@@ -1,0 +1,7 @@
+app/.venv/
+app/__pycache__/
+app/*.py[cod]
+app/*$py.class
+
+app/.env
+app/README.md
