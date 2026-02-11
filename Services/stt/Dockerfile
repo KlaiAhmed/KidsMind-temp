@@ -1,5 +1,5 @@
 # 1️⃣ Base image
-FROM python:3.14-slim
+FROM python:3.10-slim
 
 # 2️⃣ Environment
 ENV PYTHONDONTWRITEBYTECODE=1
