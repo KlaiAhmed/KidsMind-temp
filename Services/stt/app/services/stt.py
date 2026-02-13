@@ -22,7 +22,6 @@ async def transcribe_audio(upload_file) -> Dict[str, Any]:
     # Transcribe 
     segments, trans_info = model.transcribe(
         audio,
-        beam_size=1,
         vad_filter=True,
         vad_parameters=dict(min_silence_duration_ms=500),
         condition_on_previous_text=False,

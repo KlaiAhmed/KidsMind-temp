@@ -13,9 +13,11 @@
 | Service Name | Port (Host:Container) | Description |
 | :--- | :--- | :--- |
 | **api-core** | `8000:8000` | The main backend (FastAPI). Handles routing, business logic, and database interactions. |
-| **ai-service** | `8001:8001` | Dedicated service for AI model inference and heavy processing. |
+| **ai-service** | `8001:8000` | Dedicated service for AI model inference and heavy processing. |
+| **voice-service**| `8002:8000` | Dedicated to STT (Whisper) and TTS (Text-to-Speech). |
 | **postgres-db**| `5432:5432` | PostgreSQL database storing application data. |
-| **voice-service**| `9000:9000` | Dedicated to STT (Whisper) and TTS (Text-to-Speech). |
+| **MinIO-service**| `9000:9000(API)` `9001:9001(Console)` | S3 compatible storage |
+
 
 ### Tech Stack
 * **Frontend**: React + shadcn/ui (Web), React Native (Mobile)

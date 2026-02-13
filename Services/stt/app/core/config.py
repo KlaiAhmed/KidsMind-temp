@@ -1,9 +1,9 @@
 import os
 
-WHISPER_MODEL = os.getenv("WHISPER_MODEL", "small")
+WHISPER_MODEL = os.getenv("WHISPER_MODEL", "medium")
 WHISPER_DEVICE = os.getenv("WHISPER_DEVICE", "cpu")
 WHISPER_COMPUTE_TYPE = os.getenv("WHISPER_COMPUTE_TYPE", "int8")
-WHISPER_CPU_THREADS = int(os.getenv("WHISPER_CPU_THREADS", "6"))
+WHISPER_CPU_THREADS = int(os.getenv("WHISPER_CPU_THREADS", "8"))
 WHISPER_NUM_WORKERS = int(os.getenv("WHISPER_NUM_WORKERS", "1"))
 
 SERVICE_NAME = "stt-service"

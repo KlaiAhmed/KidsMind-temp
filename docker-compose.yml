@@ -1,8 +1,10 @@
 services:
-  # 1️⃣ Database Service
+  # Database Service
   db:
-    image: postgres:17-alpine
-    container_name: postgres-db
+    build: 
+      context: ./infra/DB
+    image: postgres-db
+    container_name: postgres-db-container
     restart: always
     environment:
       - POSTGRES_USER=${DB_USER}
@@ -18,47 +20,104 @@ services:
       timeout: 5s
       retries: 5
 
-  # 2️⃣ API Core Service
+  # API Core Service
   api-core:
     build:
       context: ./services/api
-      dockerfile: Dockerfile
     depends_on:
-      - db:
-          condition: service_healthy
+      db:
+        condition: service_healthy
     image: api-core
     container_name: api-core-container
     ports:
       - "${API_PORT}:8000"
+    env_file: .env
     develop:
       watch:
         - action: sync
           path: ./services/api
           target: /app
           ignore:
-            - .venv/
-            - __pycache__/
+            - app/.venv/
+            - "**/__pycache__/"
+            - Dockerfile
+            - requirements.txt
+            - .dockerignore
+            - .env
+        - action: rebuild
+          path: ./services/api/requirements.txt
 
-  # 3️⃣ AI Service
+  # AI Service
   ai-service:
     build:
       context: ./services/ai
-      dockerfile: Dockerfile
-    depends_on:
-      - db:
-          condition: service_healthy
     image: ai-service
     container_name: ai-service-container
     ports:
       - "${AI_PORT}:8000"
+    env_file: .env
     develop:
       watch:
         - action: sync
           path: ./services/ai
           target: /app
           ignore:
-            - .venv/
-            - __pycache__/
-  
-  volumes:
-    postgres_data:
+            - app/.venv/
+            - "**/__pycache__/"
+            - Dockerfile
+            - requirements.txt
+            - .dockerignore
+            - .env
+        - action: rebuild
+          path: ./services/ai/requirements.txt
+
+  # STT Service
+  stt-service:
+    build:
+      context: ./services/stt
+    image: stt-service
+    container_name: stt-service-container
+    ports:
+      - "${STT_PORT}:8000"
+    env_file: 
+      - .env
+      - ./services/stt/app/.env
+    environment:
+      - HF_HOME=/app/model_cache
+    volumes:
+      - stt_cache:/app/model_cache
+    develop:
+      watch:
+        - action: sync
+          path: ./services/stt
+          target: /app
+          ignore:
+            - app/.venv/
+            - "**/__pycache__/"
+            - Dockerfile
+            - requirements.txt
+            - .dockerignore
+            - .env
+        - action: rebuild
+          path: ./services/stt/requirements.txt
+
+  # MinIO Service
+  minio:
+    build: 
+      context: ./infra/storage
+    image: minio-storage
+    container_name: minio-storage-container
+    ports:
+      - "${MINIO_API_PORT}:9000"
+      - "${MINIO_CONSOLE_PORT}:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+
+volumes:
+  postgres_data:
+  stt_cache:
+  minio_data:

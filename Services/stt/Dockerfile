@@ -1,23 +1,50 @@
-# 1️⃣ Base image
+# --- STAGE 1: Builder ---
+FROM python:3.10-slim AS builder
+
+WORKDIR /build
+
+# Install EVERY tool needed for compilation
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    python3-dev \
+    cmake \
+    pkg-config \
+    gcc \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create a virtual environment to keep things clean
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+COPY requirements.txt .
+
+# Install dependencies into the virtual environment
+RUN pip install --no-cache-dir -r requirements.txt
+
+
+# --- STAGE 2: Final Runtime ---
 FROM python:3.10-slim
 
-# 2️⃣ Environment
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
-
-# 3️⃣ Workdir
 WORKDIR /app
 
-# 4️⃣ Install Python dependencies
-COPY requirements.txt .
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --no-cache-dir -r requirements.txt
+# Install ONLY runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
 
-# 5️⃣ Copy application source
+# Copy the entire virtual environment from the builder
+COPY --from=builder /opt/venv /opt/venv
+
+# Ensure the app uses the virtual environment
+ENV PATH="/opt/venv/bin:$PATH"
+ENV PYTHONUNBUFFERED=1
+
+# Copy app code
 COPY app/ .
 
-# 6️⃣ Precompile python bytecode to speed startup 
+# Precompile
 RUN python -m compileall -q .
 
-# 7️⃣ Run uvicorn directly 
 CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000","--reload"]
