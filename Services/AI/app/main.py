@@ -3,7 +3,7 @@ from fastapi import FastAPI, HTTPException
 
 app = FastAPI()
 
-@app.get("/health/ai")
+@app.get("/health")
 def health_check():
     try:
         return {"message": "AI API running !"}
