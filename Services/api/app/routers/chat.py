@@ -1,14 +1,14 @@
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends, Request
 from fastapi.concurrency import run_in_threadpool
-from core.config import STT_SERVICE_ENDPOINT, STORAGE_SERVICE_ENDPOINT
+from core.config import STT_SERVICE_ENDPOINT, AI_SERVICE_ENDPOINT
 from services.upload_file import upload_audio, remove_audio
 from utils.get_client import get_client
 from middlewares.vallidate_audio_file import validate_audio_file
 import httpx
 
-router = APIRouter(prefix="/chat", tags=["AI"])
+router = APIRouter()
 
-@router.post("/voice/message/{user_id}/{child_id}")
+@router.post("/voice/{user_id}/{child_id}")
 async def generate_content(user_id: str, child_id: str, audio_file: UploadFile = Depends(validate_audio_file), context: str = Form(""), store_audio: bool = Form(True), client: httpx.AsyncClient = Depends(get_client)):
     filename = None
     try:
@@ -18,11 +18,16 @@ async def generate_content(user_id: str, child_id: str, audio_file: UploadFile =
         audio_url = upload_result["url"]
         
         # Send the audio URL and context to the STT service
-        stt_response = await client.post(f"{STT_SERVICE_ENDPOINT}/stt/transcribe", json={"audio_url": audio_url, "context": context}, timeout=30.0)
+        stt_response = await client.post(f"{STT_SERVICE_ENDPOINT}/v1/stt/transcriptions", json={"audio_url": audio_url, "context": context}, timeout=30.0)
         stt_response.raise_for_status()
         stt_data = stt_response.json()
 
-        return {"message": "Audio file processed successfully!", "stt_data": stt_data}
+        # Send the text and context to the AI service
+        ai_response = await client.post(f"{AI_SERVICE_ENDPOINT}/v1/ai/chat", json={"message": stt_data["text"], "context": context}, timeout=30.0)
+        ai_response.raise_for_status()
+        ai_data = ai_response.json()
+
+        return {"message": "Audio file processed successfully!", "stt_data": stt_data, "ai_data": ai_data}
 
     except httpx.RequestError as e:
         raise HTTPException(status_code=502, detail=f"Failed to contact STT service: {e}")

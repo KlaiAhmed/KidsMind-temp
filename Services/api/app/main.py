@@ -1,6 +1,5 @@
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI
 from contextlib import asynccontextmanager
-from core.config import STT_SERVICE_ENDPOINT, STORAGE_SERVICE_ENDPOINT, AI_SERVICE_ENDPOINT
 from prometheus_fastapi_instrumentator import Instrumentator
 from routers.chat import router as chat_router
 import httpx
@@ -14,7 +13,7 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     app = FastAPI(title="Core API", lifespan=lifespan)
-    app.include_router(chat_router)
+    app.include_router(chat_router, prefix="/api/v1/chat", tags=["Chat"])
     return app
 
 app = create_app()

@@ -5,13 +5,13 @@ from utils.get_client import get_client
 import httpx
 from typing import Optional
 
-router = APIRouter(prefix="/stt", tags=["Speech-to-Text"])
+router = APIRouter()
 
 class TranscriptionRequest(BaseModel):
     audio_url: str
     context: Optional[str] = ""
 
-@router.post("/transcribe")
+@router.post("/transcriptions")
 async def transcribe(request: TranscriptionRequest, client: httpx.AsyncClient = Depends(get_client)):
     try:
         response = await client.get(request.audio_url, timeout=30.0)

@@ -132,6 +132,7 @@ services:
     ports:
       - "${PROMETHEUS_PORT}:9090"
     volumes:
+      - prometheus_data:/prometheus
       - ./infra/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
     
   # Grafana Service
@@ -151,3 +152,4 @@ volumes:
   stt_cache:
   storage_data:
   grafana_data:
+  prometheus_data:

@@ -18,7 +18,7 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     app = FastAPI(title=SERVICE_NAME, lifespan=lifespan)
 
-    app.include_router(stt_router)
+    app.include_router(stt_router, prefix="/v1/stt", tags=["Speech-to-Text"])
 
     return app
 
