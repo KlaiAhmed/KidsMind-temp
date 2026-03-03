@@ -9,12 +9,13 @@ import logging
 # Local Imports
 from ai.chains import build_chain
 from ai.moderation import check_moderation
+from ai.dev_moderation import dev_check_moderation
 
 from utils.validate_token_limit import validate_token_limit
 from utils.age_guidelines import age_guidelines
 from utils.get_client import get_client
 
-from core.config import RATE_LIMIT
+from core.config import RATE_LIMIT, IS_PROD
 
 
 router = APIRouter(tags=["AI"])
@@ -41,6 +42,7 @@ async def chat_with_ai(
     try:    
         start_time = time.time()
 
+        # Validate token limits for message and context
         if not validate_token_limit(payload.message):
             logger.warning("Message exceeds token limit.")
             raise HTTPException(status_code=413, detail="Message is too long. Please shorten it and try again.")
@@ -49,22 +51,36 @@ async def chat_with_ai(
             if not validate_token_limit(payload.context, 1000):
                 logger.warning("Context exceeds token limit.")
                 raise HTTPException(status_code=413, detail="Context is too long. Please shorten it and try again.")
+        
 
-        logger.info("Starting moderation check for chat request.")
-        safe_content = await check_moderation(payload.message, payload.context or "", client=get_client(request))
-        logger.info(f"Moderation check completed with result: {safe_content}.")
+        # Calling External Moderation API to check if user input is appropriate for kids
+        if IS_PROD == "True":
+            safe_content = await check_moderation(payload.message, payload.context or "", client=get_client(request))
+        else:
+            safe_content = await dev_check_moderation(payload.message, payload.context or "", client=get_client(request))
+
+        # If content is not safe, return a 400 error with appropriate message
         if not safe_content:
             logger.warning("Message failed moderation checks.")
             raise HTTPException(status_code=400, detail="Message contains inappropriate content for your age.")
 
+        # Get age-specific guidelines for the AI response based on the provided age group
         guidelines = age_guidelines(payload.age_group)
                 
+        # Invoke the AI chain
         response = await chain.ainvoke({
             "age_group": payload.age_group,
             "age_guidelines": guidelines,
             "context": payload.context,
-            "message": payload.message
+            "input": payload.message,
+            "history": []  # Placeholder for conversation history, yet to be implemented in future
         })
+
+        # Calling External Moderation API to check if LLM response is appropriate for kids
+        if IS_PROD == "True":
+            safe_content = await check_moderation(response.content, payload.context or "", client=get_client(request))
+        else:
+            safe_content = await dev_check_moderation(response.content, payload.context or "", client=get_client(request))
         
         duration = time.time()-start_time    
         

@@ -17,12 +17,12 @@ Use the kid age group ({age_group}) and {age_guidelines} to adapt tone, vocabula
 Use the provided CONTEXT to understand the child's current knowledge and interests : {context}.
 
 Keep responses concise and Always respond in JSON format:
-{
+{{
   "explanation": "...",
   "example": "...",
   "exercise": "...",
   "encouragement": "..."
-}
+}}
 """
 
 def build_prompt():
