@@ -1,8 +1,7 @@
 import os
 
 # Is the app running in production ? Default is False (development mode).
-IS_PROD=os.getenv("IS_PROD", "False")
-IS_PROD = IS_PROD[0].upper()+IS_PROD[1:].lower()
+IS_PROD = os.getenv("IS_PROD", "False").strip().lower() == "true"
 
 # AI API credentials and configuration
 MODEL_NAME = os.getenv("MODEL_NAME")
@@ -21,4 +20,4 @@ DEV_API_USER = os.getenv("DEV_API_USER")
 
 # APP configuration
 CONTENT_LENGTH_LIMIT = os.getenv("CONTENT_LENGTH_LIMIT", 1 * 1024 * 1024)
-RATE_LIMIT = os.getenv("RATE_LIMIT") if IS_PROD == "True" else "100/minute"
+RATE_LIMIT = os.getenv("RATE_LIMIT", "100/minute")

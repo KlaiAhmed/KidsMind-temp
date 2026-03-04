@@ -1,8 +1,7 @@
 from os import getenv
 
 # Is the app running in production ? Default is False (development mode).
-IS_PROD=getenv("IS_PROD", "False")
-IS_PROD = IS_PROD[0].upper()+IS_PROD[1:].lower()
+IS_PROD = getenv("IS_PROD", "False").strip().lower() == "true"
 
 # Service endpoints
 STT_SERVICE_ENDPOINT = getenv("STT_SERVICE_ENDPOINT", "http://stt-service:8000")
@@ -20,4 +19,4 @@ ALLOWED_CONTENT_TYPES = {"audio/mpeg", "audio/wav", "audio/x-wav", "audio/mp3"}
 STORAGE_ROOT_USER = getenv("STORAGE_ROOT_USERNAME", "admin")
 STORAGE_ROOT_PASSWORD = getenv("STORAGE_ROOT_PASSWORD")
 
-RATE_LIMIT = getenv("RATE_LIMIT") if IS_PROD == "True" else "100/minute"
+RATE_LIMIT = getenv("RATE_LIMIT", "100/minute")

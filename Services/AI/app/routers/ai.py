@@ -48,7 +48,7 @@ async def chat_with_ai(
         
 
         # Calling External Moderation API to check if user input is appropriate for kids
-        if IS_PROD == "True":
+        if IS_PROD:
             safe_content = await check_moderation(payload.message, payload.context or "", client=get_client(request))
         else:
             safe_content = await dev_check_moderation(payload.message, payload.context or "", client=get_client(request))
@@ -71,7 +71,7 @@ async def chat_with_ai(
         })
 
         # Calling External Moderation API to check if LLM response is appropriate for kids
-        if IS_PROD == "True":
+        if IS_PROD:
             safe_content = await check_moderation(response.content, payload.context or "", client=get_client(request))
         else:
             safe_content = await dev_check_moderation(response.content, payload.context or "", client=get_client(request))
