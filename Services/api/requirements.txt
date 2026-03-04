@@ -4,4 +4,4 @@ httpx==0.28.1
 minio==7.2.20
 python-multipart==0.0.22
 prometheus-fastapi-instrumentator==7.1.0
-
+slowapi==0.1.9

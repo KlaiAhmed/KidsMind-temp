@@ -1,14 +1,24 @@
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends, Request
+from fastapi import APIRouter, HTTPException, UploadFile, Form, Depends
 from fastapi.concurrency import run_in_threadpool
-from core.config import STT_SERVICE_ENDPOINT, AI_SERVICE_ENDPOINT
-from services.upload_file import upload_audio, remove_audio
-from utils.get_client import get_client
-from middlewares.vallidate_audio_file import validate_audio_file
 import httpx
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+
+# Local Imports
+from core.config import STT_SERVICE_ENDPOINT, AI_SERVICE_ENDPOINT, RATE_LIMIT, IS_PROD
+
+from services.upload_file import upload_audio, remove_audio
+
+from utils.get_client import get_client
+
+from middlewares.vallidate_audio_file import validate_audio_file
+
+Limiter = Limiter(key_func=get_remote_address)
 
 router = APIRouter()
 
 @router.post("/voice/{user_id}/{child_id}")
+@Limiter.limit(RATE_LIMIT)
 async def generate_content(user_id: str, child_id: str, audio_file: UploadFile = Depends(validate_audio_file), context: str = Form(""), store_audio: bool = Form(True), client: httpx.AsyncClient = Depends(get_client)):
     filename = None
     try:
