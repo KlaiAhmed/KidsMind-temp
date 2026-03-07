@@ -5,6 +5,8 @@ from models.whisper import load_whisper_model
 from faster_whisper.audio import decode_audio
 from services.detect_lang import detect_language
 
+from utils.logger import logger
+
 model = load_whisper_model()
 
 async def transcribe_audio(audio_bytes) -> Dict[str, Any]:
@@ -16,7 +18,7 @@ async def transcribe_audio(audio_bytes) -> Dict[str, Any]:
     detected_language = detect_language(audio)
 
     # Transcribe 
-    segments, trans_info = model.transcribe(
+    segments, _ = model.transcribe(
         audio,
         vad_filter=True,
         vad_parameters=dict(min_silence_duration_ms=500),
@@ -27,9 +29,6 @@ async def transcribe_audio(audio_bytes) -> Dict[str, Any]:
     text = " ".join(segment.text for segment in segments).strip()
 
     duration = time.time() - start_time
+    logger.info(f"Transcription completed in {duration:.2f} seconds. Detected language: {detected_language}, Transcribed text length: {len(text)} characters.")
 
-    return {
-        "text": text,
-        "language": detected_language,
-        "duration": round(duration, 2),
-    }
+    return text

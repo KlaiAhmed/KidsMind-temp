@@ -27,8 +27,8 @@ services:
     ports:
       - "${POSTGRES_EXPORTER_PORT}:9187"
 
-  # API Core Service
-  api-core:
+  # Core API Service
+  core-api:
     build:
       context: ./services/api
     depends_on:
@@ -92,6 +92,13 @@ services:
       - stt_cache:/model_cache
     command: 
       uvicorn main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app 
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
 
   # Storage Service 
   storage-service:

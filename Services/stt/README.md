@@ -133,12 +133,9 @@ All runtime parameters are injected via environment variables with safe defaults
 | Variable | Default | Description |
 |---|---|---|
 | `WHISPER_MODEL` | `medium` | Main model size: `tiny`, `base`, `small`, `medium`, `large-v3` |
-| `WHISPER_DEVICE` | `cpu` | Inference device: `cpu` or `cuda` |
-| `WHISPER_COMPUTE_TYPE` | `int8` | Quantization type: `int8`, `float16`, `float32` |
-| `WHISPER_CPU_THREADS` | `8` | CPU thread count for the main model |
-| `WHISPER_NUM_WORKERS` | `1` | Parallel worker count for the main model |
-
-> Using `cuda` with `float16` is recommended for GPU-accelerated deployments. The `int8` default is optimised for CPU inference.
+| `WHISPER_MODE` | `cpu` | Inference mode: `cpu` or `gpu` |
+| `WHISPER_CPU_THREADS` | `4` | CPU thread count for the main model |
+| `WHISPER_NUM_WORKERS` | `2` | Parallel worker count for the main model |
 
 ---
 
@@ -176,48 +173,96 @@ stt-service/
 
 ## Docker
 
-### Build
+### Host Machine Setup (Required for GPU)
 
+> **macOS users:** NVIDIA CUDA is not supported on Mac (Apple Silicon uses Metal, not CUDA).  
+> 
+> GPU mode will not work regardless of setup: use `WHISPER_MODE=cpu`.
+
+---
+
+#### Linux + Windows
+
+Install the **NVIDIA Container Toolkit** — this is the bridge that lets Docker talk to your GPU. Without it, `--gpus all` silently does nothing.
+```bash
+curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+
+curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
+  sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+  sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+
+sudo apt-get update && sudo apt-get install -y nvidia-container-toolkit
+
+sudo systemctl restart docker
+```
+> On Windows, Docker Desktop runs containers inside WSL2 (a Linux VM). You install the toolkit *inside that VM*, not on Windows itself. The Windows NVIDIA driver handles the actual GPU communication.
+
+**Prerequisites:**
+-  **NVIDIA GPU** ( Pascal architecture or newer with NVIDIA RTX series card recommended )
+-  **WSL2** enabled with a **Linux distro** (Ubuntu recommended) 
+  to check run in powershell : wsl --list --verbose
+-  **[NVIDIA drivers for Windows](https://www.nvidia.com/Download/index.aspx)** installed (the normal desktop driver)
+  to check run in powershell : nvidia-smi
+-  **[Docker Desktop](https://www.docker.com/products/docker-desktop/)** with the WSL2 backend enabled
+
+
+**Verify the setup worked :**
+```bash
+docker run --rm --gpus all nvidia/cuda:12.1.0-base-ubuntu22.04 nvidia-smi
+```
+You should see your GPU listed. If you get an error, the toolkit isn't wired up correctly.
+
+---
+
+### Build
 ```bash
 docker build -t stt-service:latest .
 ```
 
-### Run
-
-```bash
-docker run --rm \
-  -p 8000:8000 \
-  -e WHISPER_MODEL=medium \
-  -e WHISPER_DEVICE=cpu \
-  -e WHISPER_COMPUTE_TYPE=int8 \
-  -e WHISPER_CPU_THREADS=8 \
-  stt-service:latest
-```
+> `WHISPER_MODE` controls both the device (`cpu`/`cuda`) and compute type (`int8`/`float16`) automatically. See [Configuration](#configuration) for details.
 
 The service will be available at `http://stt-service:8000`.
 
-### GPU (optional)
-
-```bash
-docker run --rm \
-  --gpus all \
-  -p 8000:8000 \
-  -e WHISPER_MODEL=large-v3 \
-  -e WHISPER_DEVICE=cuda \
-  -e WHISPER_COMPUTE_TYPE=float16 \
-  stt-service:latest
+### Docker Compose
+```yaml
+services:
+  stt-service:
+    ...
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
 ```
+
+**What does `deploy.resources.reservations.devices` do?**
+
+It is the Docker Compose equivalent of `--gpus all` on the command line. Without it, Compose starts the container with no GPU access even if the toolkit is installed. Breaking it down:
+
+| Key | Value | Meaning |
+|---|---|---|
+| `driver` | `nvidia` | Use the NVIDIA runtime (installed by the toolkit) |
+| `count` | `1` | Reserve 1 GPU for this container. Use `all` to expose every GPU |
+| `capabilities` | `[gpu]` | Grant general GPU compute access (required for CUDA) |
+
+> This block is only meaningful when running with `docker compose` (v2). Plain `docker run` uses `--gpus all` instead.
 
 ### Implementation Details
 
-The `Dockerfile` uses a **multi-stage build** to keep the final image lean:
+The `Dockerfile` uses a **multi-stage build**:
 
 | Stage | Base Image | Purpose |
 |---|---|---|
 | `builder` | `python:3.10-slim` | Installs Python dependencies into an isolated virtualenv |
-| `runtime` | `python:3.10-slim` | Copies only the virtualenv and app code — no build tools |
+| `runtime` | `nvidia/cuda:12.1.0-cudnn8-runtime-ubuntu22.04` | Ships CUDA + cuDNN runtime libs; copies only the virtualenv and app code |
+
+The `runtime` variant of the NVIDIA image is used (not `devel`) — it contains only the libraries needed to *run* CUDA code, not compile it, keeping the image as lean as possible. cuDNN 8 is required by CTranslate2, the engine underlying faster-whisper.
 
 `ffmpeg` is sourced from a static binary release and installed in the runtime stage to support all audio formats (MP3, OGG, FLAC, M4A, etc.) without pulling in a full `ffmpeg` apt package tree.
+
+> **Note on image size:** the NVIDIA base image adds CUDA + cuDNN, bringing the total image size to ~3–4 GB. This is unavoidable — `runtime` is already the smallest NVIDIA variant that works.
 
 ---
 

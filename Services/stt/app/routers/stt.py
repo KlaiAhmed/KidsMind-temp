@@ -1,9 +1,10 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
-from services.stt import transcribe_audio
+from fastapi import APIRouter, HTTPException, Depends
+from services.transcribe import transcribe_audio
 from pydantic import BaseModel
 from utils.get_client import get_client
 import httpx
 from typing import Optional
+from utils.logger import logger
 
 router = APIRouter()
 
@@ -14,6 +15,7 @@ class TranscriptionRequest(BaseModel):
 @router.post("/transcriptions")
 async def transcribe(request: TranscriptionRequest, client: httpx.AsyncClient = Depends(get_client)):
     try:
+
         response = await client.get(request.audio_url, timeout=30.0)
         response.raise_for_status()
 

@@ -17,6 +17,7 @@ dist/
 .pytest_cache/
 .mypy_cache/
 **/model_cache/
+**/__pycache__/
 
 node_modules/
 .npm

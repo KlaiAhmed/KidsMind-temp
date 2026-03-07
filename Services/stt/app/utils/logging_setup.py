@@ -11,7 +11,8 @@ from starlette.requests import Request
 from starlette.responses import Response
 from starlette.types import ASGIApp
 
-DEFAULT_SERVICE_NAME = "STT-Service"
+from core.config import SERVICE_NAME
+
 
 request_id_var: ContextVar[str] = ContextVar("request_id", default="-")
 
@@ -118,7 +119,7 @@ def setup_logging() -> None:
     """
     level_name: str = os.getenv("LOG_LEVEL", "INFO").upper()
     level: int = getattr(logging, level_name, logging.INFO)
-    service_name: str = os.getenv("SERVICE_NAME", DEFAULT_SERVICE_NAME)
+    service_name: str = os.getenv("SERVICE_NAME", SERVICE_NAME)
 
     root = logging.getLogger()
     root.handlers.clear()

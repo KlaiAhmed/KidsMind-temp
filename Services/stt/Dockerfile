@@ -1,46 +1,31 @@
-# STAGE 1: Builder 
-FROM python:3.10-slim AS builder
+FROM nvidia/cuda:12.8.1-cudnn-runtime-ubuntu24.04
 
-WORKDIR /build
+ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    gcc \
+    python3.12 \
+    python3.12-venv \
+    python3-pip \
+    ffmpeg \
+    libsndfile1 \
+    libgomp1 \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-RUN python -m venv /opt/venv
+RUN python3.12 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 COPY requirements.txt .
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --upgrade pip setuptools wheel && \
+    pip install -r requirements.txt
 
-RUN pip install --no-cache-dir -r requirements.txt
-
-# STAGE 2: Runtime 
-FROM python:3.10-slim
-
-RUN groupadd -r appuser && useradd -r -g appuser appuser
-
-RUN mkdir -p /model_cache && chown -R appuser:appuser /model_cache
+ENV HF_HOME=/model_cache
+ENV PYTHONUNBUFFERED=1
+ENV LD_LIBRARY_PATH="/usr/local/cuda/lib64:/usr/lib/x86_64-linux-gnu:/opt/venv/lib/python3.12/site-packages/ctranslate2"
 
 WORKDIR /app
+COPY app/ .
 
-RUN apt-get update && apt-get install -y --no-install-recommends wget xz-utils \
-    && wget -q https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz \
-    && tar -xvf ffmpeg-release-amd64-static.tar.xz \
-    && mv ffmpeg-*-static/ffmpeg /usr/local/bin/ \
-    && mv ffmpeg-*-static/ffprobe /usr/local/bin/ \
-    && rm -rf ffmpeg-release-amd64-static.tar.xz ffmpeg-*-static \
-    && apt-get purge -y wget xz-utils \
-    && apt-get autoremove -y \
-    && rm -rf /var/lib/apt/lists/*
-
-
-COPY --from=builder /opt/venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
-ENV PYTHONUNBUFFERED=1
-
-COPY --chown=appuser:appuser app/ .
-
-USER appuser
-
+EXPOSE 8000
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

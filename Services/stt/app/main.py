@@ -1,4 +1,4 @@
-from utils.logging import setup_logging, RequestTracingMiddleware
+from utils.logging_setup import setup_logging, RequestTracingMiddleware
 
 setup_logging()
 

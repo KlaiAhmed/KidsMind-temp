@@ -11,9 +11,8 @@ _model: WhisperModel | None = None
 tiny_model: WhisperModel | None = None
 
 
-def load_whisper_model() -> tuple[WhisperModel, WhisperModel]:
+def load_whisper_model() -> WhisperModel:
     global _model
-    
     #load main model
     if _model is None:
         print("--- LOADING Transcribe MODEL INTO MEMORY (ONCE AT STARTUP) ---")
@@ -22,7 +21,7 @@ def load_whisper_model() -> tuple[WhisperModel, WhisperModel]:
             device=WHISPER_DEVICE,
             compute_type=WHISPER_COMPUTE_TYPE,
             cpu_threads=WHISPER_CPU_THREADS, 
-            num_workers=WHISPER_NUM_WORKERS 
+            num_workers=WHISPER_NUM_WORKERS
         )
     return _model
 
@@ -36,6 +35,6 @@ def load_tiny_model() -> WhisperModel:
             device=WHISPER_DEVICE,
             compute_type=WHISPER_COMPUTE_TYPE,
             cpu_threads=2, 
-            num_workers=1 
+            num_workers=1
         )
     return tiny_model
