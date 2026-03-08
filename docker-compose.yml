@@ -16,17 +16,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # Postgres Exporter for Prometheus
-  postgres-exporter:
-    image: prometheuscommunity/postgres-exporter:v0.19.0
-    environment:
-      DATA_SOURCE_NAME: "postgresql://${DB_USER}:${DB_PASSWORD}@database:5432/${DB_NAME}?sslmode=disable"
-    depends_on:
-      database:
-        condition: service_healthy
-    ports:
-      - "${POSTGRES_EXPORTER_PORT}:9187"
-
   # Core API Service
   core-api:
     build:
@@ -163,6 +152,8 @@ services:
   # Prometheus Service for Monitoring
   prometheus:
     image: prom/prometheus:v3.9.1
+    profiles:
+      - monitoring
     ports:
       - "${PROMETHEUS_PORT}:9090"
     volumes:
@@ -172,6 +163,8 @@ services:
   # Grafana Service for Visualization
   grafana:
     image: grafana/grafana:12.3
+    profiles:
+      - monitoring
     ports:
       - "${GRAFANA_PORT}:3000"
     environment:
@@ -179,6 +172,33 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
     volumes:
       - grafana_data:/var/lib/grafana
+
+  # Postgres Exporter for Prometheus
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.19.0
+    profiles:
+      - monitoring
+    environment:
+      DATA_SOURCE_NAME: "postgresql://${DB_USER}:${DB_PASSWORD}@database:5432/${DB_NAME}?sslmode=disable"
+    depends_on:
+      database:
+        condition: service_healthy
+    ports:
+      - "${POSTGRES_EXPORTER_PORT}:9187"
+
+  # Redis Exporter for Prometheus
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.81.0-alpine
+    profiles:
+      - monitoring
+    depends_on:
+      cache:
+        condition: service_healthy
+    environment:
+      REDIS_ADDR: "redis://cache:6379"
+      REDIS_PASSWORD: ${CACHE_PASSWORD}
+    ports:
+      - "${REDIS_EXPORTER_PORT}:9121"
 
 
 volumes:

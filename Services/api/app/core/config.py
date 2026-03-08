@@ -20,5 +20,7 @@ ALLOWED_CONTENT_TYPES = {"audio/mpeg", "audio/wav", "audio/x-wav", "audio/mp3"}
 STORAGE_ROOT_USER = getenv("STORAGE_ROOT_USERNAME", "admin")
 STORAGE_ROOT_PASSWORD = _require("STORAGE_ROOT_PASSWORD")
 
+# Cache configuration
+CACHE_PASSWORD = _require("CACHE_PASSWORD")
 
 RATE_LIMIT = getenv("RATE_LIMIT", "100/minute")
