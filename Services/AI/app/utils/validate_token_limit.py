@@ -1,14 +1,7 @@
 from fastapi import HTTPException
-import tiktoken
-from core.config import MODEL_NAME
-from utils.logger import logger
 from schemas.ChatRequest import ChatRequest
-
-# Initialize the tokenizer for the specified model
-try:
-    ENCODER = tiktoken.encoding_for_model(MODEL_NAME)
-except KeyError:
-    ENCODER = tiktoken.get_encoding("cl100k_base") # default for gpt-4 + models
+from utils.get_model_encoder import ENCODER
+from utils.logger import logger
 
 def validate_token_limit(
     payload: ChatRequest, 
@@ -24,6 +17,7 @@ def validate_token_limit(
         context_limit (Optional[int]): The maximum allowed number of tokens for the context (default: 1000).
         
     """
+
     # Encode text
     text_tokens = len(ENCODER.encode(payload.text))
     if text_tokens > text_limit:
