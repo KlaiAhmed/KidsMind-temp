@@ -34,7 +34,11 @@ class Settings(BaseSettings):
     STORAGE_ROOT_USERNAME: str = "admin"
     STORAGE_ROOT_PASSWORD: str
     CACHE_PASSWORD: str
+
+    # LOGGING
+    LOG_LEVEL: str = "INFO"
     
+    # App Config
     RATE_LIMIT: str = "100/minute"
 
     @field_validator("STORAGE_ROOT_PASSWORD", "CACHE_PASSWORD")

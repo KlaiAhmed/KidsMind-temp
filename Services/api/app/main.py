@@ -1,15 +1,15 @@
 from fastapi import FastAPI, Request
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from utils.limiter import limiter
-from utils.logging import setup_logging, RequestTracingMiddleware
-
-setup_logging()
-
 from contextlib import asynccontextmanager
 from prometheus_fastapi_instrumentator import Instrumentator
-from routers.chat import router as chat_router
 import httpx
+
+# Local imports
+from core.logging_setup import setup_logging, RequestTracingMiddleware
+from routers.chat import router as chat_router
+from utils.limiter import limiter
+
 
 
 @asynccontextmanager
@@ -19,6 +19,10 @@ async def lifespan(app: FastAPI):
         yield
 
 def create_app() -> FastAPI:
+    # Set up logging for the application
+    setup_logging() 
+
+    # Initialize the FastAPI app with a lifespan context manager
     app = FastAPI(title="Core API", lifespan=lifespan)
     
     # Add request tracing middleware

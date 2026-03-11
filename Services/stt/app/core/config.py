@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     WHISPER_COMPUTE_TYPE: str = ""
     WHISPER_CPU_THREADS: int = 0
 
+    # Logging
+    LOG_LEVEL: str = "INFO"
+
     @model_validator(mode="after")
     def derive_device_settings(self) -> "Settings":
         if self.WHISPER_MODE == "gpu":

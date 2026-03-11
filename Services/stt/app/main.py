@@ -1,13 +1,11 @@
-from utils.logging_setup import setup_logging, RequestTracingMiddleware
-
-setup_logging()
-
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from prometheus_fastapi_instrumentator import Instrumentator
 import httpx
 
+# Local imports
 from routers.stt_router import router as stt_router
+from core.logging_setup import setup_logging, RequestTracingMiddleware
 from core.config import settings
 from models.whisper import load_all_models, get_model
 from utils.logger import logger
@@ -28,12 +26,21 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting Down.")
 
 def create_app() -> FastAPI:
+    # Set up logging for the application
+    setup_logging() 
+
+    # Initialize the FastAPI app with a lifespan context manager
     app = FastAPI(title=settings.SERVICE_NAME, lifespan=lifespan)
 
+    # Add request tracing middleware
     app.add_middleware(RequestTracingMiddleware)
+
+    # Include the STT router
     app.include_router(stt_router, prefix="/v1/stt", tags=["Speech-to-Text"])
 
+    # Instrumentation for Prometheus
     Instrumentator().instrument(app).expose(app)
+    
     return app
 
 app = create_app()

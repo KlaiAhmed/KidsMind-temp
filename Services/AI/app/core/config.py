@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     MAX_HISTORY_TOKENS: int = 4096
     HISTORY_TTL: int = Field(default=3600, alias="HISTORY_TTL_SECONDS")
 
+    # LOGGING
+    LOG_LEVEL: str = "INFO"
+
     # App Config 
     RATE_LIMIT: str = "100/minute"
 
