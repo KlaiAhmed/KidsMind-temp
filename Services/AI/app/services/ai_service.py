@@ -10,13 +10,16 @@ class AIService:
     def __init__(self, chain=None):
         self.chain = chain or build_chain()
 
+    def build_session_key(self, user_id: str, child_id: str, session_id: str) -> str:
+        return f"kidsmind:history:{user_id}:{child_id}:{session_id}"
+
     async def get_response(self, user: dict, payload) -> dict:
         """Non-streaming path: returns the fully structured dict."""
         timer=time.perf_counter()
 
         guidelines = age_guidelines(payload.age_group)
         
-        session_id = f"kidsmind:history:{user['id']}:{user['child_id']}:{user['session_id']}"
+        session_id = self.build_session_key(user['id'], user['child_id'], user['session_id'])
 
         try:
             response = await self.chain.ainvoke(
@@ -46,8 +49,8 @@ class AIService:
 
         guidelines = age_guidelines(payload.age_group)
 
-        session_id = f"kidsmind:history:{user['id']}:{user['child_id']}:{user['session_id']}"
-        
+        session_id = self.build_session_key(user['id'], user['child_id'], user['session_id'])
+
         logger.info("AIService.stream_response started", extra={
             "user_id": user.get("id"),
             "child_id": user.get("child_id"),

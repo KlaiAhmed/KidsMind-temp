@@ -4,6 +4,7 @@ from fastapi.responses import StreamingResponse
 # Local Imports
 from controllers.chat_controller import chat_controller, chat_stream_controller
 from services.history import history_service
+from services.ai_service import ai_service
 from schemas.ChatRequest import ChatRequest
 from utils.get_client import get_client
 from utils.auth import verify_service_token
@@ -57,8 +58,8 @@ async def chat_with_ai_stream(user_id: str, child_id: str, session_id: str, payl
 async def get_session_history(user_id: str, child_id: str, session_id: str):
     """Returns conversation history."""
     try:
-        user = {"id": user_id, "child_id": child_id, "session_id": session_id}
-        history = history_service.get_history(user)
+        session_key = ai_service.build_session_key(user_id, child_id, session_id)
+        history = history_service.get_history(session_key)
         return {
             "messages": [
                 {"role": m.type, "content": m.content}
@@ -76,8 +77,8 @@ async def get_session_history(user_id: str, child_id: str, session_id: str):
 async def clear_session(user_id: str, child_id: str, session_id: str):
     """Clears a child's conversation history."""
     try:
-        user = {"id": user_id, "child_id": child_id, "session_id": session_id}
-        history = history_service.get_history(user)
+        session_key = ai_service.build_session_key(user_id, child_id, session_id)
+        history = history_service.get_history(session_key)
         history.clear()
         return {"status": "cleared"}
     
