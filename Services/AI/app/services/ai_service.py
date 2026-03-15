@@ -2,13 +2,13 @@ import json
 from typing import AsyncGenerator
 import time
 
-from services.build_chain import build_chain
+from services.build_chain import chain_builder
 from utils.age_guidelines import age_guidelines
 from utils.logger import logger
 
 class AIService:
     def __init__(self, chain=None):
-        self.chain = chain or build_chain()
+        self.chain = chain or chain_builder.build()
 
     def build_session_key(self, user_id: str, child_id: str, session_id: str) -> str:
         return f"kidsmind:history:{user_id}:{child_id}:{session_id}"
