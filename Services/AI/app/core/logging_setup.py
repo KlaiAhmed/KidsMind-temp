@@ -12,7 +12,6 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 from core.config import settings
 
 
-
 # Global var for each request containing a uinique ID
 request_id_var: ContextVar[str] = ContextVar("request_id", default="-")
 

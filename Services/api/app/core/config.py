@@ -11,9 +11,14 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    # Service
+    SERVICE_NAME: str = "KidsMind API Service"
+
     # App State
     IS_PROD: bool = False
-    SERVICE_NAME: str = "KidsMind API Service"
+
+    # CORS configuration
+    CORS_ORIGINS: list[str] = ["*"]
 
     # Service Endpoints
     STT_SERVICE_ENDPOINT: str = "http://stt-service:8000"

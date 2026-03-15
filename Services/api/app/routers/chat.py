@@ -98,6 +98,8 @@ async def text_chat(
     async with handle_service_errors():
         duration = time.perf_counter()
 
+        logger.info(f"Received text chat request: {body.text} with context: {body.context}")
+
         # Send Response to AI Service
         ai_response =await generate_content(
             user_id=user_id,
@@ -111,7 +113,6 @@ async def text_chat(
         duration = time.perf_counter() - duration
         logger.info(f"Content generation completed in {duration:.3f} seconds")
 
-        return {
-            "ai_data": ai_response.json(),
-        }
+        return ai_response,
+
 

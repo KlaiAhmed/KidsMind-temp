@@ -1,37 +1,34 @@
+# services/history.py
+from typing import Optional
+import asyncio
+
 from langchain_community.chat_message_histories import RedisChatMessageHistory
-from langchain_core.messages import BaseMessage
+from langchain_core.chat_history import BaseChatMessageHistory
+
 from core.config import settings
-from utils.trim_messages_by_tokens import trim_messages_by_tokens
+from utils.logger import logger
+
 
 class HistoryService:
-
-    def get_session_key(self, user: dict) -> str:
-        return f"kidsmind:history:{user['id']}:{user['child_id']}:{user['session_id']}"
-
-    # Get the RedisChatMessageHistory instance for this session
-    def get_history(self, user: dict) -> RedisChatMessageHistory:
-        """Returns a RedisChatMessageHistory instance for this session."""
-        return RedisChatMessageHistory(
-            session_id=self.get_session_key(user),
-            url=settings.CACHE_SERVICE_ENDPOINT,
-            ttl=settings.HISTORY_TTL,
-        )
-
-    # Get the last MAX_HISTORY_MESSAGES messages to prevent token overflow
-    def get_trimmed_messages(self, history: RedisChatMessageHistory) -> list[BaseMessage]:
+    def get_history(self, session_id: str) -> BaseChatMessageHistory:
         """
-        Returns the last MAX_HISTORY_MESSAGES messages.
-        Prevents token overflow on long sessions.
+        Returns an async-compatible RedisChatMessageHistory.
+        This function is async because it awaits the async Redis client factory.
+        RunnableWithMessageHistory supports async get_session_history when the chain is used via .ainvoke.
         """
-        messages = history.messages
-        trimmed = messages[-settings.MAX_HISTORY_MESSAGES:]
-        trimmed= trim_messages_by_tokens(trimmed, max_tokens=settings.MAX_HISTORY_TOKENS)
-        return trimmed
+        logger.debug("HistoryService.get_history called", extra={"session_id": session_id})
 
-    # Append a new turn to the history after a successful response
-    def append_turn(self, history: RedisChatMessageHistory, user_input: str, llm_output: str) -> None:
-        """Saves a full human/AI turn to Redis after a successful response."""
-        history.add_user_message(user_input)
-        history.add_ai_message(llm_output)
+        try:
+            history = RedisChatMessageHistory(
+                session_id=session_id,
+                url=settings.CACHE_SERVICE_ENDPOINT,
+                ttl=settings.HISTORY_TTL,
+            )
+            logger.debug("Created RedisChatMessageHistory", extra={"session_id": session_id})
+            return history
+        except Exception as exc:
+            logger.exception("Failed to construct RedisChatMessageHistory", exc_info=exc, extra={"session_id": session_id})
+            raise
+
 
 history_service = HistoryService()

@@ -1,11 +1,12 @@
-from utils.get_model_encoder import ENCODER
+from utils.token_count import get_token_count
 from collections import deque
 
 def trim_messages_by_tokens(messages: list, max_tokens: int = 2000) -> list:
     dq = deque(messages)
     
     def count(msg) -> int:
-        return len(ENCODER.encode(msg.content))
+        return get_token_count(msg.content)
+
 
     total = sum(count(m) for m in dq)
     

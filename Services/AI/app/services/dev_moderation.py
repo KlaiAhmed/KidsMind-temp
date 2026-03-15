@@ -22,7 +22,7 @@ DEV_KIDS_THRESHOLDS = {
 async def dev_check_moderation(message: str, context: str, client: httpx.AsyncClient ):
     """ Checks if the content is appropriate for kids using Sightengine moderation API(free Tier)."""
     try:
-        timer= time.time()
+        timer= time.perf_counter()
 
         text= f"APP CONTEXT: {context}\nUSER Input: {message}"
 
@@ -41,11 +41,11 @@ async def dev_check_moderation(message: str, context: str, client: httpx.AsyncCl
         for category, threshold in DEV_KIDS_THRESHOLDS.items():
             api_score = scores.get(category, 0)
             if api_score > threshold:
-                logger.warning(f"Content flagged for category '{category}' with score {api_score} exceeding threshold {threshold}.")
-                raise HTTPException(status_code=400, detail=f"text contains inappropriate content for your age. Category: {category}")
+                logger.warning(f"Content blocked | category='{category}' | score={api_score:.3f} | threshold={threshold}")
+                raise HTTPException(status_code=400, detail=f"text contains inappropriate content for your age.")
                     
-        timer = time.time() - timer
-        logger.info(f"Dev Moderation check completed in {timer:.2f} seconds with scores: {scores}.")
+        timer = time.perf_counter() - timer
+        logger.info(f"Dev Moderation check completed in {timer:.3f} seconds with scores: {scores}.")
                 
     except HTTPException:
         raise

@@ -14,6 +14,11 @@ class Settings(BaseSettings):
     # Service
     SERVICE_NAME: str = "stt-service"
 
+    IS_PROD: bool = False
+
+    # CORS 
+    CORS_ORIGINS: list[str] = ["*"]
+
     # Audio file constraints
     MAX_AUDIO_BYTES : int =  50 * 1024 * 1024  # 50 MB
     SUPPORTED_AUDIO_EXTENSIONS: set = {".mp3", ".wav", ".ogg", ".flac", ".m4a"}

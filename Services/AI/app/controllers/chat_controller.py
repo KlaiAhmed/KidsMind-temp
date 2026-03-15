@@ -1,5 +1,7 @@
-from fastapi import HTTPException
+import json
 import time
+from fastapi import HTTPException
+from typing import AsyncGenerator
 
 from services.ai_service import ai_service
 from schemas.ChatRequest import ChatRequest
@@ -7,32 +9,53 @@ from utils.get_moderation_service import get_moderation_service
 from utils.validate_token_limit import validate_token_limit
 from utils.logger import logger
 
-async def chat_controller(payload: ChatRequest, user: dict, client) -> str:
-    try:    
-        start_time = time.time()
 
-        # Validate token limits for text and context
+async def chat_controller(payload: ChatRequest, user: dict, client) -> dict:
+    """Non-streaming: validate → moderate → invoke → return parsed dict."""
+    try:
+        start = time.perf_counter()
         validate_token_limit(payload)
 
-        # Get the moderation service ( either OpenAI (prod) or Sightengine (dev) Content Moderation API)
         moderate = get_moderation_service()
-
-        # Calling External Moderation API to check if user input is appropriate for kids
         await moderate(payload.text, payload.context or "", client=client)
 
-        # Call the AI service
         response = await ai_service.get_response(user, payload)
 
-        # Calling External Moderation API to check if AI output is appropriate for kids
-        await moderate(response.get("explanation", ""), payload.context or "", client=client)
-
-        duration = time.time() - start_time
-        logger.info(f"Chat processing completed in {duration:.2f} seconds.")
-
+        logger.info(f"Chat completed in {time.perf_counter() - start:.3f}s")
         return response
-    
+
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Unexpected error in Chat_controller: {e}")
+        logger.error(f"Unexpected error in chat_controller: {e}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
+
+
+async def chat_stream_controller(payload: ChatRequest, user: dict, client) -> AsyncGenerator[str, None]:
+    """
+    Streaming: validate → moderate (before stream starts) → yield SSE events.
+
+    Each SSE event data is a JSON string: {"field":"...","value":"..."}
+    Terminal events: [DONE] on success, {"error":"..."} on failure.
+    """
+    start = time.perf_counter()
+
+    # Validate and moderate BEFORE returning the generator, errors surface as HTTP exceptions
+    validate_token_limit(payload)
+    moderate = get_moderation_service()
+    await moderate(payload.text, payload.context or "", client=client)
+
+    async def generate():
+        try:
+            async for chunk in ai_service.stream_response(user, payload):
+                yield f"data: {chunk}\n\n"
+
+            logger.info(f"Stream completed in {time.perf_counter() - start:.3f}s")
+            yield "data: [DONE]\n\n"
+
+        except Exception as e:
+            logger.error(f"Stream generation error: {e}")
+            error_event = json.dumps({"error": "Stream interrupted. Please try again."})
+            yield f"data: {error_event}\n\n"
+
+    return generate()

@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from prometheus_fastapi_instrumentator import Instrumentator
 import httpx
@@ -10,6 +11,15 @@ from core.logging_setup import setup_logging, RequestTracingMiddleware
 from core.config import settings
 from models.whisper import load_all_models, get_model
 from utils.logger import logger
+
+
+HTTPX_TIMEOUT = httpx.Timeout(
+    connect=5.0,
+    read=60.0,
+    write=10.0,
+    pool=5.0,
+)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -33,7 +43,7 @@ async def lifespan(app: FastAPI):
     # Initialize the worker semaphore based on the number of workers/threads configured for the mode
     app.state.worker_semaphore = asyncio.Semaphore(settings.WHISPER_NUM_WORKERS if settings.WHISPER_MODE == "gpu" else settings.WHISPER_CPU_THREADS)
     
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    async with httpx.AsyncClient(timeout=HTTPX_TIMEOUT) as client:
         app.state.http_client = client
         yield
     
@@ -46,6 +56,14 @@ def create_app() -> FastAPI:
     # Initialize the FastAPI app with a lifespan context manager
     app = FastAPI(title=settings.SERVICE_NAME, lifespan=lifespan)
 
+    # Add CORS middleware
+    app.add_middleware(CORSMiddleware,
+        allow_origins=settings.CORS_ORIGINS,
+        allow_credentials=True,
+        allow_methods=["POST", "GET", "DELETE"],
+        allow_headers=["*"],
+    )
+
     # Add request tracing middleware
     app.add_middleware(RequestTracingMiddleware)
 
@@ -54,12 +72,13 @@ def create_app() -> FastAPI:
 
     # Instrumentation for Prometheus
     Instrumentator().instrument(app).expose(app)
+
+    @app.get("/health")
+    def health_check():
+        return {"status": "ok"}
     
     return app
 
 app = create_app()
 
 
-@app.get("/health")
-def health_check():
-    return {"status": "ok"}

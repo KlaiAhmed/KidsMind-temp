@@ -1,477 +1,227 @@
 # STT Service
 
-A production-ready, high-performance Speech-to-Text microservice built on [faster-whisper](https://github.com/SYSTRAN/faster-whisper) and served via FastAPI. Designed for low-latency transcription within a containerized, security-hardened environment.
+## Overview
 
-## Table of Contents
+A FastAPI microservice that transcribes audio files via [faster-whisper](https://github.com/SYSTRAN/faster-whisper) (CTranslate2 backend). Accepts a URL pointing to an audio file, downloads it, runs a dual-model pipeline (tiny model for language detection, configurable main model for transcription), and returns the text with detected language and processing duration. Designed to run GPU-accelerated inside Docker with semaphore-based concurrency control.
 
-- [STT Service](#stt-service)
-  - [Table of Contents](#table-of-contents)
-  - [Features](#features)
-  - [Dual-Model Pipeline](#dual-model-pipeline)
-  - [API](#api)
-    - [`POST /v1/stt/transcriptions`](#post-v1stttranscriptions)
-    - [`GET /health`](#get-health)
-    - [`GET /metrics`](#get-metrics)
-  - [Configuration](#configuration)
-  - [Dependencies](#dependencies)
-  - [Repository Structure](#repository-structure)
-  - [Docker](#docker)
-    - [Host Machine Setup (Required for GPU)](#host-machine-setup-required-for-gpu)
-      - [Linux + Windows](#linux--windows)
-    - [Build](#build)
-    - [Docker Compose](#docker-compose)
-    - [Implementation Details](#implementation-details)
-  - [Observability](#observability)
-    - [Metrics](#metrics)
-    - [Logging](#logging)
-      - [What gets logged](#what-gets-logged)
-      - [Why JSON instead of plain text](#why-json-instead-of-plain-text)
-      - [Why stdout instead of a log file](#why-stdout-instead-of-a-log-file)
-      - [How request tracing works](#how-request-tracing-works)
-      - [Why raw ASGI middleware instead of `BaseHTTPMiddleware`](#why-raw-asgi-middleware-instead-of-basehttpmiddleware)
-      - [Usage](#usage)
-      - [Paths excluded from logging](#paths-excluded-from-logging)
-      - [Silenced third-party loggers](#silenced-third-party-loggers)
+## Architecture
 
----
+```mermaid
+flowchart TD
+    Client([Client]) --> MW[RequestTracingMiddleware<br/>X-Request-ID · duration]
+    MW --> Router[stt_router<br/>POST /v1/stt/transcriptions]
+    Router -- "Depends" --> Sem[acquire_worker<br/>asyncio.Semaphore]
+    Router -- "Depends" --> Models[get_models<br/>main + tiny]
+    Router -- "Depends" --> HC[get_client<br/>httpx.AsyncClient]
+    Router --> Ctrl[stt_controller]
+    Ctrl --> Fetch[fetch_audio<br/>validate ext · HTTP GET · validate size]
+    Ctrl --> Decode[decode_audio<br/>faster_whisper.audio.decode_audio]
+    Ctrl --> Lang[detect_language<br/>tiny model · beam_size=1 · asyncio.to_thread]
+    Ctrl --> Transcribe[transcribe_audio<br/>main model · VAD filter · asyncio.to_thread]
+    Fetch -.-> ExtStorage[(External Audio Storage)]
+    Lang -.-> TinyModel[(Whisper tiny)]
+    Transcribe -.-> MainModel[(Whisper main)]
+    Transcribe --> Result([TranscriptionResult])
+```
 
-## Features
+## Why faster-whisper?
 
-- **4x faster** inference than standard OpenAI Whisper via the CTranslate2 backend
-- **~50% lower memory footprint** through INT8 quantization
-- **Dual-model pipeline** — a lightweight `tiny` model performs fast language detection before the main model begins transcription
-- **Confidence-threshold fallback** — if the `tiny` model's language probability falls below `0.5`, language detection is delegated to the main model, preventing silent misclassification
-- **16.5% reduction in total processing time** from offloading language detection to the `tiny` model
-- **VAD (Voice Activity Detection)** filtering built into the transcription pipeline to strip silence and reduce hallucinations
-- **Prometheus metrics** exposed at `/metrics` for out-of-the-box observability
-- **Non-root container execution** for runtime security and container breakout prevention
-- **Multi-stage Docker build** that produces a lean, dependency-minimal runtime image
+The service uses [faster-whisper](https://github.com/SYSTRAN/faster-whisper) instead of the standard OpenAI Whisper library. faster-whisper is a reimplementation of Whisper using the [CTranslate2](https://github.com/OpenNMT/CTranslate2) inference engine, which applies model compression and hardware-level optimisations that make it strictly superior for production workloads.
+
+| Dimension | OpenAI Whisper | faster-whisper (this service) |
+|---|---|---|
+| **Inference speed** | Baseline | **~4× faster** via CTranslate2 |
+| **Memory footprint** | Baseline | **~50% lower** through INT8 quantisation |
+| **Compute types** | FP32 / FP16 | FP16 (GPU) · INT8 (CPU) — auto-selected by `WHISPER_MODE` |
+| **GPU support** | Yes (PyTorch) | Yes (CUDA via CTranslate2) |
+| **CPU support** | Slow | Practical — INT8 quantisation keeps latency acceptable |
+| **VAD integration** | Not built-in | Built-in — strips silence, reduces hallucinations |
+| **Multi-worker concurrency** | Not supported | Supported — `WHISPER_NUM_WORKERS` semaphore |
+| **API compatibility** | Reference API | Drop-in compatible output format |
+
+In short: for the same transcription quality, faster-whisper consumes roughly half the memory and completes in a quarter of the time, which directly translates to higher throughput and lower infrastructure cost.
 
 ---
 
 ## Dual-Model Pipeline
 
-The service separates language detection from transcription across two independently loaded models. This avoids the overhead of running full-beam search on the main model just to determine language.
-
 ```mermaid
-flowchart TD
-    A([Audio Input]) --> B[Decode Audio
-faster-whisper decode_audio]
-    B --> C[Tiny Model 
-            beam_size=1 
-            temperature=0]
-    C --> D{language_probability
-≥ 0.5?}
-    D -- Yes --> E[Use detected language]
-    D -- No
-Low confidence --> F[Pass language=None
-to main model]
-    E --> G[Main Model Transcription]
-    F --> G
-    G --> H([Return text · language · duration])
+flowchart LR
+    A[Audio ndarray] --> B[Tiny Model<br/>greedy · temp=0]
+    B --> C{confidence ≥ 0.5?}
+    C -- Yes --> D[detected language]
+    C -- No --> E[language = None]
+    D --> F[Main Model<br/>VAD · beam search]
+    E --> F
+    F --> G[Transcribed text]
 ```
 
-**Key design decisions:**
+**Stage 1 — Language detection (tiny model)**
 
-| Stage | Model | Config | Purpose |
-|---|---|---|---|
-| Language Detection | `whisper-tiny` | `beam_size=1`, `temperature=0`, `cpu_threads=2` | Fast, greedy language ID |
-| Transcription | Configurable (default: `medium`) | INT8, `vad_filter=True`, `min_silence_ms=500` | High-accuracy transcription |
+The lightweight `tiny` model runs greedy decoding (`beam_size=1`, `temperature=0`) on the audio to identify the spoken language as cheaply and quickly as possible. Greedy decoding is intentionally lossy here — quality does not matter because only the language tag and its associated confidence score are used; the text output is discarded.
 
-When the tiny model's confidence is below the threshold, `language=None` is passed to the main model, which performs its own internal language detection during the first transcription pass — adding minimal overhead while guaranteeing correctness.
+If the returned confidence score is **≥ 0.5**, the detected language tag is passed to the main model, constraining its search space and skipping its own detection pass entirely. If confidence falls **below 0.5**, the language is set to `None` and the main model performs language detection itself during the first transcription pass — preventing silent misclassification on ambiguous or noisy audio.
 
----
+**Stage 2 — Transcription (main model)**
 
-## API
+The configurable main model (default: `large-v3-turbo`) runs beam search over the full audio with VAD (Voice Activity Detection) filtering enabled. VAD pre-processes the waveform to strip non-speech segments before inference, which reduces both hallucinations on silent passages and the total number of tokens the model has to process.
 
-### `POST /v1/stt/transcriptions`
+### Why the split pays off
 
-Accepts an audio file URL (e.g. from object storage), downloads it internally, and returns the transcription.
+| Metric | Single-model approach | Dual-model approach |
+|---|---|---|
+| **Language detection cost** | Full main-model pass | Tiny-model greedy pass (negligible) |
+| **Total processing time** | Baseline | **~16.5% faster** |
+| **Misclassification risk** | Low-confidence results silently accepted | Confidence threshold fallback to main model |
+| **Memory overhead** | One model loaded | Tiny model adds minimal VRAM (~70 MB) |
+| **Hallucination resistance** | Depends on model | VAD filtering on main model |
 
-**Request body** (`application/json`):
+The `tiny` model is fast enough that its language detection cost is negligible relative to the main model transcription pass. The net result is a measurable end-to-end speedup without sacrificing accuracy, and an explicit safety net against the silent misclassification failure mode that would occur if a low-confidence language tag were passed through unchecked.
 
-```json
-{
-  "audio_url": "https://your-storage/audio/file.wav",
-  "context": ""
-}
-```
+
+
+## API Reference
+
+### Speech-to-Text
+
+| Method | Endpoint | Request Body | Response | Description |
+|--------|----------|-------------|----------|-------------|
+| `POST` | `/v1/stt/transcriptions` | `TranscriptionRequest` (JSON) | `TranscriptionResult` (JSON) | Fetch audio from URL, detect language, transcribe |
+
+**`TranscriptionRequest`**
 
 | Field | Type | Required | Description |
-|---|---|---|---|
-| `audio_url` | `string` | Yes | Presigned or accessible URL pointing to the audio file |
-| `context` | `string` | No | Optional context hint (reserved for future prompt conditioning) |
+|-------|------|----------|-------------|
+| `audio_url` | `HttpUrl` | Yes | Accessible URL pointing to the audio file |
+| `initial_prompt` | `string` | No | Context text passed to the model to condition transcription |
 
-**Response** (`200 OK`):
-
-```json
-{
-  "text": "Hello, how are you today?",
-  "language": "en",
-  "duration": 1.43
-}
-```
+**`TranscriptionResult`**
 
 | Field | Type | Description |
-|---|---|---|
-| `text` | `string` | Full transcription of the audio |
-| `language` | `string` | BCP-47 language code detected or inferred |
-| `duration` | `float` | Total server-side processing time in seconds |
+|-------|------|-------------|
+| `text` | `string` | Full transcription |
+| `language` | `string \| null` | BCP-47 language code, or `null` if detection was uncertain |
+| `duration_seconds` | `float` | Wall-clock time for language detection + transcription |
 
-**Error responses:**
+### Infrastructure
 
-| Status | Condition |
-|---|---|
-| `400` | Audio URL returned a non-2xx response (e.g. storage access denied) |
-| `502` | Network error reaching the audio URL |
-| `500` | Internal transcription failure |
+| Method | Endpoint | Response | Description |
+|--------|----------|----------|-------------|
+| `GET` | `/health` | `{"status": "ok"}` | Liveness probe |
+| `GET` | `/metrics` | Prometheus text | Auto-instrumented request metrics (counts, latencies, in-flight gauges) |
 
-### `GET /health`
+## Data Flow
 
-Returns `{"status": "ok"}` — used by container orchestrators for liveness probing.
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant MW as TracingMiddleware
+    participant R as Router
+    participant S as Semaphore
+    participant Ctrl as Controller
+    participant Ext as Audio Storage
+    participant Tiny as Tiny Model
+    participant Main as Main Model
 
-### `GET /metrics`
-
-Prometheus-compatible metrics endpoint exposed by `prometheus-fastapi-instrumentator`. Includes request counts, latencies, and in-flight request gauges per route.
-
----
+    C->>MW: POST /v1/stt/transcriptions
+    MW->>MW: Assign X-Request-ID
+    MW->>R: Forward request
+    R->>S: acquire(timeout=STT_TIMEOUT_SECONDS)
+    alt Semaphore timeout
+        S-->>R: TimeoutError
+        R-->>C: 503 Service Busy
+    end
+    S-->>R: Acquired
+    R->>Ctrl: stt_controller(request, client, models)
+    Ctrl->>Ctrl: Validate audio extension
+    Ctrl->>Ext: HTTP GET audio_url (30s timeout)
+    Ext-->>Ctrl: Audio bytes
+    Ctrl->>Ctrl: Validate size (≤50 MB)
+    Ctrl->>Ctrl: decode_audio → numpy ndarray
+    Ctrl->>Tiny: asyncio.to_thread(detect_language)
+    Tiny-->>Ctrl: language or None
+    Ctrl->>Main: asyncio.to_thread(transcribe_audio)
+    Main-->>Ctrl: Transcribed text
+    Ctrl-->>R: TranscriptionResult
+    R->>S: release()
+    R-->>MW: Response
+    MW->>MW: Log request · inject X-Request-ID header
+    MW-->>C: 200 + TranscriptionResult
+```
 
 ## Configuration
 
-All runtime parameters are injected via environment variables with safe defaults.
+All settings are loaded via `pydantic-settings` from environment variables or `.env`.
 
-| Variable | Default | Description |
-|---|---|---|
-| `WHISPER_MODEL` | `medium` | Main model size: `tiny`, `base`, `small`, `medium`, `large-v3` |
-| `WHISPER_MODE` | `cpu` | Inference mode: `cpu` or `gpu` |
-| `WHISPER_CPU_THREADS` | `4` | CPU thread count for the main model |
-| `WHISPER_NUM_WORKERS` | `2` | Parallel worker count for the main model |
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `WHISPER_MODE` | No | `gpu` | `cpu` or `gpu` — controls device, compute type, and semaphore sizing |
+| `WHISPER_MODEL` | No | `large-v3-turbo` | Main model: `tiny`, `base`, `small`, `medium`, `large-v3-turbo`, `large-v3` |
+| `WHISPER_NUM_WORKERS` | No | `2` | Max concurrent transcriptions (GPU mode semaphore size) |
+| `WHISPER_CPU_THREADS` | No | `8` (derived) | CPU threads per model; also semaphore size in CPU mode |
+| `HF_TOKEN` | No | — | Hugging Face token for model downloads (higher rate limits) |
+| `LOG_LEVEL` | No | `INFO` | Python log level |
 
----
+**Derived settings** (set automatically by `WHISPER_MODE`, overridable):
 
-## Dependencies
+| `WHISPER_MODE` | `WHISPER_DEVICE` | `WHISPER_COMPUTE_TYPE` | `WHISPER_CPU_THREADS` |
+|----------------|-----------------|----------------------|----------------------|
+| `gpu` | `cuda` | `float16` | `0` (unused) |
+| `cpu` | `cpu` | `int8` | `8` |
 
-| Package | Version | Role |
-|---|---|---|
-| `fastapi` | `0.128.7` | API layer — request routing, dependency injection, OpenAPI schema generation |
-| `uvicorn` | `0.40.0` | ASGI server — serves FastAPI with async I/O via `asyncio` event loop |
-| `python-multipart` | `0.0.22` | Multipart form-data parser required for file upload support in FastAPI |
-| `faster-whisper` | `1.2.1` | Core inference engine — CTranslate2-optimized Whisper with INT8 quantization |
-| `prometheus-fastapi-instrumentator` | `7.1.0` | Auto-instruments FastAPI routes and exposes a `/metrics` Prometheus endpoint |
-| `httpx` | `0.28.1` | Async HTTP client used to fetch audio files from object storage URLs |
+**Constraints**: `MAX_AUDIO_BYTES` = 50 MB, `SUPPORTED_AUDIO_EXTENSIONS` = `.mp3`, `.wav`, `.ogg`, `.flac`, `.m4a`.
 
----
-
-## Repository Structure
-
-```
-stt-service/
-├── app/
-│   ├── core/             # App config & environment variable bindings
-│   ├── models/           # Whisper model loader — singleton init on startup
-│   ├── routers/          # API route definitions
-│   ├── services/         # Core business logic: STT pipeline & language detection
-│   ├── utils/            # Shared helpers
-│   └── main.py           # Application entry point
-├── .dockerignore
-├── Dockerfile            # Multi-stage build
-├── requirements.txt
-└── README.md
-```
-
----
 
 ## Docker
 
-### Host Machine Setup (Required for GPU)
-
-> **macOS users:** NVIDIA CUDA is not supported on Mac (Apple Silicon uses Metal, not CUDA).  
-> 
-> GPU mode will not work regardless of setup: use `WHISPER_MODE=cpu`.
-
----
-
-#### Linux + Windows
-
-Install the **NVIDIA Container Toolkit** — this is the bridge that lets Docker talk to your GPU. Without it, `--gpus all` silently does nothing.
 ```bash
-curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
-
-curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
-  sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
-  sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
-
-sudo apt-get update && sudo apt-get install -y nvidia-container-toolkit
-
-sudo systemctl restart docker
-```
-> On Windows, Docker Desktop runs containers inside WSL2 (a Linux VM). You install the toolkit *inside that VM*, not on Windows itself. The Windows NVIDIA driver handles the actual GPU communication.
-
-**Prerequisites:**
--  **NVIDIA GPU** ( Pascal architecture or newer with NVIDIA RTX series card recommended )
--  **WSL2** enabled with a **Linux distro** (Ubuntu recommended) 
-  to check run in powershell : wsl --list --verbose
--  **[NVIDIA drivers for Windows](https://www.nvidia.com/Download/index.aspx)** installed (the normal desktop driver)
-  to check run in powershell : nvidia-smi
--  **[Docker Desktop](https://www.docker.com/products/docker-desktop/)** with the WSL2 backend enabled
-
-
-**Verify the setup worked :**
-```bash
-docker run --rm --gpus all nvidia/cuda:12.1.0-base-ubuntu22.04 nvidia-smi
-```
-You should see your GPU listed. If you get an error, the toolkit isn't wired up correctly.
-
----
-
-### Build
-```bash
-docker build -t stt-service:latest .
+docker compose build stt-service
 ```
 
-> `WHISPER_MODE` controls both the device (`cpu`/`cuda`) and compute type (`int8`/`float16`) automatically. See [Configuration](#configuration) for details.
+GPU requires the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html). For CPU-only, omit `--gpus all` and set `WHISPER_MODE=cpu`.
 
-The service will be available at `http://stt-service:8000`.
-
-### Docker Compose
+Docker Compose GPU reservation:
 ```yaml
-services:
-  stt-service:
-    ...
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
+deploy:
+  resources:
+    reservations:
+      devices:
+        - driver: nvidia
+          count: 1
+          capabilities: [gpu]
 ```
 
-**What does `deploy.resources.reservations.devices` do?**
-
-It is the Docker Compose equivalent of `--gpus all` on the command line. Without it, Compose starts the container with no GPU access even if the toolkit is installed. Breaking it down:
-
-| Key | Value | Meaning |
-|---|---|---|
-| `driver` | `nvidia` | Use the NVIDIA runtime (installed by the toolkit) |
-| `count` | `1` | Reserve 1 GPU for this container. Use `all` to expose every GPU |
-| `capabilities` | `[gpu]` | Grant general GPU compute access (required for CUDA) |
-
-> This block is only meaningful when running with `docker compose` (v2). Plain `docker run` uses `--gpus all` instead.
-
-### Implementation Details
-
-| Stage | Base Image | Purpose |
-|---|---|---|
-| `Image` | `nvidia/cuda:12.8.1-cudnn8-runtime-ubuntu24.04` | Ships CUDA + cuDNN runtime libs; copies only the virtualenv and app code |
-
-> **Note on image size:** the NVIDIA base image adds CUDA + cuDNN, bringing the total image size to ~5–6 GB. This is unavoidable — `runtime` is already the smallest NVIDIA variant that works.
-
----
-
-
-## Observability
-
-### Metrics
-
-Prometheus metrics are automatically collected for every route:
-
-```
-http_requests_total
-http_request_duration_seconds
-http_requests_in_progress
-```
-
----
-
-### Logging
-
-Logging is implemented in `app/utils/logging_setup.py`. The file contains three components — a JSON formatter, a request tracing middleware, and a setup function — each described below.
-
----
-
-#### What gets logged
-
-Every log line emitted by this service is a single JSON object written to `stdout`. A typical request log looks like this:
-
-```json
-{
-  "timestamp":   "2024-01-15T10:30:00.123456+00:00",
-  "level":       "INFO",
-  "service":     "stt",
-  "module":      "utils.logging_setup",
-  "request_id":  "a1b2c3d4-5678-90ab-cdef-000000000000",
-  "message":     "request completed",
-  "http_method": "POST",
-  "http_path":   "/v1/stt/transcriptions",
-  "client_ip":   "192.168.1.1",
-  "status_code": 200,
-  "duration_s":  0.342
-}
-```
-
-And a log line emitted from application code (e.g. inside the transcription service) looks like:
-
-```json
-{
-  "timestamp":  "2024-01-15T10:30:00.050000+00:00",
-  "level":      "WARNING",
-  "service":    "stt",
-  "module":     "services.transcriber",
-  "request_id": "a1b2c3d4-5678-90ab-cdef-000000000000",
-  "message":    "audio too short, padding applied"
-}
-```
-
-Notice both lines share the same `request_id` — this is the core feature of the tracing system.
-
----
-
-#### Why JSON instead of plain text
-
-Plain-text logs like `[INFO] 2024-01-15 — request completed in 0.3s` are readable by humans but opaque to machines. Once you have more than one service, you need to search, filter, and correlate logs programmatically.
-
-JSON logs unlock queries in Grafana Loki like:
-
-```logql
-# Show only errors from this service
-{service="stt"} | level = "ERROR"
-
-# Show all requests that took more than 1 second
-{service="stt"} | duration_s > 1.0
-
-# Trace a single request across all services
-{} | request_id = "a1b2c3d4-..."
-```
-
-Every field in the JSON object becomes a filterable dimension in Loki — no log parsing configuration required.
-
----
-
-#### Why stdout instead of a log file
-
-In a containerised environment, writing to a file inside the container is an anti-pattern:
-
-- Log files survive container restarts and accumulate unboundedly, consuming disk
-- Files are lost entirely when the container is replaced or crashes at the worst moment
-- You'd need to manage log rotation, permissions, and file discovery per container
-
-Instead, the service logs to `stdout`. Docker automatically captures all `stdout` output and writes it to a host-level file at `/var/lib/docker/containers/<id>/<id>-json.log`. **Promtail** (a log shipper) reads those files and forwards them to **Grafana Loki** for storage, indexing, and querying. You never manage log files manually.
-
-```
-FastAPI (stdout)
-      │
-      ▼
-  Docker log driver
-      │
-      ▼
-  Promtail  ←  reads /var/lib/docker/containers/...
-      │
-      ▼
-  Grafana Loki  ←  stores & indexes
-      │
-      ▼
-  Grafana  ←  query & dashboard
-```
-
----
-
-#### How request tracing works
-
-Every HTTP request gets a unique `request_id` — a UUID4 string like `a1b2c3d4-5678-...`. This ID is generated (or read from the incoming `X-Request-ID` header if an upstream service already assigned one) at the start of the request and stored in a **ContextVar**.
-
-A `ContextVar` is Python's mechanism for a variable that is local to the current async task. Because FastAPI handles requests concurrently, a normal global variable would be overwritten by other requests mid-flight. A ContextVar gives each concurrent request its own isolated copy of the variable — so 100 simultaneous requests each have their own `request_id` without interfering with each other.
-
-The JSON formatter reads from this ContextVar on every log call. This means any log line emitted anywhere in your code during a request — in a router, a service, a utility function — automatically carries the correct `request_id` with zero extra effort.
-
-```
-Incoming request
-      │
-      ├─ middleware sets:  request_id_var = "a1b2c3d4-..."
-      │
-      ├─ router logs:      logger.info("starting transcription")
-      │                    → {"request_id": "a1b2c3d4-...", ...}
-      │
-      ├─ service logs:     logger.warning("audio short, padding")
-      │                    → {"request_id": "a1b2c3d4-...", ...}
-      │
-      └─ middleware logs:  "request completed"
-                           → {"request_id": "a1b2c3d4-...", ...}
-```
-
-The `request_id` is also echoed back to the caller as a response header `X-Request-ID`, so clients can reference it when reporting issues.
-
----
-
-#### Why raw ASGI middleware instead of `BaseHTTPMiddleware`
-
-FastAPI's built-in `BaseHTTPMiddleware` is simple to use but has a critical flaw: it **buffers the entire response body in memory** before passing it to the client. For a Speech-to-Text service that may stream large results, this causes two problems:
-
-- Streaming responses break silently — the client receives everything at once, or nothing
-- Memory usage spikes proportionally to response size under concurrent load
-
-The middleware in this service is implemented as a **raw ASGI middleware** instead. ASGI is the low-level protocol FastAPI runs on. Each response is sent in two separate messages:
-
-| ASGI message type | Contains |
-|---|---|
-| `http.response.start` | Status code + response headers |
-| `http.response.body` | The actual response bytes (may arrive in chunks) |
-
-The middleware wraps the `send` function to intercept only `http.response.start` (to read the status code and inject the `X-Request-ID` header), then immediately forwards every message to the client unchanged. The body is never buffered.
-
----
-
-#### Usage
-
-**In `main.py`** — wire up logging and the middleware:
-
-```python
-from utils.logging_setup import setup_logging, RequestTracingMiddleware
-
-def create_app() -> FastAPI:
-    setup_logging()  # must be called first — before any imports that log
-    app = FastAPI(title=settings.SERVICE_NAME, lifespan=lifespan)
-    app.add_middleware(RequestTracingMiddleware)
-    ...
-    return app
-```
-
-> `setup_logging()` must be the first line. Python's logging system initialises lazily — if any module logs before setup runs, it creates a default plain-text handler that persists alongside yours, producing duplicate output.
-
-**In any other file** — use the standard Python logging API:
-
-```python
-from utils.logger import logger
-
-logger.info("model loaded successfully")
-logger.warning("audio too short, padding applied")
-logger.error("transcription failed", exc_info=True)  # attaches full traceback
-```
-
-No imports from this file are needed in application code. Because all loggers in Python form a tree rooted at the root logger, configuring the root logger once in `setup_logging()` causes every child logger across the entire application to automatically inherit the JSON formatter.
-
----
-
-#### Paths excluded from logging
-
-The following paths are silently skipped by the middleware and never produce a log line:
-
-| Path | Reason |
-|---|---|
-| `/metrics` | Scraped by Prometheus every 15 seconds — would generate ~5,760 useless log lines per day |
-| `/health` | Polled by container orchestrators every few seconds for liveness checks |
-| `/favicon.ico` | Browser requests — irrelevant to a JSON API |
-
----
-
-#### Silenced third-party loggers
-
-These libraries log at `DEBUG`/`INFO` level constantly. They are suppressed to `WARNING` to prevent noise in production logs:
-
-| Logger | Reason suppressed |
-|---|---|
-| `httpx` | Logs every outgoing HTTP request header and body |
-| `httpcore` | Low-level HTTP engine under `httpx` — very verbose |
-| `uvicorn.access` | Uvicorn has its own access log format; we replace it with our JSON version |
-| `multipart` | Logs file upload parsing internals |
-| `asyncio` | Internal event loop debug messages |
+## Dependencies & Integrations
+
+| Dependency / Service | Purpose | Required |
+|---------------------|---------|----------|
+| `faster-whisper` 1.2.1 | CTranslate2-optimized Whisper inference engine | Yes |
+| `ctranslate2` 4.7.1 | Backend runtime for faster-whisper (CUDA/CPU) | Yes |
+| `fastapi` 0.128.7 | HTTP API framework with dependency injection | Yes |
+| `uvicorn` 0.40.0 | ASGI server | Yes |
+| `httpx` 0.28.1 | Async HTTP client for fetching audio from URLs | Yes |
+| `av` (PyAV) 16.1.0 | FFmpeg bindings for audio decoding | Yes |
+| `pydantic-settings` 2.13.1 | Typed configuration from env vars / `.env` files | Yes |
+| `python-multipart` 0.0.22 | Multipart form parsing (FastAPI dependency) | Yes |
+| `prometheus-fastapi-instrumentator` 7.1.0 | Auto-instruments routes, exposes `/metrics` | Yes |
+| `numpy` 2.4.2 | Audio array representation | Yes |
+| NVIDIA CUDA 12.8 + cuDNN | GPU inference runtime | Only for GPU mode |
+| `ffmpeg` (system) | Audio format conversion (used by `av`/`faster-whisper`) | Yes |
+
+## Error Handling
+
+- **Domain exceptions** in `exceptions.py` map to specific HTTP status codes at the router layer:
+
+| Exception | HTTP Status | Detail |
+|-----------|-------------|--------|
+| `UnsupportedAudioFormatError` | 415 | Unsupported audio format |
+| `AudioTooLargeError` | 413 | Audio exceeds 50 MB limit |
+| `AudioFetchError` | 502 | Failed to fetch audio from URL (network error or non-2xx upstream) |
+| `AudioDecodeError` | 422 | Audio bytes could not be decoded |
+| `TranscriptionError` | 500 | Model inference failure |
+| Unhandled exception | 500 | Unexpected internal error |
+
+- **503 Service Busy**: returned by the `acquire_worker` semaphore dependency when all workers are occupied and the timeout (`STT_TIMEOUT_SECONDS`, default 5s GPU / 30s CPU) expires. Clients should retry with backoff.
+- **Request tracing**: every response includes an `X-Request-ID` header (propagated from the incoming header or generated as UUID4). All log lines for that request share the same ID for cross-service correlation.
+- **No retry/backoff logic** is implemented internally — the service fails fast and delegates retry decisions to the caller.
+- **Logging exclusions**: `/metrics`, `/health`, and `/favicon.ico` are excluded from request logging to reduce noise.

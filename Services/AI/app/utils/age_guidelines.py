@@ -1,4 +1,13 @@
-def age_guidelines(age: str) -> str:
+def age_guidelines(age_group: str) -> str:
+    """ 
+    LLM guidelines based on the kid age group
+    Accepts age-group (string):
+        "3-6"
+        "7-11"
+        "12-15"
+    Returns:
+        string
+    """
     guidelines = {
         "3-6": (
             "Tone: playful, warm, celebratory. "
@@ -28,7 +37,7 @@ def age_guidelines(age: str) -> str:
             "Refusal: 'That falls outside what I can help with. Feel free to ask about any academic topic.'"
         ),
     }
-    return guidelines.get(age, (
+    return guidelines.get(age_group, (
         "Tone: clear and neutral. Adapt vocabulary and depth to the question's complexity. "
         "Refusal: 'I can't help with that. Ask me about any subject you're studying!'"
     ))

@@ -10,8 +10,14 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    # Service
+    SERVICE_NAME: str = "AI-service"
+
     # App State
     IS_PROD: bool = False
+
+    # CORS 
+    CORS_ORIGINS: list[str] = ["*"]
 
     # Main AI API (Required) 
     MODEL_NAME: str
@@ -31,15 +37,16 @@ class Settings(BaseSettings):
     # Cache & History 
     CACHE_PASSWORD: Optional[str] = None
     CACHE_SERVICE_ENDPOINT: str = "redis://cache:6379"
-    MAX_HISTORY_MESSAGES: int = 16
-    MAX_HISTORY_TOKENS: int = 4096
+    MAX_HISTORY_MESSAGES: int = 40
+    MAX_LOADED_HISTORY_MESSAGES: int = 10
+    MAX_HISTORY_TOKENS: int = 1500
     HISTORY_TTL: int = Field(default=3600, alias="HISTORY_TTL_SECONDS")
 
     # LOGGING
     LOG_LEVEL: str = "INFO"
 
-    # App Config 
-    RATE_LIMIT: str = "100/minute"
+    # AUTH TOKEN
+    SERVICE_TOKEN: str = ""
 
     @model_validator(mode="after")
     def validate_environment_credentials(self) -> "Settings":
