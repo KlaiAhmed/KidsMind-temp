@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     STORAGE_SERVICE_ENDPOINT: str = "http://storage-service:9000"
     AI_SERVICE_ENDPOINT: str = "http://ai-service:8000"
     DB_SERVICE_ENDPOINT: str = "http://db:5432"
+    CACHE_SERVICE_ENDPOINT: str = "redis://cache:6379"
 
     # File Upload Configuration
     MAX_SIZE: int = Field(default=10 * 1024 * 1024)
