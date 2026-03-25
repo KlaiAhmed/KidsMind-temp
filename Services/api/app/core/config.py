@@ -69,6 +69,11 @@ class Settings(BaseSettings):
     SECRET_ACCESS_KEY: str
     SECRET_REFRESH_KEY: str
 
+    # Initial super admin bootstrap
+    SUPER_ADMIN_EMAIL: str | None = None
+    SUPER_ADMIN_USERNAME: str | None = None
+    SUPER_ADMIN_PASSWORD: str | None = None
+
     @field_validator("STORAGE_ROOT_PASSWORD", "CACHE_PASSWORD", "DB_PASSWORD", "SECRET_ACCESS_KEY", "SECRET_REFRESH_KEY")
     @classmethod
     def check_not_empty(cls, v: str) -> str:

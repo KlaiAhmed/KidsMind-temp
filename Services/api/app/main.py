@@ -12,6 +12,7 @@ from core.logging_setup import setup_logging, RequestTracingMiddleware
 from core.cache_client import get_cache_client, close_cache_client
 from routers.chat import router as chat_router
 from routers.auth import router as auth_router
+from services.bootstrap_admin import ensure_super_admin_exists
 from utils.limiter import limiter
 from utils.logger import logger
 from utils.upstream_headers import build_service_headers
@@ -31,6 +32,7 @@ async def lifespan(app: FastAPI):
         app.state.http_client = client
 
         await get_cache_client()
+        ensure_super_admin_exists()
 
         yield
 

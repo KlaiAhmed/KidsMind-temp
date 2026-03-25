@@ -198,6 +198,9 @@ sequenceDiagram
 | `STORAGE_ROOT_USERNAME` | No | `admin` | MinIO access key |
 | `STORAGE_ROOT_PASSWORD` | **Yes** | — | MinIO secret key (validated non-empty) |
 | `CACHE_PASSWORD` | **Yes** | — | Redis password for rate limiter (validated non-empty) |
+| `SUPER_ADMIN_EMAIL` | No | empty | Bootstrap admin email used at startup seeding |
+| `SUPER_ADMIN_USERNAME` | No | empty | Bootstrap admin username used at startup seeding |
+| `SUPER_ADMIN_PASSWORD` | No | empty | Bootstrap admin password used at startup seeding |
 | `LOG_LEVEL` | No | `INFO` | Python log level |
 | `RATE_LIMIT` | No | `100/minute` | Default rate limit per IP (slowapi format) |
 
@@ -213,6 +216,9 @@ sequenceDiagram
    ```env
    STORAGE_ROOT_PASSWORD=your-minio-secret
    CACHE_PASSWORD=your-redis-password
+    SUPER_ADMIN_EMAIL=superadmin@kidsmind.local
+    SUPER_ADMIN_USERNAME=superadmin
+    SUPER_ADMIN_PASSWORD=ChangeMe123!
    STT_SERVICE_ENDPOINT=http://localhost:8001
    AI_SERVICE_ENDPOINT=http://localhost:8002
    STORAGE_SERVICE_ENDPOINT=http://localhost:9000
