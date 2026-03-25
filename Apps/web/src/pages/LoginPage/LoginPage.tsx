@@ -9,7 +9,7 @@ const LoginPage = () => {
   const { language, setLanguage, translations } = useLanguage();
 
   const handleLoginSuccess = () => {
-    window.location.href = '/dashboard';
+    window.location.href = '/';
   };
 
   return (

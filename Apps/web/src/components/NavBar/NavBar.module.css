@@ -144,6 +144,22 @@
   transform: rotate(180deg);
 }
 
+.userButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-full);
+  color: var(--text-secondary);
+  transition: background 0.25s ease, color 0.25s ease;
+}
+
+.userButton:hover {
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+}
+
 .loginButton {
   padding: var(--spacing-sm) var(--spacing-md);
   border-radius: var(--radius-sm);

@@ -1,10 +1,32 @@
 import React, { Suspense } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import HomePage from './pages/HomePage/HomePage';
+import { useAuthStatus } from './hooks/useAuthStatus';
 
 const LoginPage = React.lazy(() => import('./pages/LoginPage/LoginPage'));
 const GetStartedPage = React.lazy(() => import('./pages/GetStartedPage/GetStartedPage'));
+
+interface GuestOnlyRouteProps {
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  children: React.ReactElement;
+}
+
+const GuestOnlyRoute = ({ isAuthenticated, isLoading, children }: GuestOnlyRouteProps) => {
+  if (isLoading) {
+    return null;
+  }
+
+  if (isAuthenticated) {
+    return <Navigate to="/" replace />;
+  }
+
+  return children;
+};
+
 const App = () => {
+  const { isAuthenticated, isLoading } = useAuthStatus();
+
   return (
     <BrowserRouter>
       <Suspense
@@ -35,9 +57,23 @@ const App = () => {
         }
       >
         <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/get-started" element={<GetStartedPage />} />
+          <Route path="/" element={<HomePage isAuthenticated={isAuthenticated} />} />
+          <Route
+            path="/login"
+            element={(
+              <GuestOnlyRoute isAuthenticated={isAuthenticated} isLoading={isLoading}>
+                <LoginPage />
+              </GuestOnlyRoute>
+            )}
+          />
+          <Route
+            path="/get-started"
+            element={(
+              <GuestOnlyRoute isAuthenticated={isAuthenticated} isLoading={isLoading}>
+                <GetStartedPage />
+              </GuestOnlyRoute>
+            )}
+          />
         </Routes>
       </Suspense>
     </BrowserRouter>

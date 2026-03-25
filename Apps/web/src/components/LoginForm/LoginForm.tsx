@@ -18,8 +18,14 @@ interface LoginFormProps {
   onSuccess: () => void;
 }
 
+interface ApiErrorResponse {
+  detail?: string | Array<{ msg?: string }>;
+}
+
 const LoginForm = ({ translations, onSuccess }: LoginFormProps) => {
   const [serverError, setServerError] = useState<string>('');
+
+  const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/$/, '');
 
   const {
     values,
@@ -38,19 +44,56 @@ const LoginForm = ({ translations, onSuccess }: LoginFormProps) => {
     return translations[errorKey as keyof TranslationMap] || errorKey;
   };
 
-  const onSubmit = async (): Promise<void> => {
+  const getApiErrorMessage = (errorBody: ApiErrorResponse | null): string => {
+    if (!errorBody?.detail) {
+      return translations.login_error_invalid;
+    }
+
+    if (typeof errorBody.detail === 'string') {
+      if (errorBody.detail.toLowerCase() === 'invalid credentials') {
+        return translations.login_error_invalid;
+      }
+      return errorBody.detail;
+    }
+
+    const firstValidationMessage = errorBody.detail.find((item) => item?.msg)?.msg;
+    return firstValidationMessage || translations.login_error_invalid;
+  };
+
+  const onSubmit = async (formValues: LoginFormValues): Promise<void> => {
     setServerError('');
 
-    await new Promise<void>((resolve) => {
-      setTimeout(resolve, 1500);
-    });
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/v1/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Client-Type': 'web',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          email: formValues.email,
+          password: formValues.password,
+        }),
+      });
 
-    // Demo: always fail with invalid credentials
-    setServerError(translations.login_error_invalid);
+      if (!response.ok) {
+        let errorMessage = translations.login_error_invalid;
+        try {
+          const errorBody = (await response.json()) as ApiErrorResponse;
+          errorMessage = getApiErrorMessage(errorBody);
+        } catch {
+          errorMessage = translations.login_error_invalid;
+        }
 
-    // In a real implementation, onSuccess() would be called after a
-    // successful API response. Keeping the reference so the prop is used.
-    void onSuccess;
+        setServerError(errorMessage);
+        return;
+      }
+
+      onSuccess();
+    } catch {
+      setServerError(translations.login_error_invalid);
+    }
   };
 
   const handleFormSubmit = (event: React.FormEvent<HTMLFormElement>): void => {

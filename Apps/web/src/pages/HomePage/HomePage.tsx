@@ -26,7 +26,11 @@ const SectionSkeleton: React.FC = () => (
   />
 );
 
-const HomePage = () => {
+interface HomePageProps {
+  isAuthenticated: boolean;
+}
+
+const HomePage = ({ isAuthenticated }: HomePageProps) => {
   const { theme, toggleTheme } = useTheme();
   const { language, setLanguage, translations, isRTL } = useLanguage();
 
@@ -48,6 +52,7 @@ const HomePage = () => {
         language={language}
         onLanguageChange={setLanguage}
         translations={translations}
+        isAuthenticated={isAuthenticated}
       />
       <main id="main-content">
         <HeroSection translations={translations} language={language} />
@@ -57,7 +62,7 @@ const HomePage = () => {
           <HowItWorks translations={translations} />
           <SafetyBanner translations={translations} />
           <TestimonialCarousel translations={translations} />
-          <CTASection translations={translations} />
+          <CTASection translations={translations} isAuthenticated={isAuthenticated} />
         </Suspense>
       </main>
       <Suspense fallback={null}>

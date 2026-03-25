@@ -1,7 +1,7 @@
 /** NavBar — Fixed navigation bar with language selector, theme toggle, and mobile drawer menu. */
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { Sun, Moon, Menu, X, Languages } from 'lucide-react';
+import { Sun, Moon, Menu, X, Languages, User } from 'lucide-react';
 import type { ThemeMode, LanguageCode, TranslationMap } from '../../types';
 import { LANGUAGES } from '../../utils/constants';
 import { useScrollPosition } from '../../hooks/useScrollPosition';
@@ -13,6 +13,7 @@ interface NavBarProps {
   language: LanguageCode;
   onLanguageChange: (code: LanguageCode) => void;
   translations: TranslationMap;
+  isAuthenticated: boolean;
 }
 
 const RocketLogo = () => {
@@ -40,6 +41,7 @@ const NavBar = ({
   language,
   onLanguageChange,
   translations,
+  isAuthenticated,
 }: NavBarProps) => {
   const { isAtPageTop, isHiddenByScroll } = useScrollPosition();
   const [isLanguageDropdownOpen, setIsLanguageDropdownOpen] = useState(false);
@@ -128,8 +130,20 @@ const NavBar = ({
               {theme === 'light' ? <Moon size={20} strokeWidth={2} /> : <Sun size={20} strokeWidth={2} />}
             </button>
 
-            <Link to="/login" className={styles.loginButton}>{translations.nav_login}</Link>
-            <Link to="/get-started" className={styles.startButton}>{translations.nav_start}</Link>
+            {isAuthenticated ? (
+              <button
+                type="button"
+                className={styles.userButton}
+                aria-label="User account"
+              >
+                <User size={20} strokeWidth={2} aria-hidden="true" />
+              </button>
+            ) : (
+              <>
+                <Link to="/login" className={styles.loginButton}>{translations.nav_login}</Link>
+                <Link to="/get-started" className={styles.startButton}>{translations.nav_start}</Link>
+              </>
+            )}
           </div>
 
           <button
@@ -166,8 +180,20 @@ const NavBar = ({
         >
           {theme === 'light' ? <Moon size={20} strokeWidth={2} /> : <Sun size={20} strokeWidth={2} />}
         </button>
-        <Link to="/login" className={styles.loginButton} onClick={() => setIsMobileMenuOpen(false)}>{translations.nav_login}</Link>
-        <Link to="/get-started" className={styles.startButton} onClick={() => setIsMobileMenuOpen(false)}>{translations.nav_start}</Link>
+        {isAuthenticated ? (
+          <button
+            type="button"
+            className={styles.userButton}
+            aria-label="User account"
+          >
+            <User size={20} strokeWidth={2} aria-hidden="true" />
+          </button>
+        ) : (
+          <>
+            <Link to="/login" className={styles.loginButton} onClick={() => setIsMobileMenuOpen(false)}>{translations.nav_login}</Link>
+            <Link to="/get-started" className={styles.startButton} onClick={() => setIsMobileMenuOpen(false)}>{translations.nav_start}</Link>
+          </>
+        )}
       </div>
     </>
   );

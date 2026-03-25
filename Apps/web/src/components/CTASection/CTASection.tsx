@@ -6,9 +6,10 @@ import styles from './CTASection.module.css';
 
 interface CTASectionProps {
   translations: TranslationMap;
+  isAuthenticated: boolean;
 }
 
-const CTASection = ({ translations }: CTASectionProps) => {
+const CTASection = ({ translations, isAuthenticated }: CTASectionProps) => {
   const { ref, isVisible } = useScrollReveal();
 
   return (
@@ -23,7 +24,7 @@ const CTASection = ({ translations }: CTASectionProps) => {
             {translations.cta_title}
           </h2>
           <p className={styles.subtitle}>{translations.cta_subtitle}</p>
-          <button className={styles.button}>{translations.cta_button}</button>
+          {!isAuthenticated && <button className={styles.button}>{translations.cta_button}</button>}
           <p className={styles.footnote}>{translations.cta_footnote}</p>
         </div>
       </div>

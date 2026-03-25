@@ -25,6 +25,10 @@ cd Apps/web
 npm install
 npm run dev
 ```
+
+### Environment
+
+- Copy `.env.example` to `.env` and set `VITE_API_BASE_URL` (default local API: `http://localhost:8000`).
 ## Routes
 
 | Path | Page | Loading |
