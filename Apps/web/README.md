@@ -29,6 +29,14 @@ npm run dev
 ### Environment
 
 - Copy `.env.example` to `.env` and set `VITE_API_BASE_URL` (default local API: `http://localhost:8000`).
+
+### Auth + CSRF (web)
+
+- Web auth uses cookie-based tokens (`access_token`, `refresh_token`) with `credentials: include`.
+- After login, store `csrf_token` from response body in memory (fallback: read `csrf_token` cookie).
+- Send `X-CSRF-Token` on mutating cookie-auth requests (`POST`, `PUT`, `PATCH`, `DELETE`).
+- On refresh, replace stored CSRF token with the new `csrf_token` returned by the API.
+- Do not persist CSRF token in localStorage.
 ## Routes
 
 | Path | Page | Loading |
@@ -122,6 +130,7 @@ Apps/web/
 | File | Responsibility |
 | --- | --- |
 | `utils/constants.ts` | Static app content/config arrays |
+| `utils/csrf.ts` | CSRF token read/store/header helpers |
 | `utils/translations.ts` | Translation dictionaries |
 | `utils/validators.ts` | Pure validation rules |
 | `utils/cssVariables.ts` | Theme application helper |

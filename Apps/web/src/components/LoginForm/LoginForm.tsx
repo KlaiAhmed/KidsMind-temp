@@ -4,6 +4,7 @@ import { AlertCircle } from 'lucide-react';
 import type { TranslationMap } from '../../types';
 import { useForm } from '../../hooks/useForm';
 import { validateLoginForm } from '../../utils/validators';
+import { setCsrfToken } from '../../utils/csrf';
 import FormField from '../shared/FormField/FormField';
 import PasswordField from '../shared/PasswordField/PasswordField';
 import styles from './LoginForm.module.css';
@@ -20,6 +21,10 @@ interface LoginFormProps {
 
 interface ApiErrorResponse {
   detail?: string | Array<{ msg?: string }>;
+}
+
+interface LoginSuccessResponse {
+  csrf_token?: string;
 }
 
 const LoginForm = ({ translations, onSuccess }: LoginFormProps) => {
@@ -88,6 +93,13 @@ const LoginForm = ({ translations, onSuccess }: LoginFormProps) => {
 
         setServerError(errorMessage);
         return;
+      }
+
+      try {
+        const successBody = (await response.json()) as LoginSuccessResponse;
+        setCsrfToken(successBody.csrf_token ?? null);
+      } catch {
+        setCsrfToken(null);
       }
 
       onSuccess();
