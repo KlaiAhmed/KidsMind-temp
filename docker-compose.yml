@@ -17,6 +17,8 @@ services:
     env_file:
       - .env
       - ./services/api/app/.env
+    labels:
+      logging: "promtail"
     environment:
       - PYTHONUNBUFFERED=1
     volumes:
@@ -36,6 +38,8 @@ services:
     env_file:
       - .env
       - ./services/ai/app/.env
+    labels:
+      logging: "promtail"
     environment:
       - PYTHONUNBUFFERED=1
     volumes:
@@ -54,6 +58,8 @@ services:
     env_file:
       - .env
       - ./services/stt/app/.env
+    labels:
+      logging: "promtail"
     environment:
       - PYTHONUNBUFFERED=1
       - HF_HOME=/model_cache
