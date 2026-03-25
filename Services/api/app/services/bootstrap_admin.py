@@ -30,10 +30,23 @@ def ensure_super_admin_exists() -> None:
         )
 
         if existing_user:
+            updated = False
+
+            if existing_user.email != email:
+                existing_user.email = email
+                updated = True
+
+            if existing_user.username != username:
+                existing_user.username = username
+                updated = True
+
             if existing_user.role != UserRole.ADMIN:
                 existing_user.role = UserRole.ADMIN
+                updated = True
+
+            if updated:
                 db.commit()
-                logger.info("Existing bootstrap super admin promoted to admin role")
+                logger.info("Existing bootstrap super admin synchronized with configured credentials")
             else:
                 logger.info("Bootstrap super admin already exists")
             return

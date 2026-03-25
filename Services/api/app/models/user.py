@@ -9,6 +9,7 @@ from core.database import Base
 class UserRole(str, enum.Enum):
     PARENT = "parent"
     ADMIN = "admin"
+    SUPER_ADMIN = "super_admin"
 
 
 class User(Base):
@@ -72,7 +73,11 @@ class User(Base):
     # IS_ADMIN : CHECK IF USER HAS ADMIN ROLE
     @property
     def is_admin(self) -> bool:
-        return self.role == UserRole.ADMIN
+        return self.role in (UserRole.ADMIN, UserRole.SUPER_ADMIN)
+
+    @property
+    def is_super_admin(self) -> bool:
+        return self.role == UserRole.SUPER_ADMIN
 
     # REPRESENTATION
     def __repr__(self) -> str:
