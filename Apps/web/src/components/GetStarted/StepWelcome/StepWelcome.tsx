@@ -82,18 +82,16 @@ const StepWelcome = ({
   const dailyTimeLimitMinutes = preferencesData.dailyLimitMinutes ?? 30;
   const isVoiceEnabled = preferencesData.enableVoice ?? false;
 
-  /* ─── Determine age group display ────────────────────────────────────────── */
-
-  const ageGroupLabel = useMemo(() => {
-    const ageGroup = childData.ageGroup;
-    if (!ageGroup) return '';
-    const ageGroupLabels: Record<string, string> = {
-      '3-6': '3-6',
-      '7-11': '7-11',
-      '12-15': '12-15',
+  const educationStageLabel = useMemo(() => {
+    const educationStage = childData.educationStage;
+    if (!educationStage) return '';
+    const labels: Record<string, string> = {
+      KINDERGARTEN: 'Kindergarten',
+      PRIMARY: 'Primary',
+      SECONDARY: 'Secondary',
     };
-    return ageGroupLabels[ageGroup] ?? ageGroup;
-  }, [childData.ageGroup]);
+    return labels[educationStage] ?? educationStage;
+  }, [childData.educationStage]);
 
   return (
     <div className={styles.stepContainer}>
@@ -167,7 +165,7 @@ const StepWelcome = ({
               {translations.gs_welcome_summary_profile}
             </span>
             <span className={styles.summaryValue}>
-              {childData.nickname ?? ''}{ageGroupLabel ? ` (${ageGroupLabel})` : ''}
+              {childData.nickname ?? ''}{educationStageLabel ? ` (${educationStageLabel})` : ''}
             </span>
           </div>
         </div>

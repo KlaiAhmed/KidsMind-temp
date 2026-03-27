@@ -42,6 +42,7 @@ class User(Base):
     # SECURITY
     mfa_enabled = Column(Boolean, default=False, nullable=False)
     mfa_secret = Column(String(255), nullable=True)
+    parent_pin_hash = Column(String(255), nullable=True)
     last_login_at = Column(DateTime, nullable=True)
     failed_login_attempts = Column(Integer, default=0, nullable=False)
     locked_until = Column(DateTime, nullable=True)

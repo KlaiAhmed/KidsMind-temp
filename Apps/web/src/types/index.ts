@@ -234,8 +234,8 @@ export interface ParentAccountFormData {
 /** Child profile creation form data */
 export interface ChildProfileFormData {
   nickname: string;
-  ageGroup: AgeGroupId;
-  gradeLevel: GradeLevel;
+  birthDate: string;
+  educationStage: EducationStageId;
   avatarEmoji: string;
   preferredLanguage: LanguageCode;
 }
@@ -251,13 +251,7 @@ export interface PreferencesFormData {
 
 // ─── Domain Enums ─────────────────────────────────────────────────────────────
 
-export type AgeGroupId = '3-6' | '7-11' | '12-15';
-
-export type GradeLevel =
-  | 'preschool'
-  | 'kindergarten'
-  | 'grade1' | 'grade2' | 'grade3' | 'grade4' | 'grade5' | 'grade6'
-  | 'grade7' | 'grade8' | 'grade9' | 'grade10';
+export type EducationStageId = 'KINDERGARTEN' | 'PRIMARY' | 'SECONDARY';
 
 export type SubjectId = 'math' | 'french' | 'english' | 'science' | 'history' | 'art';
 

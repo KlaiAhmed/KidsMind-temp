@@ -21,6 +21,7 @@ Base = declarative_base()
 def init_db() -> None:
 	"""Initialize database schema for local/dev environments."""
 	import models.user  # noqa: F401
+	import models.child_profile  # noqa: F401
 	import models.refresh_token_session  # noqa: F401
 
 	Base.metadata.create_all(bind=engine)

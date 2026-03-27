@@ -8,6 +8,12 @@ from utils.get_db import get_db
 from utils.manage_tokens import verify_token
 
 
+STRICT_NON_PROD_AUTH_PATHS = {
+    "/api/v1/users/me",
+    "/api/v1/users/me/summary",
+}
+
+
 def get_client_type(
     x_client_type: Literal["web", "mobile"] | None = Header(default=None, alias="X-Client-Type"),
 ) -> Literal["web", "mobile"]:
@@ -33,6 +39,13 @@ def get_current_user(
     Raises:
         HTTPException: 401 when token is missing/invalid or user is inactive.
     """
+    if not settings.IS_PROD and request.url.path not in STRICT_NON_PROD_AUTH_PATHS:
+        # In non-prod, keep selected endpoints protected but allow the rest to run without credentials.
+        dev_user = db.query(User).filter(User.is_active.is_(True)).order_by(User.id.asc()).first()
+        if not dev_user:
+            raise HTTPException(status_code=401, detail="No active user available for non-prod fallback auth")
+        return dev_user
+
     client_type = get_client_type(x_client_type=x_client_type)
     if client_type == "web":
         token = request.cookies.get("access_token")

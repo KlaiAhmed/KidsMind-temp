@@ -25,6 +25,9 @@ class AIService:
             response = await self.chain.ainvoke(
                 {
                     "age_group": payload.age_group,
+                    "education_stage": payload.education_stage,
+                    "is_accelerated": payload.is_accelerated,
+                    "is_below_expected_stage": payload.is_below_expected_stage,
                     "age_guidelines": guidelines,
                     "context": payload.context or "",
                     "input": payload.text,
@@ -56,12 +59,18 @@ class AIService:
             "child_id": user.get("child_id"),
             "session_id": session_id,
             "age_group": payload.age_group,
+            "education_stage": payload.education_stage,
+            "is_accelerated": payload.is_accelerated,
+            "is_below_expected_stage": payload.is_below_expected_stage,
         })
 
         try:
             async for chunk in self.chain.astream(
                 {
                     "age_group": payload.age_group,
+                    "education_stage": payload.education_stage,
+                    "is_accelerated": payload.is_accelerated,
+                    "is_below_expected_stage": payload.is_below_expected_stage,
                     "age_guidelines": guidelines,
                     "context": payload.context or "",
                     "input": payload.text,

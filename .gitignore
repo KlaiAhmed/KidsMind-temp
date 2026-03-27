@@ -51,3 +51,6 @@ nosig
 .expo/
 dist/
 web-build/
+
+API.md
+REGISTER.md

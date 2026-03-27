@@ -15,6 +15,7 @@ from middlewares.csrf_middleware import CSRFMiddleware
 from routers.chat import router as chat_router
 from routers.auth import router as auth_router
 from routers.users import router as users_router
+from routers.children import router as children_router
 from services.bootstrap_admin import ensure_super_admin_exists
 from utils.limiter import limiter
 from utils.logger import logger
@@ -74,6 +75,9 @@ def create_app() -> FastAPI:
 
     # Include the users router
     app.include_router(users_router, prefix="/api/v1/users", tags=["Users"])
+
+    # Include the children router
+    app.include_router(children_router, prefix="/api/v1/children", tags=["Children"])
 
     # Instrumentation for Prometheus
     Instrumentator().instrument(app).expose(app)

@@ -1,8 +1,9 @@
-from pydantic import BaseModel
-from typing import Optional, Literal
+from pydantic import BaseModel, ConfigDict
+from typing import Optional
 
 class TextChatRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     text: str
     context: Optional[str] = ""
-    age_group: Optional[Literal["3-6", "7-11", "12-15", "3-15"]] = "3-15"
     stream: bool = False

@@ -1,8 +1,10 @@
 from fastapi import HTTPException, Request, Response
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
+import re
 
-from schemas.auth_schema import UserLogin
+from models.user import User, UserRole
+from schemas.auth_schema import UserLogin, UserRegister
 from utils.auth_service_utils import (
     build_logout_response,
     create_refresh_session,
@@ -19,15 +21,71 @@ from utils.auth_service_utils import (
     ensure_account_not_locked,
 )
 from utils.logger import logger
+from utils.manage_pwd import hash_password
 from utils.manage_tokens import generate_tokens
 
 
 class AuthService:
-    def __init__(self, client_type: str, response: Response, db: Session):
+    def __init__(self, client_type: str, response: Response | None, db: Session):
         """Store request-specific auth context for subsequent operations."""
         self.db = db
         self.client_type = client_type
         self.response = response
+
+    async def register(self, payload: UserRegister) -> dict:
+        """Register a new parent account with consent and hashed parent PIN."""
+        if not payload.consents.terms or not payload.consents.data_processing:
+            raise HTTPException(status_code=400, detail="Required consents must be accepted")
+
+        existing_user = self.db.query(User).filter(User.email == payload.email).first()
+        if existing_user:
+            raise HTTPException(status_code=409, detail="Email already registered")
+
+        username = self._generate_unique_username(payload.email)
+        now = datetime.now(timezone.utc)
+        user = User(
+            email=payload.email,
+            username=username,
+            hashed_password=hash_password(payload.password),
+            role=UserRole.PARENT,
+            is_active=True,
+            is_verified=False,
+            default_language=payload.default_language,
+            country=payload.country,
+            timezone=payload.timezone,
+            consent_terms=payload.consents.terms,
+            consent_data_processing=payload.consents.data_processing,
+            consent_analytics=payload.consents.analytics,
+            consent_given_at=now,
+            parent_pin_hash=hash_password(payload.parent_pin),
+            mfa_enabled=False,
+        )
+
+        self.db.add(user)
+        self.db.commit()
+        self.db.refresh(user)
+
+        logger.info(f"New parent account registered user_id={user.id} email={user.email}")
+        return {
+            "id": user.id,
+            "email": user.email,
+            "role": user.role,
+            "created_at": user.created_at,
+        }
+
+    def _generate_unique_username(self, email: str) -> str:
+        """Generate a deterministic unique username from the email prefix."""
+        base = email.split("@", 1)[0].strip().lower()
+        base = re.sub(r"[^a-z0-9_.-]", "", base) or "parent"
+        candidate = base[:100]
+
+        index = 1
+        while self.db.query(User).filter(User.username == candidate).first():
+            suffix = f"_{index}"
+            candidate = f"{base[:100 - len(suffix)]}{suffix}"
+            index += 1
+
+        return candidate
 
     # Login
     async def login(self, payload: UserLogin) -> dict:

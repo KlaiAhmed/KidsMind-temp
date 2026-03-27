@@ -174,7 +174,7 @@ const validateParentAccountStep = (values: ParentAccountFormData): FormErrors =>
 /**
  * validateChildProfileStep — validates step 2 of onboarding.
  *
- * Checks nickname, age group selection, and grade level.
+ * Checks nickname, birth date, and education stage.
  *
  * @param values - The child profile form data
  * @returns FormErrors object
@@ -185,12 +185,25 @@ const validateChildProfileStep = (values: ChildProfileFormData): FormErrors => {
   const nicknameError = validateNickname(values.nickname);
   if (nicknameError) errors.nickname = nicknameError;
 
-  if (!values.ageGroup) {
-    errors.ageGroup = 'error_age_group_required';
+  if (!values.birthDate) {
+    errors.birthDate = 'error_age_group_required';
+  } else {
+    const birthDate = new Date(values.birthDate);
+    const today = new Date();
+    if (Number.isNaN(birthDate.getTime()) || birthDate > today) {
+      errors.birthDate = 'error_age_group_required';
+    } else {
+      const age = today.getFullYear() - birthDate.getFullYear() - (
+        today < new Date(today.getFullYear(), birthDate.getMonth(), birthDate.getDate()) ? 1 : 0
+      );
+      if (age < 3 || age > 15) {
+        errors.birthDate = 'error_age_group_required';
+      }
+    }
   }
 
-  if (!values.gradeLevel) {
-    errors.gradeLevel = 'error_grade_required';
+  if (!values.educationStage) {
+    errors.educationStage = 'error_grade_required';
   }
 
   return errors;

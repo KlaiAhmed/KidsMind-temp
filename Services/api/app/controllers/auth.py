@@ -2,8 +2,20 @@ from fastapi import HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
 from services.auth_service import AuthService
-from schemas.auth_schema import UserLogin
+from schemas.auth_schema import UserLogin, UserRegister
 from utils.logger import logger
+
+
+async def register_controller(payload: UserRegister, db: Session):
+    """Register a new parent account through the auth service layer."""
+    try:
+        auth_service = AuthService(client_type="mobile", response=None, db=db)
+        return await auth_service.register(payload)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error occurred while registering user: {e}")
+        raise HTTPException(status_code=500, detail="Internal Server Error")
 
 
 async def login_controller(payload: UserLogin, client_type: str, response: Response, db: Session):

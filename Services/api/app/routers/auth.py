@@ -2,9 +2,9 @@ from fastapi import APIRouter, Body, Depends, Header, Request, Response
 from sqlalchemy.orm import Session
 import time
 
-from controllers.auth import login_controller, logout_controller, refresh_controller
+from controllers.auth import login_controller, logout_controller, refresh_controller, register_controller
 from core.config import settings
-from schemas.auth_schema import LogoutRequest, RefreshRequest, UserLogin
+from schemas.auth_schema import LogoutRequest, RefreshRequest, RegisterResponse, UserLogin, UserRegister
 from utils.get_db import get_db
 from utils.limiter import limiter
 from utils.logger import logger
@@ -13,6 +13,25 @@ from utils.csrf_dependencies import verify_csrf_dep
 
 
 router = APIRouter()
+
+
+@router.post("/register", response_model=RegisterResponse, status_code=201)
+@limiter.limit(settings.RATE_LIMIT)
+async def register(
+    request: Request,
+    payload: UserRegister = Body(...),
+    db: Session = Depends(get_db),
+):
+    """Register a new parent account with onboarding consent and PIN data."""
+    timer = time.perf_counter()
+
+    logger.info(f"Register request received from {request.client.host} for email: {payload.email}")
+    result = await register_controller(payload, db)
+
+    timer = time.perf_counter() - timer
+    logger.info(f"Register request processed in {timer:.3f} seconds")
+
+    return result
 
 
 @router.post("/login")
