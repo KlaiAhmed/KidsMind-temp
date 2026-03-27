@@ -1,8 +1,19 @@
+"""
+Application Configuration
+
+Responsibility: Centralizes all application settings using pydantic-settings.
+               All environment variables and configuration values are defined here.
+Layer: Core
+Domain: Configuration
+"""
+
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Set
 
-from utils.logger import logger
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):

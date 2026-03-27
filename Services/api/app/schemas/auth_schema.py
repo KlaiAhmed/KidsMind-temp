@@ -1,6 +1,16 @@
-from datetime import datetime
-from pydantic import ConfigDict, EmailStr, BaseModel, Field, field_validator
+"""
+Authentication Schemas
+
+Responsibility: Defines Pydantic request/response schemas for authentication
+               endpoints including registration, login, and token operations.
+Layer: Schema
+Domain: Auth
+"""
+
 import re
+from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from models.user import UserRole
 

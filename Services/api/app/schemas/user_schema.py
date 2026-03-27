@@ -1,3 +1,11 @@
+"""
+User Schemas
+
+Responsibility: Defines Pydantic response schemas for user profile endpoints.
+Layer: Schema
+Domain: Users
+"""
+
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr
@@ -6,6 +14,8 @@ from models.user import UserRole
 
 
 class UserSummaryResponse(BaseModel):
+    """Summary response schema for basic user information."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: int

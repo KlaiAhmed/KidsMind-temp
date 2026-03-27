@@ -1,3 +1,12 @@
+"""
+CSRF Middleware
+
+Responsibility: Validates CSRF tokens for state-changing requests from
+               web clients using cookie-based authentication.
+Layer: Middleware
+Domain: Security
+"""
+
 import hmac
 
 from fastapi import Request
@@ -9,6 +18,16 @@ from utils.csrf import verify_csrf_token
 
 
 class CSRFMiddleware(BaseHTTPMiddleware):
+    """
+    ASGI middleware that validates CSRF tokens for protected requests.
+
+    Skips validation for:
+    - Login endpoint (no session yet)
+    - Safe HTTP methods (GET, HEAD, OPTIONS, TRACE)
+    - Requests with Authorization header (API clients)
+    - Requests without access_token cookie (not web auth)
+    """
+
     async def dispatch(self, request: Request, call_next):
         if request.url.path == "/api/v1/auth/login":
             return await call_next(request)

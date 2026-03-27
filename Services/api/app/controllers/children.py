@@ -1,14 +1,42 @@
+"""
+children
+
+Responsibility: Coordinate child profile operations between routers and child profile service.
+Layer: Controller
+Domain: Children
+"""
+
+import logging
+
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from models.child_profile import ChildProfile
 from models.user import User
 from schemas.child_profile_schema import ChildProfileCreate, ChildProfileUpdate
 from services.child_profile_service import ChildProfileService
-from utils.logger import logger
+
+logger = logging.getLogger(__name__)
 
 
-async def create_child_controller(payload: ChildProfileCreate, current_user: User, db: Session):
-    """Create a child profile for the authenticated parent user."""
+async def create_child_controller(
+    payload: ChildProfileCreate,
+    current_user: User,
+    db: Session,
+) -> ChildProfile:
+    """Create a child profile for the authenticated parent user.
+
+    Args:
+        payload: Validated child profile creation data.
+        current_user: The authenticated parent user.
+        db: Active database session.
+
+    Returns:
+        The newly created ChildProfile ORM instance.
+
+    Raises:
+        HTTPException: On creation errors.
+    """
     try:
         child_service = ChildProfileService(db)
         return child_service.create_child_profile(current_user, payload)
@@ -19,8 +47,22 @@ async def create_child_controller(payload: ChildProfileCreate, current_user: Use
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
 
-async def list_children_controller(current_user: User, db: Session):
-    """List all child profiles owned by the authenticated parent user."""
+async def list_children_controller(
+    current_user: User,
+    db: Session,
+) -> list[ChildProfile]:
+    """List all child profiles owned by the authenticated parent user.
+
+    Args:
+        current_user: The authenticated parent user.
+        db: Active database session.
+
+    Returns:
+        List of ChildProfile ORM instances belonging to the parent.
+
+    Raises:
+        HTTPException: On retrieval errors.
+    """
     try:
         child_service = ChildProfileService(db)
         return child_service.get_children_for_parent(current_user)
@@ -31,8 +73,26 @@ async def list_children_controller(current_user: User, db: Session):
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
 
-async def update_child_controller(child_id: int, payload: ChildProfileUpdate, current_user: User, db: Session):
-    """Update one child profile that belongs to the authenticated parent user."""
+async def update_child_controller(
+    child_id: int,
+    payload: ChildProfileUpdate,
+    current_user: User,
+    db: Session,
+) -> ChildProfile:
+    """Update one child profile that belongs to the authenticated parent user.
+
+    Args:
+        child_id: Numeric identifier of the child profile to update.
+        payload: Validated child profile update data.
+        current_user: The authenticated parent user.
+        db: Active database session.
+
+    Returns:
+        The updated ChildProfile ORM instance.
+
+    Raises:
+        HTTPException: 404 if profile not found or doesn't belong to parent.
+    """
     try:
         child_service = ChildProfileService(db)
         return child_service.update_child_profile(child_id, current_user, payload)

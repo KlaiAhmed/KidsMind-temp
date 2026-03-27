@@ -1,3 +1,12 @@
+"""
+Bootstrap Admin Service
+
+Responsibility: Handles super admin initialization during application startup.
+Layer: Service
+Domain: Auth / Admin
+"""
+
+import logging
 from datetime import datetime, timezone
 
 from sqlalchemy import or_
@@ -5,8 +14,9 @@ from sqlalchemy import or_
 from core.config import settings
 from core.database import SessionLocal
 from models.user import User, UserRole
-from utils.logger import logger
 from utils.manage_pwd import hash_password
+
+logger = logging.getLogger(__name__)
 
 
 def ensure_super_admin_exists() -> None:

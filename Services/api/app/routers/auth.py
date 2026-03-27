@@ -1,16 +1,32 @@
-from fastapi import APIRouter, Body, Depends, Header, Request, Response
-from sqlalchemy.orm import Session
+"""
+Authentication Router
+
+Responsibility: Handles HTTP endpoints for user authentication including
+               registration, login, token refresh, and logout.
+Layer: Router
+Domain: Auth
+"""
+
+import logging
 import time
 
-from controllers.auth import login_controller, logout_controller, refresh_controller, register_controller
-from core.config import settings
-from schemas.auth_schema import LogoutRequest, RefreshRequest, RegisterResponse, UserLogin, UserRegister
-from utils.get_db import get_db
-from utils.limiter import limiter
-from utils.logger import logger
-from utils.auth_dependencies import get_client_type
-from utils.csrf_dependencies import verify_csrf_dep
+from fastapi import APIRouter, Body, Depends, Header, Request, Response
+from sqlalchemy.orm import Session
 
+from controllers.auth import (
+    login_controller,
+    logout_controller,
+    refresh_controller,
+    register_controller,
+)
+from core.config import settings
+from dependencies.authentication import get_client_type
+from dependencies.infrastructure import get_db
+from dependencies.request_security import verify_csrf_dep
+from schemas.auth_schema import LogoutRequest, RefreshRequest, RegisterResponse, UserLogin, UserRegister
+from utils.limiter import limiter
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 

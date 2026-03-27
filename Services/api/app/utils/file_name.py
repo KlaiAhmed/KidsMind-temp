@@ -1,3 +1,11 @@
+"""
+Storage Path Utilities
+
+Responsibility: Generates unique storage paths for uploaded files.
+Layer: Utils
+Domain: Storage
+"""
+
 import uuid
 from datetime import datetime
 from pathlib import Path

@@ -1,3 +1,10 @@
+"""
+Request security dependencies.
+
+Responsibility: Validates request-level CSRF protection for browser-cookie based
+authenticated flows.
+"""
+
 import hmac
 
 from fastapi import Cookie, Header, HTTPException, Request
@@ -11,6 +18,17 @@ async def verify_csrf_dep(
     csrf_cookie: str | None = Cookie(default=None, alias="csrf_token"),
     x_csrf_token: str | None = Header(default=None, alias="X-CSRF-Token"),
 ) -> None:
+    """
+    Verify CSRF token for state-changing requests from web clients.
+
+    Args:
+        request: Incoming FastAPI request.
+        csrf_cookie: CSRF token from cookie.
+        x_csrf_token: CSRF token from X-CSRF-Token header.
+
+    Raises:
+        HTTPException: 403 if CSRF validation fails.
+    """
     if request.method in ("GET", "HEAD", "OPTIONS", "TRACE"):
         return
 

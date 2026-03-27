@@ -1,4 +1,14 @@
+"""
+Child Profile Context Cache Service
+
+Responsibility: Manages caching of child profile context for performance
+               optimization during chat operations.
+Layer: Service
+Domain: Children / Caching
+"""
+
 import json
+import logging
 import time
 from typing import Any
 
@@ -7,9 +17,10 @@ from sqlalchemy.orm import Session
 
 from models.child_profile import ChildProfile
 from utils.child_profile_logic import evaluate_stage_alignment, get_age_group
-from utils.logger import logger
 
+logger = logging.getLogger(__name__)
 
+# Cache TTL in seconds (1 hour)
 CHILD_PROFILE_CONTEXT_TTL_SECONDS = 3600
 
 

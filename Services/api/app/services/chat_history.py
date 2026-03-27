@@ -1,7 +1,19 @@
+"""
+Chat History Service
+
+Responsibility: Handles communication with AI service for conversation
+               history retrieval and management.
+Layer: Service
+Domain: Chat
+"""
+
+import logging
+
 import httpx
 
 from core.config import settings
-from utils.logger import logger
+
+logger = logging.getLogger(__name__)
 
 
 async def get_conversation_history(

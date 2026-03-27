@@ -1,8 +1,19 @@
-from contextlib import asynccontextmanager
-from fastapi import HTTPException
-import httpx 
+"""
+Service Error Handling Utilities
 
-from utils.logger import logger
+Responsibility: Provides context manager for handling upstream service errors.
+Layer: Utils
+Domain: Error Handling
+"""
+
+import logging
+from contextlib import asynccontextmanager
+
+import httpx
+from fastapi import HTTPException
+
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def handle_service_errors():

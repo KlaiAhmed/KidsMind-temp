@@ -1,18 +1,42 @@
+"""
+User Model
+
+Responsibility: Defines the User ORM model for database persistence and
+               associated role enumeration.
+Layer: Model
+Domain: Users
+"""
+
 import enum
-from sqlalchemy import (
-    Column, Integer, String, Boolean, DateTime,
-    Enum as SAEnum, func
-)
+from datetime import datetime, timezone
+
+from sqlalchemy import Boolean, Column, DateTime, Enum as SAEnum, Integer, String, func
+
 from core.database import Base
 
 
 class UserRole(str, enum.Enum):
+    """Enumeration of available user roles in the system."""
+
     PARENT = "parent"
     ADMIN = "admin"
     SUPER_ADMIN = "super_admin"
 
 
 class User(Base):
+    """
+    SQLAlchemy ORM model representing a user account.
+
+    Attributes:
+        id: Primary key identifier.
+        email: Unique email address.
+        username: Unique username.
+        hashed_password: Argon2 hashed password.
+        role: User role (parent, admin, or super_admin).
+        is_active: Whether the account is active.
+        is_verified: Whether email has been verified.
+    """
+
     __tablename__ = "users"
 
     # IDENTITY

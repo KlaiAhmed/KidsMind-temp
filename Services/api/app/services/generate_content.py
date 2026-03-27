@@ -1,8 +1,20 @@
-import httpx
+"""
+Content Generation Service
+
+Responsibility: Handles communication with AI service for content generation
+               including both synchronous and streaming responses.
+Layer: Service
+Domain: Chat / AI
+"""
+
+import logging
 from collections.abc import AsyncGenerator
 
+import httpx
+
 from core.config import settings
-from utils.logger import logger
+
+logger = logging.getLogger(__name__)
 
 async def generate_content(
     user_id: str,

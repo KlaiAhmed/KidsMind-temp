@@ -1,3 +1,11 @@
+"""
+Child Profile Service
+
+Responsibility: Implements business logic for child profile CRUD operations.
+Layer: Service
+Domain: Children
+"""
+
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 

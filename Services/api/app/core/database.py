@@ -1,3 +1,12 @@
+"""
+Database Configuration
+
+Responsibility: Configures SQLAlchemy engine, session factory, and provides
+               database schema initialization.
+Layer: Core
+Domain: Database
+"""
+
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -11,17 +20,21 @@ SQLALCHEMY_DATABASE_URL = f"postgresql://{settings.DB_USERNAME}:{settings.DB_PAS
 # Create the SQLAlchemy engine
 engine = create_engine(SQLALCHEMY_DATABASE_URL)
 
-# Create a session
+# Create a session factory
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-# Base class for models
+# Base class for ORM models
 Base = declarative_base()
 
 
 def init_db() -> None:
-	"""Initialize database schema for local/dev environments."""
-	import models.user  # noqa: F401
-	import models.child_profile  # noqa: F401
-	import models.refresh_token_session  # noqa: F401
+    """
+    Initialize database schema for local/dev environments.
 
-	Base.metadata.create_all(bind=engine)
+    Creates all tables defined by ORM models that inherit from Base.
+    """
+    import models.user  # noqa: F401
+    import models.child_profile  # noqa: F401
+    import models.refresh_token_session  # noqa: F401
+
+    Base.metadata.create_all(bind=engine)

@@ -1,3 +1,12 @@
+"""
+Logging Configuration
+
+Responsibility: Configures JSON-formatted structured logging and provides
+               request tracing middleware for correlation IDs.
+Layer: Core
+Domain: Observability / Logging
+"""
+
 import json
 import logging
 import time

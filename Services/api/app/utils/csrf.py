@@ -1,3 +1,11 @@
+"""
+CSRF Token Utilities
+
+Responsibility: Provides CSRF token generation and verification functions.
+Layer: Utils
+Domain: Security
+"""
+
 import secrets
 
 from itsdangerous import BadData, SignatureExpired, URLSafeTimedSerializer

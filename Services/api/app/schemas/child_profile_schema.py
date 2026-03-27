@@ -1,6 +1,16 @@
+"""
+Child Profile Schemas
+
+Responsibility: Defines Pydantic request/response schemas for child profile
+               endpoints including creation, update, and response models.
+Layer: Schema
+Domain: Children
+"""
+
 from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
+
 from utils.child_profile_logic import EducationStage, get_age, get_age_group
 
 

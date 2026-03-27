@@ -1,20 +1,33 @@
+"""
+Children Router
+
+Responsibility: Handles HTTP endpoints for child profile management including
+               creation, listing, and updating profiles.
+Layer: Router
+Domain: Children
+"""
+
+import logging
 import time
 
 from fastapi import APIRouter, Body, Depends, Request
 from redis.asyncio import Redis
 from sqlalchemy.orm import Session
 
-from controllers.children import create_child_controller, list_children_controller, update_child_controller
+from controllers.children import (
+    create_child_controller,
+    list_children_controller,
+    update_child_controller,
+)
 from core.config import settings
-from services.child_profile_context_cache import invalidate_child_profile_context_cache
+from dependencies.authentication import get_current_user
+from dependencies.infrastructure import get_db, get_redis
 from models.user import User
 from schemas.child_profile_schema import ChildProfileCreate, ChildProfileResponse, ChildProfileUpdate
-from utils.auth_dependencies import get_current_user
-from utils.get_db import get_db
-from utils.get_redis import get_redis
+from services.child_profile_context_cache import invalidate_child_profile_context_cache
 from utils.limiter import limiter
-from utils.logger import logger
 
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 

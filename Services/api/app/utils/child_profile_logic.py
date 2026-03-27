@@ -1,8 +1,18 @@
+"""
+Child Profile Logic Utilities
+
+Responsibility: Provides age calculation and education stage alignment logic.
+Layer: Utils
+Domain: Children
+"""
+
 from datetime import date
 from enum import Enum
 
 
 class EducationStage(str, Enum):
+    """Enumeration of education stages supported by the system."""
+
     KINDERGARTEN = "KINDERGARTEN"
     PRIMARY = "PRIMARY"
     SECONDARY = "SECONDARY"
