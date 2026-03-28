@@ -31,4 +31,20 @@ const getCountryOptions = (language: LanguageCode): CountryOption[] => {
     .sort((a, b) => a.label.localeCompare(b.label, language === 'ch' ? 'zh' : language, { sensitivity: 'base' }));
 };
 
-export { getCountryOptions };
+const getPrimaryTimezoneByCountryCode = (countryCode: string): string => {
+  const normalizedCountryCode = countryCode.trim().toUpperCase();
+  if (!normalizedCountryCode) {
+    return 'UTC';
+  }
+
+  const country = countries.find((item) => item.cca2 === normalizedCountryCode);
+  const countryWithTimezone = country as (typeof countries)[number] & { timezones?: string[] };
+
+  if (!countryWithTimezone || !Array.isArray(countryWithTimezone.timezones) || countryWithTimezone.timezones.length === 0) {
+    return 'UTC';
+  }
+
+  return countryWithTimezone.timezones[0] ?? 'UTC';
+};
+
+export { getCountryOptions, getPrimaryTimezoneByCountryCode };

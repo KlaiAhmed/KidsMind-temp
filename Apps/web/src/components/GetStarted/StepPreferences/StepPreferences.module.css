@@ -448,6 +448,15 @@
   transform: none;
 }
 
+.spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #FFFFFF;
+  border-radius: 50%;
+  animation: spinRing 0.8s linear infinite;
+}
+
 /* ─── Reduced Motion ───────────────────────────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
@@ -457,6 +466,10 @@
 
   .sliderWrapper input[type="range"]::-webkit-slider-thumb {
     transition: none;
+  }
+
+  .spinner {
+    animation: none;
   }
 
   .sliderWrapper input[type="range"]::-moz-range-thumb {

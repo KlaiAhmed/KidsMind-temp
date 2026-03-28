@@ -22,7 +22,8 @@ import styles from './StepChildProfile.module.css';
 interface StepChildProfileProps {
   translations: TranslationMap;
   language: LanguageCode;
-  onComplete: (data: ChildProfileFormData) => void;
+  onComplete: (data: ChildProfileFormData) => Promise<void> | void;
+  submitError?: string;
 }
 
 interface BirthDateParts {
@@ -123,6 +124,7 @@ const StepChildProfile = ({
   translations,
   language,
   onComplete,
+  submitError,
 }: StepChildProfileProps) => {
   const previousAutoDerivedStageRef = useRef<EducationStageId | null>(null);
   const [birthDateParts, setBirthDateParts] = useState<BirthDateParts>({
@@ -471,7 +473,7 @@ const StepChildProfile = ({
       : resolveError('birthDate');
 
   const onSubmit = async (data: ChildProfileFormData): Promise<void> => {
-    onComplete(data);
+    await onComplete(data);
   };
 
   const shouldShowNicknamePreview = values.nickname.trim().length >= 2;
@@ -645,9 +647,16 @@ const StepChildProfile = ({
           className={styles.submitButton}
           disabled={isSubmitting}
         >
+          {isSubmitting ? <span className={styles.spinner} aria-hidden="true" /> : null}
           {translations.gs_next_button}
-          <ArrowRight size={18} aria-hidden="true" />
+          {!isSubmitting ? <ArrowRight size={18} aria-hidden="true" /> : null}
         </button>
+
+        {submitError && (
+          <p className={styles.serverError} role="alert">
+            {submitError}
+          </p>
+        )}
       </form>
     </div>
   );

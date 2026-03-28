@@ -3,6 +3,8 @@ import { useState, useCallback } from 'react';
 import { useTheme } from '../../hooks/useTheme';
 import { useLanguage } from '../../hooks/useLanguage';
 import { useMultiStep } from '../../hooks/useMultiStep';
+import { apiBaseUrl } from '../../utils/api';
+import { getPrimaryTimezoneByCountryCode } from '../../utils/countries';
 import { getCsrfHeader, setCsrfToken } from '../../utils/csrf';
 import type {
   OnboardingStep,
@@ -22,32 +24,112 @@ import styles from './GetStartedPage.module.css';
 
 /** Total number of steps in the onboarding flow */
 const TOTAL_STEPS = 4;
-const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/$/, '');
 
 interface ApiErrorResponse {
-  detail?: string | Array<{ msg?: string }>;
+  message?: string;
+  error?: string;
+  detail?: string | Array<{ msg?: string; message?: string }>;
+}
+
+interface RegisterSuccessResponse {
+  csrf_token?: string;
 }
 
 interface LoginSuccessResponse {
   csrf_token?: string;
 }
 
-const extractApiErrorMessage = async (response: Response, fallbackMessage: string): Promise<string> => {
+interface ChildCreateSuccessResponse {
+  id?: number | string;
+  child_id?: number | string;
+}
+
+const API_ERROR_TRANSLATION_PATTERNS: Array<{ pattern: RegExp; key: keyof TranslationMap }> = [
+  { pattern: /invalid credentials/i, key: 'login_error_invalid' },
+  { pattern: /csrf/i, key: 'login_error_session' },
+  { pattern: /nickname cannot be blank/i, key: 'error_nickname_required' },
+  { pattern: /birth_date cannot be in the future|birth_date must correspond to an age between 3 and 15/i, key: 'error_birth_date_invalid' },
+  { pattern: /parent pin must be exactly 4 digits/i, key: 'error_pin_must_be_4_digits' },
+  { pattern: /at least 8 characters/i, key: 'error_password_too_short' },
+  { pattern: /one uppercase/i, key: 'error_password_no_uppercase' },
+  { pattern: /one number/i, key: 'error_password_no_number' },
+  { pattern: /value is not a valid email address/i, key: 'error_email_invalid' },
+];
+
+const hasTranslationKey = (translations: TranslationMap, key: string): key is keyof TranslationMap => {
+  return Object.prototype.hasOwnProperty.call(translations, key);
+};
+
+const mapApiMessageToTranslationKey = (message: string): keyof TranslationMap | null => {
+  for (const item of API_ERROR_TRANSLATION_PATTERNS) {
+    if (item.pattern.test(message)) {
+      return item.key;
+    }
+  }
+
+  return null;
+};
+
+const translateApiMessage = (message: string, translations: TranslationMap): string => {
+  const normalizedMessage = message.trim();
+
+  if (!normalizedMessage) {
+    return translations.status_error_description;
+  }
+
+  if (hasTranslationKey(translations, normalizedMessage)) {
+    return translations[normalizedMessage];
+  }
+
+  const mappedKey = mapApiMessageToTranslationKey(normalizedMessage);
+  if (mappedKey) {
+    return translations[mappedKey];
+  }
+
+  return normalizedMessage;
+};
+
+const extractApiErrorMessage = async (
+  response: Response,
+  fallbackTranslationKey: keyof TranslationMap
+): Promise<string> => {
   try {
     const errorBody = (await response.json()) as ApiErrorResponse;
-
-    if (!errorBody.detail) {
-      return fallbackMessage;
-    }
 
     if (typeof errorBody.detail === 'string') {
       return errorBody.detail;
     }
 
-    const firstValidationError = errorBody.detail.find((item) => item?.msg)?.msg;
-    return firstValidationError || fallbackMessage;
+    if (Array.isArray(errorBody.detail)) {
+      const firstValidationError = errorBody.detail.find((item) => item?.msg || item?.message);
+      if (firstValidationError?.msg) {
+        return firstValidationError.msg;
+      }
+
+      if (firstValidationError?.message) {
+        return firstValidationError.message;
+      }
+    }
+
+    if (typeof errorBody.message === 'string') {
+      return errorBody.message;
+    }
+
+    if (typeof errorBody.error === 'string') {
+      return errorBody.error;
+    }
+
+    if (response.status === 401 || response.status === 403) {
+      return 'login_error_session';
+    }
+
+    return fallbackTranslationKey;
   } catch {
-    return fallbackMessage;
+    if (response.status === 401 || response.status === 403) {
+      return 'login_error_session';
+    }
+
+    return fallbackTranslationKey;
   }
 };
 
@@ -90,167 +172,188 @@ const GetStartedPage = () => {
   const [parentData, setParentData] = useState<Partial<ParentAccountFormData>>({});
   const [childData, setChildData] = useState<Partial<ChildProfileFormData>>({});
   const [preferencesData, setPreferencesData] = useState<Partial<PreferencesFormData>>({});
+  const [childId, setChildId] = useState<number | null>(null);
   const [submitError, setSubmitError] = useState('');
 
   const [direction, setDirection] = useState<'forward' | 'backward'>('forward');
 
-  const completeRegistrationFlow = useCallback(
-    async (
-      parent: ParentAccountFormData,
-      child: ChildProfileFormData,
-      preferences: PreferencesFormData
-    ): Promise<void> => {
-      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-
-      const registerPayload = {
-        email: parent.email,
-        password: parent.password,
-        default_language: parent.language,
-        timezone,
-        consents: {
-          terms: parent.agreedToTerms,
-          data_processing: parent.agreedToTerms,
-          analytics: false,
-        },
-        parent_pin: preferences.parentPinCode,
-        ...(parent.country ? { country: parent.country } : {}),
-      };
-
-      const registerResponse = await fetch(`${apiBaseUrl}/api/v1/auth/register`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Client-Type': 'web',
-        },
-        credentials: 'include',
-        body: JSON.stringify(registerPayload),
-      });
-
-      if (!registerResponse.ok && registerResponse.status !== 409) {
-        throw new Error(await extractApiErrorMessage(registerResponse, 'Unable to create account.'));
-      }
-
-      const loginResponse = await fetch(`${apiBaseUrl}/api/v1/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Client-Type': 'web',
-        },
-        credentials: 'include',
-        body: JSON.stringify({
-          email: parent.email,
-          password: parent.password,
-        }),
-      });
-
-      if (!loginResponse.ok) {
-        throw new Error(await extractApiErrorMessage(loginResponse, 'Unable to log in after registration.'));
-      }
-
-      try {
-        const loginBody = (await loginResponse.json()) as LoginSuccessResponse;
-        setCsrfToken(loginBody.csrf_token ?? null);
-      } catch {
-        setCsrfToken(null);
-      }
-
-      const childPayload = {
-        nickname: child.nickname,
-        birth_date: child.birthDate,
-        education_stage: child.educationStage,
-        languages: [child.preferredLanguage],
-        avatar: child.avatarEmoji,
-        settings_json: {
-          daily_limit_minutes: preferences.dailyLimitMinutes,
-          allowed_subjects: preferences.allowedSubjects,
-          voice_enabled: preferences.enableVoice,
-        },
-      };
-
-      const childResponse = await fetch(`${apiBaseUrl}/api/v1/children`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Client-Type': 'web',
-          ...getCsrfHeader(),
-        },
-        credentials: 'include',
-        body: JSON.stringify(childPayload),
-      });
-
-      if (!childResponse.ok) {
-        throw new Error(
-          await extractApiErrorMessage(
-            childResponse,
-            'Account created, but child profile setup failed. Please retry.'
-          )
-        );
-      }
-    },
-    []
-  );
-
   const handleParentComplete = useCallback(
-    (data: ParentAccountFormData) => {
-      setParentData(data);
+    async (data: ParentAccountFormData): Promise<void> => {
       setSubmitError('');
-      setDirection('forward');
-      goToNextStep();
-    },
-    [goToNextStep]
-  );
-
-  const handleChildComplete = useCallback(
-    (data: ChildProfileFormData) => {
-      setChildData(data);
-      setSubmitError('');
-      setDirection('forward');
-      goToNextStep();
-    },
-    [goToNextStep]
-  );
-
-  const handlePreferencesComplete = useCallback(
-    async (data: PreferencesFormData) => {
-      setPreferencesData(data);
-      setSubmitError('');
-
-      const parentIsComplete =
-        !!parentData.email
-        && !!parentData.password
-        && !!parentData.confirmPassword
-        && !!parentData.language
-        && typeof parentData.agreedToTerms === 'boolean';
-
-      const childIsComplete =
-        !!childData.nickname
-        && !!childData.birthDate
-        && !!childData.educationStage
-        && !!childData.avatarEmoji
-        && !!childData.preferredLanguage;
-
-      if (!parentIsComplete || !childIsComplete) {
-        setSubmitError('Please complete previous steps before continuing.');
-        return;
-      }
 
       try {
-        await completeRegistrationFlow(
-          parentData as ParentAccountFormData,
-          childData as ChildProfileFormData,
-          data
-        );
+        const timezone = getPrimaryTimezoneByCountryCode(data.country);
+
+        const registerPayload = {
+          email: data.email,
+          password: data.password,
+          password_confirmation: data.confirmPassword,
+          country: data.country,
+          timezone,
+          agreed_to_terms: data.agreedToTerms,
+        };
+
+        const registerResponse = await fetch(`${apiBaseUrl}/api/v1/auth/register`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Client-Type': 'web',
+          },
+          credentials: 'include',
+          body: JSON.stringify(registerPayload),
+        });
+
+        if (!registerResponse.ok) {
+          const errorMessage = await extractApiErrorMessage(registerResponse, 'status_error_description');
+          throw new Error(translateApiMessage(errorMessage, translations));
+        }
+
+        try {
+          const registerBody = (await registerResponse.json()) as RegisterSuccessResponse;
+          setCsrfToken(registerBody.csrf_token ?? null);
+        } catch {
+          setCsrfToken(null);
+        }
+
+        const loginResponse = await fetch(`${apiBaseUrl}/api/v1/auth/login`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Client-Type': 'web',
+          },
+          credentials: 'include',
+          body: JSON.stringify({
+            email: data.email,
+            password: data.password,
+          }),
+        });
+
+        if (!loginResponse.ok) {
+          const errorMessage = await extractApiErrorMessage(loginResponse, 'login_error_invalid');
+          throw new Error(translateApiMessage(errorMessage, translations));
+        }
+
+        try {
+          const loginBody = (await loginResponse.json()) as LoginSuccessResponse;
+          setCsrfToken(loginBody.csrf_token ?? null);
+        } catch {
+          setCsrfToken(null);
+        }
+
+        setParentData(data);
+        setChildData({});
+        setPreferencesData({});
+        setChildId(null);
         setDirection('forward');
         goToNextStep();
       } catch (error) {
         setSubmitError(
           error instanceof Error
             ? error.message
-            : 'Registration failed. Please try again.'
+            : translations.status_error_description
         );
       }
     },
-    [childData, completeRegistrationFlow, goToNextStep, parentData]
+    [goToNextStep, translations]
+  );
+
+  const handleChildComplete = useCallback(
+    async (data: ChildProfileFormData): Promise<void> => {
+      setSubmitError('');
+
+      try {
+        const childPayload = {
+          nickname: data.nickname,
+          birth_date: data.birthDate,
+          education_stage: data.educationStage,
+          languages: [data.preferredLanguage],
+          avatar: data.avatarEmoji,
+        };
+
+        const childResponse = await fetch(`${apiBaseUrl}/api/v1/children`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Client-Type': 'web',
+            ...getCsrfHeader(),
+          },
+          credentials: 'include',
+          body: JSON.stringify(childPayload),
+        });
+
+        if (!childResponse.ok) {
+          const errorMessage = await extractApiErrorMessage(childResponse, 'status_error_description');
+          throw new Error(translateApiMessage(errorMessage, translations));
+        }
+
+        const childBody = (await childResponse.json()) as ChildCreateSuccessResponse;
+        const rawChildId = childBody.child_id ?? childBody.id;
+        const numericChildId = Number(rawChildId);
+
+        if (!rawChildId || Number.isNaN(numericChildId)) {
+          throw new Error(translations.status_error_description);
+        }
+
+        setChildId(numericChildId);
+        setChildData(data);
+        setDirection('forward');
+        goToNextStep();
+      } catch (error) {
+        setSubmitError(
+          error instanceof Error
+            ? error.message
+            : translations.status_error_description
+        );
+      }
+    },
+    [goToNextStep, translations]
+  );
+
+  const handlePreferencesComplete = useCallback(
+    async (data: PreferencesFormData) => {
+      setSubmitError('');
+
+      if (childId === null) {
+        setSubmitError(translations.status_error_description);
+        return;
+      }
+
+      try {
+        const patchPayload = {
+          settings_json: {
+            daily_limit_minutes: data.dailyLimitMinutes,
+            allowed_subjects: data.allowedSubjects,
+            voice_enabled: data.enableVoice,
+          },
+        };
+
+        const patchResponse = await fetch(`${apiBaseUrl}/api/v1/children/${childId}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Client-Type': 'web',
+            ...getCsrfHeader(),
+          },
+          credentials: 'include',
+          body: JSON.stringify(patchPayload),
+        });
+
+        if (!patchResponse.ok) {
+          const errorMessage = await extractApiErrorMessage(patchResponse, 'status_error_description');
+          throw new Error(translateApiMessage(errorMessage, translations));
+        }
+
+        setPreferencesData(data);
+        window.location.href = '/dashboard';
+      } catch (error) {
+        setSubmitError(
+          error instanceof Error
+            ? error.message
+            : translations.status_error_description
+        );
+      }
+    },
+    [childId, translations]
   );
 
   const handleBack = () => {
@@ -305,6 +408,7 @@ const GetStartedPage = () => {
               translations={translations}
               language={language}
               onComplete={handleParentComplete}
+              submitError={submitError}
             />
           )}
           {currentStepIndex === 1 && (
@@ -312,6 +416,7 @@ const GetStartedPage = () => {
               translations={translations}
               language={language}
               onComplete={handleChildComplete}
+              submitError={submitError}
             />
           )}
           {currentStepIndex === 2 && (

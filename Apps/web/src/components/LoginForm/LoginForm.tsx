@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { AlertCircle } from 'lucide-react';
 import type { TranslationMap } from '../../types';
 import { useForm } from '../../hooks/useForm';
+import { apiBaseUrl } from '../../utils/api';
 import { validateLoginForm } from '../../utils/validators';
 import { setCsrfToken } from '../../utils/csrf';
 import FormField from '../shared/FormField/FormField';
@@ -30,8 +31,6 @@ interface LoginSuccessResponse {
 
 const LoginForm = ({ translations, onSuccess }: LoginFormProps) => {
   const [serverError, setServerError] = useState<string>('');
-
-  const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/$/, '');
 
   const hasActiveSession = async (): Promise<boolean> => {
     const response = await fetch(`${apiBaseUrl}/api/v1/users/me/summary`, {

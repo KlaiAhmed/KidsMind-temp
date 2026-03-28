@@ -65,30 +65,29 @@ const validatePassword = (password: string): string => {
 };
 
 /**
- * getPasswordStrength — returns a 0–3 score for the password strength meter.
+ * getPasswordStrength — returns a 0–4 score for the password strength meter.
  *
  * Scoring criteria:
  * - 0: empty or very short (< 4 chars)
- * - 1: weak — meets length but few criteria
- * - 2: fair — meets some criteria
- * - 3: strong — meets all criteria (length, uppercase, number, special char)
+ * - 1: weak
+ * - 2: fair
+ * - 3: strong
+ * - 4: max strength (all criteria met)
  *
  * @param password - The password string to evaluate
- * @returns A score from 0 to 3
+ * @returns A score from 0 to 4
  */
-const getPasswordStrength = (password: string): 0 | 1 | 2 | 3 => {
+const getPasswordStrength = (password: string): 0 | 1 | 2 | 3 | 4 => {
   if (!password || password.length < 4) return 0;
 
   let score = 0;
 
-  if (password.length >= 8) score++;
-  if (/[A-Z]/.test(password) && /[a-z]/.test(password)) score++;
-  if (/[0-9]/.test(password)) score++;
-  if (/[^a-zA-Z0-9]/.test(password)) score++;
+  if (password.length >= 8) score += 1;
+  if (/[A-Z]/.test(password) && /[a-z]/.test(password)) score += 1;
+  if (/[0-9]/.test(password)) score += 1;
+  if (/[^a-zA-Z0-9]/.test(password)) score += 1;
 
-  if (score <= 1) return 1;
-  if (score <= 2) return 2;
-  return 3;
+  return Math.min(score, 4) as 0 | 1 | 2 | 3 | 4;
 };
 
 /**

@@ -7,6 +7,7 @@ import ErrorPage from './pages/ErrorPage/ErrorPage';
 
 const LoginPage = React.lazy(() => import('./pages/LoginPage/LoginPage'));
 const GetStartedPage = React.lazy(() => import('./pages/GetStartedPage/GetStartedPage'));
+const ParentProfilePage = React.lazy(() => import('./pages/ParentProfilePage/ParentProfilePage'));
 const NotFoundPage = React.lazy(() => import('./pages/NotFoundPage/NotFoundPage'));
 
 interface GuestOnlyRouteProps {
@@ -73,6 +74,7 @@ const App = () => {
                 </GuestOnlyRoute>
               )}
             />
+            <Route path="/parent-profile" element={<ParentProfilePage isAuthenticated={isAuthenticated} />} />
             <Route path="/error" element={<ErrorPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Routes>

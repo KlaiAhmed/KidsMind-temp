@@ -10,17 +10,9 @@ Domain: Auth
 import re
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 from models.user import UserRole
-
-
-class RegisterConsents(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    terms: bool
-    data_processing: bool
-    analytics: bool | None = False
 
 
 class UserRegister(BaseModel):
@@ -28,11 +20,10 @@ class UserRegister(BaseModel):
 
     email: EmailStr
     password: str = Field(min_length=8)
-    country: str | None = Field(default=None, max_length=100)
-    default_language: str = Field(default="fr", min_length=2, max_length=10)
-    timezone: str = Field(default="UTC", min_length=2, max_length=100)
-    consents: RegisterConsents
-    parent_pin: str = Field(min_length=4, max_length=4)
+    password_confirmation: str = Field(min_length=8)
+    country: str = Field(min_length=2, max_length=100)
+    timezone: str = Field(min_length=2, max_length=100)
+    agreed_to_terms: bool
 
     @field_validator("password")
     @classmethod
@@ -55,12 +46,21 @@ class UserRegister(BaseModel):
 
         return value
 
-    @field_validator("parent_pin")
+    @field_validator("country")
     @classmethod
-    def validate_parent_pin(cls, value: str) -> str:
-        if not re.fullmatch(r"\d{4}", value):
-            raise ValueError("Parent PIN must be exactly 4 digits")
-        return value
+    def validate_country(cls, value: str) -> str:
+        normalized_value = value.strip().upper()
+        if not re.fullmatch(r"[A-Z]{2}", normalized_value):
+            raise ValueError("Country must be a 2-letter ISO code")
+        return normalized_value
+
+    @model_validator(mode="after")
+    def validate_password_confirmation(self) -> "UserRegister":
+        if self.password != self.password_confirmation:
+            raise ValueError("Password confirmation does not match password")
+        if not self.agreed_to_terms:
+            raise ValueError("Terms and conditions must be accepted")
+        return self
 
 
 class RegisterResponse(BaseModel):

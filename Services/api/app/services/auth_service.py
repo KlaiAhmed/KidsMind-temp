@@ -36,13 +36,13 @@ class AuthService:
         self.response = response
 
     async def register(self, payload: UserRegister) -> dict:
-        """Register a new parent account with consent and hashed parent PIN."""
-        if not payload.consents.terms or not payload.consents.data_processing:
-            raise HTTPException(status_code=400, detail="Required consents must be accepted")
+        """Register a new parent account from step-1 onboarding fields."""
+        if not payload.agreed_to_terms:
+            raise HTTPException(status_code=400, detail="Terms and conditions must be accepted")
 
         existing_user = self.db.query(User).filter(User.email == payload.email).first()
         if existing_user:
-            raise HTTPException(status_code=409, detail="Email already registered")
+            raise HTTPException(status_code=409, detail="User already exists")
 
         username = self._generate_unique_username(payload.email)
         now = datetime.now(timezone.utc)
@@ -53,14 +53,12 @@ class AuthService:
             role=UserRole.PARENT,
             is_active=True,
             is_verified=False,
-            default_language=payload.default_language,
             country=payload.country,
             timezone=payload.timezone,
-            consent_terms=payload.consents.terms,
-            consent_data_processing=payload.consents.data_processing,
-            consent_analytics=payload.consents.analytics,
+            consent_terms=payload.agreed_to_terms,
+            consent_data_processing=payload.agreed_to_terms,
+            consent_analytics=False,
             consent_given_at=now,
-            parent_pin_hash=hash_password(payload.parent_pin),
             mfa_enabled=False,
         )
 

@@ -13,7 +13,8 @@ import styles from './StepParentAccount.module.css';
 interface StepParentAccountProps {
   translations: TranslationMap;
   language: LanguageCode;
-  onComplete: (data: ParentAccountFormData) => void;
+  onComplete: (data: ParentAccountFormData) => Promise<void> | void;
+  submitError?: string;
 }
 
 const normalizeIsoCountrySearch = (value: string): string => value.trim().toUpperCase();
@@ -28,6 +29,7 @@ const StepParentAccount = ({
   translations,
   language,
   onComplete,
+  submitError,
 }: StepParentAccountProps) => {
   const countryOptions = useMemo(() => getCountryOptions(language), [language]);
   const [countrySearch, setCountrySearch] = useState('');
@@ -137,7 +139,7 @@ const StepParentAccount = ({
   };
 
   const onSubmit = async (data: ParentAccountFormData): Promise<void> => {
-    onComplete(data);
+    await onComplete(data);
   };
 
   const selectedCountryLabel = useMemo(() => {
@@ -304,6 +306,12 @@ const StepParentAccount = ({
           {translations.gs_next_button}
           {!isSubmitting ? <ArrowRight size={18} aria-hidden="true" /> : null}
         </button>
+
+        {submitError && (
+          <p className={styles.serverError} role="alert">
+            {submitError}
+          </p>
+        )}
       </form>
     </div>
   );

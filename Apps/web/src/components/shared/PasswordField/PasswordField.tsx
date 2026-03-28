@@ -25,26 +25,26 @@ const PasswordField = ({
 
   const getStrengthLabelText = (): string => {
     if (!translations) {
-      const labels = ['', 'Weak', 'Fair', 'Strong'];
+      const labels = ['', 'Weak', 'Fair', 'Strong', 'Strong'];
       return labels[strengthScore];
     }
     if (strengthScore === 1) return translations.gs_password_strength_weak;
     if (strengthScore === 2) return translations.gs_password_strength_fair;
-    if (strengthScore === 3) return translations.gs_password_strength_strong;
+    if (strengthScore >= 3) return translations.gs_password_strength_strong;
     return '';
   };
 
   const getStrengthColorClassName = (): string => {
     if (strengthScore === 1) return styles.strengthWeak;
     if (strengthScore === 2) return styles.strengthFair;
-    if (strengthScore === 3) return styles.strengthStrong;
+    if (strengthScore >= 3) return styles.strengthStrong;
     return '';
   };
 
   const getStrengthLabelClassName = (): string => {
     if (strengthScore === 1) return styles.strengthLabelWeak;
     if (strengthScore === 2) return styles.strengthLabelFair;
-    if (strengthScore === 3) return styles.strengthLabelStrong;
+    if (strengthScore >= 3) return styles.strengthLabelStrong;
     return '';
   };
 

@@ -5,6 +5,8 @@ import { Sun, Moon, Menu, X, Languages, User } from 'lucide-react';
 import type { ThemeMode, LanguageCode, TranslationMap } from '../../types';
 import { LANGUAGES } from '../../utils/constants';
 import { useScrollPosition } from '../../hooks/useScrollPosition';
+import { apiBaseUrl } from '../../utils/api';
+import { clearCsrfToken, getCsrfHeader } from '../../utils/csrf';
 import styles from './NavBar.module.css';
 
 interface NavBarProps {
@@ -15,6 +17,8 @@ interface NavBarProps {
   translations: TranslationMap;
   isAuthenticated: boolean;
 }
+
+const PARENT_PROFILE_ROUTE = '/parent-profile';
 
 const RocketLogo = () => {
   return (
@@ -46,22 +50,83 @@ const NavBar = ({
   const { isAtPageTop, isHiddenByScroll } = useScrollPosition();
   const [isLanguageDropdownOpen, setIsLanguageDropdownOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
+  const [isMobileUserDropdownOpen, setIsMobileUserDropdownOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const languageDropdownRef = useRef<HTMLDivElement>(null);
+  const userDropdownRef = useRef<HTMLDivElement>(null);
+  const mobileUserDropdownRef = useRef<HTMLDivElement>(null);
   const shouldHideNav = isHiddenByScroll && !isMobileMenuOpen;
+
+  const closeAllDropdownMenus = useCallback(() => {
+    setIsLanguageDropdownOpen(false);
+    setIsUserDropdownOpen(false);
+    setIsMobileUserDropdownOpen(false);
+  }, []);
 
   const handleLanguageSelect = useCallback(
     (code: LanguageCode) => {
       onLanguageChange(code);
-      setIsLanguageDropdownOpen(false);
+      closeAllDropdownMenus();
       setIsMobileMenuOpen(false);
     },
-    [onLanguageChange]
+    [closeAllDropdownMenus, onLanguageChange]
   );
+
+  const handleDesktopUserMenuToggle = useCallback(() => {
+    setIsLanguageDropdownOpen(false);
+    setIsUserDropdownOpen((previousValue) => !previousValue);
+  }, []);
+
+  const handleMobileUserMenuToggle = useCallback(() => {
+    setIsMobileUserDropdownOpen((previousValue) => !previousValue);
+  }, []);
+
+  const handleParentProfileClick = useCallback(() => {
+    closeAllDropdownMenus();
+    setIsMobileMenuOpen(false);
+  }, [closeAllDropdownMenus]);
+
+  const handleLogout = useCallback(async () => {
+    if (isLoggingOut) {
+      return;
+    }
+
+    setIsLoggingOut(true);
+    closeAllDropdownMenus();
+    setIsMobileMenuOpen(false);
+
+    try {
+      await fetch(`${apiBaseUrl}/api/v1/auth/logout`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Client-Type': 'web',
+          ...getCsrfHeader(),
+        },
+        credentials: 'include',
+        body: JSON.stringify({}),
+      });
+    } catch {
+      // Logout should still clear local auth state if the network call fails.
+    } finally {
+      clearCsrfToken();
+      window.location.assign('/login');
+    }
+  }, [closeAllDropdownMenus, isLoggingOut]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (languageDropdownRef.current && !languageDropdownRef.current.contains(e.target as Node)) {
         setIsLanguageDropdownOpen(false);
+      }
+
+      if (userDropdownRef.current && !userDropdownRef.current.contains(e.target as Node)) {
+        setIsUserDropdownOpen(false);
+      }
+
+      if (mobileUserDropdownRef.current && !mobileUserDropdownRef.current.contains(e.target as Node)) {
+        setIsMobileUserDropdownOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -71,13 +136,25 @@ const NavBar = ({
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        setIsLanguageDropdownOpen(false);
+        closeAllDropdownMenus();
         setIsMobileMenuOpen(false);
       }
     };
     document.addEventListener('keydown', handleEscape);
     return () => document.removeEventListener('keydown', handleEscape);
-  }, []);
+  }, [closeAllDropdownMenus]);
+
+  useEffect(() => {
+    if (!isMobileMenuOpen) {
+      setIsMobileUserDropdownOpen(false);
+    }
+  }, [isMobileMenuOpen]);
+
+  useEffect(() => {
+    if (shouldHideNav) {
+      closeAllDropdownMenus();
+    }
+  }, [closeAllDropdownMenus, shouldHideNav]);
 
   return (
     <>
@@ -131,13 +208,39 @@ const NavBar = ({
             </button>
 
             {isAuthenticated ? (
-              <button
-                type="button"
-                className={styles.userButton}
-                aria-label="User account"
-              >
-                <User size={20} strokeWidth={2} aria-hidden="true" />
-              </button>
+              <div className={styles.userMenuWrapper} ref={userDropdownRef}>
+                <button
+                  type="button"
+                  className={styles.userButton}
+                  aria-label="User account"
+                  aria-haspopup="menu"
+                  aria-expanded={isUserDropdownOpen}
+                  onClick={handleDesktopUserMenuToggle}
+                >
+                  <User size={20} strokeWidth={2} aria-hidden="true" />
+                </button>
+                {isUserDropdownOpen && (
+                  <div className={styles.userDropdown} role="menu" aria-label="User menu">
+                    <Link
+                      to={PARENT_PROFILE_ROUTE}
+                      className={styles.userMenuItem}
+                      role="menuitem"
+                      onClick={handleParentProfileClick}
+                    >
+                      Parent Profile
+                    </Link>
+                    <button
+                      type="button"
+                      className={styles.userMenuItem}
+                      role="menuitem"
+                      onClick={() => void handleLogout()}
+                      disabled={isLoggingOut}
+                    >
+                      Logout
+                    </button>
+                  </div>
+                )}
+              </div>
             ) : (
               <>
                 <Link to="/login" className={styles.loginButton}>{translations.nav_login}</Link>
@@ -181,13 +284,39 @@ const NavBar = ({
           {theme === 'light' ? <Moon size={20} strokeWidth={2} /> : <Sun size={20} strokeWidth={2} />}
         </button>
         {isAuthenticated ? (
-          <button
-            type="button"
-            className={styles.userButton}
-            aria-label="User account"
-          >
-            <User size={20} strokeWidth={2} aria-hidden="true" />
-          </button>
+          <div className={styles.mobileUserMenuWrapper} ref={mobileUserDropdownRef}>
+            <button
+              type="button"
+              className={styles.userButton}
+              aria-label="User account"
+              aria-haspopup="menu"
+              aria-expanded={isMobileUserDropdownOpen}
+              onClick={handleMobileUserMenuToggle}
+            >
+              <User size={20} strokeWidth={2} aria-hidden="true" />
+            </button>
+            {isMobileUserDropdownOpen && (
+              <div className={styles.mobileUserDropdown} role="menu" aria-label="User menu">
+                <Link
+                  to={PARENT_PROFILE_ROUTE}
+                  className={styles.userMenuItem}
+                  role="menuitem"
+                  onClick={handleParentProfileClick}
+                >
+                  Parent Profile
+                </Link>
+                <button
+                  type="button"
+                  className={styles.userMenuItem}
+                  role="menuitem"
+                  onClick={() => void handleLogout()}
+                  disabled={isLoggingOut}
+                >
+                  Logout
+                </button>
+              </div>
+            )}
+          </div>
         ) : (
           <>
             <Link to="/login" className={styles.loginButton} onClick={() => setIsMobileMenuOpen(false)}>{translations.nav_login}</Link>

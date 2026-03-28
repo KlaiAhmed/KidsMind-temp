@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
+import { apiBaseUrl } from '../utils/api';
 import { clearCsrfToken, getCsrfHeader, getCsrfToken, setCsrfToken } from '../utils/csrf';
-
-const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/$/, '');
 
 interface RefreshResponse {
   csrf_token?: string;

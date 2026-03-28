@@ -416,7 +416,8 @@ const StepPreferences = ({
           onClick={onSubmit}
           disabled={isSubmitting}
         >
-          {isSubmitting ? '...' : translations.gs_next_button}
+          {isSubmitting ? <span className={styles.spinner} aria-hidden="true" /> : null}
+          {translations.gs_next_button}
         </button>
       </div>
     </div>

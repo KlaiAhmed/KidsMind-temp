@@ -38,7 +38,7 @@ async def register(
     payload: UserRegister = Body(...),
     db: Session = Depends(get_db),
 ):
-    """Register a new parent account with onboarding consent and PIN data."""
+    """Register a new parent account using step-1 onboarding data."""
     timer = time.perf_counter()
 
     logger.info(f"Register request received from {request.client.host} for email: {payload.email}")
