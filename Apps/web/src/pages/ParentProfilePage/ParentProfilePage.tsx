@@ -3,6 +3,7 @@ import { Link, Navigate } from 'react-router-dom';
 import NavBar from '../../components/NavBar/NavBar';
 import { useLanguage } from '../../hooks/useLanguage';
 import { useTheme } from '../../hooks/useTheme';
+import { hasParentProfileAccess } from '../../utils/parentProfileAccess';
 import styles from './ParentProfilePage.module.css';
 
 interface ParentProfilePageProps {
@@ -19,6 +20,10 @@ const ParentProfilePage = ({ isAuthenticated }: ParentProfilePageProps) => {
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (!hasParentProfileAccess()) {
+    return <Navigate to="/" replace />;
   }
 
   return (

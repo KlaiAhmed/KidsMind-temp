@@ -1,6 +1,13 @@
 /** NavBar — Fixed navigation bar with language selector, theme toggle, and mobile drawer menu. */
-import { useState, useCallback, useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import {
+  useState,
+  useCallback,
+  useEffect,
+  useRef,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ClipboardEvent as ReactClipboardEvent,
+} from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { Sun, Moon, Menu, X, Languages, User } from 'lucide-react';
 import type { ThemeMode, LanguageCode, TranslationMap } from '../../types';
 import { LANGUAGES } from '../../utils/constants';
@@ -8,6 +15,11 @@ import { useScrollPosition } from '../../hooks/useScrollPosition';
 import { apiBaseUrl } from '../../utils/api';
 import { clearCsrfToken, getCsrfHeader } from '../../utils/csrf';
 import { dispatchAuthStateChanged } from '../../utils/authEvents';
+import {
+  clearParentProfileAccess,
+  grantParentProfileAccess,
+  hasParentProfileAccess,
+} from '../../utils/parentProfileAccess';
 import styles from './NavBar.module.css';
 
 interface NavBarProps {
@@ -20,6 +32,7 @@ interface NavBarProps {
 }
 
 const PARENT_PROFILE_ROUTE = '/parent-profile';
+const PIN_LENGTH = 4;
 
 const RocketLogo = () => {
   return (
@@ -48,15 +61,23 @@ const NavBar = ({
   translations,
   isAuthenticated,
 }: NavBarProps) => {
+  const navigate = useNavigate();
   const { isAtPageTop, isHiddenByScroll } = useScrollPosition();
   const [isLanguageDropdownOpen, setIsLanguageDropdownOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const [isMobileUserDropdownOpen, setIsMobileUserDropdownOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isPinModalOpen, setIsPinModalOpen] = useState(false);
+  const [pinDigits, setPinDigits] = useState<string[]>(Array(PIN_LENGTH).fill(''));
+  const [pinError, setPinError] = useState('');
+  const [isVerifyingPin, setIsVerifyingPin] = useState(false);
+  const [isPinErrorShaking, setIsPinErrorShaking] = useState(false);
   const languageDropdownRef = useRef<HTMLDivElement>(null);
   const userDropdownRef = useRef<HTMLDivElement>(null);
   const mobileUserDropdownRef = useRef<HTMLDivElement>(null);
+  const pinInputRefs = useRef<Array<HTMLInputElement | null>>([]);
+  const lastSubmittedPinRef = useRef<string | null>(null);
   const shouldHideNav = isHiddenByScroll && !isMobileMenuOpen;
 
   const closeAllDropdownMenus = useCallback(() => {
@@ -83,10 +104,235 @@ const NavBar = ({
     setIsMobileUserDropdownOpen((previousValue) => !previousValue);
   }, []);
 
+  const closePinModal = useCallback(() => {
+    if (isVerifyingPin) {
+      return;
+    }
+
+    setIsPinModalOpen(false);
+    setPinDigits(Array(PIN_LENGTH).fill(''));
+    setPinError('');
+    setIsPinErrorShaking(false);
+    lastSubmittedPinRef.current = null;
+  }, [isVerifyingPin]);
+
+  const triggerPinError = useCallback((message: string) => {
+    setPinError(message);
+    setIsPinErrorShaking(false);
+    window.requestAnimationFrame(() => {
+      setIsPinErrorShaking(true);
+    });
+  }, []);
+
   const handleParentProfileClick = useCallback(() => {
     closeAllDropdownMenus();
     setIsMobileMenuOpen(false);
-  }, [closeAllDropdownMenus]);
+
+    if (hasParentProfileAccess()) {
+      navigate(PARENT_PROFILE_ROUTE);
+      return;
+    }
+
+    setPinDigits(Array(PIN_LENGTH).fill(''));
+    setPinError('');
+    setIsPinErrorShaking(false);
+    lastSubmittedPinRef.current = null;
+    setIsPinModalOpen(true);
+  }, [closeAllDropdownMenus, navigate]);
+
+  const handleVerifyParentPin = useCallback(async (candidatePin: string) => {
+    if (isVerifyingPin) {
+      return;
+    }
+
+    const normalizedPin = candidatePin.trim();
+    if (!/^\d{4}$/.test(normalizedPin)) {
+      triggerPinError(translations.error_pin_must_be_4_digits);
+      return;
+    }
+
+    setIsVerifyingPin(true);
+    setPinError('');
+
+    try {
+      const verifyResponse = await fetch(`${apiBaseUrl}/api/v1/safety-and-rules/verify-parent-pin`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Client-Type': 'web',
+          ...getCsrfHeader(),
+        },
+        credentials: 'include',
+        body: JSON.stringify({ parentPin: normalizedPin }),
+      });
+
+      if (!verifyResponse.ok) {
+        if (verifyResponse.status === 404) {
+          triggerPinError(translations.nav_pin_not_set);
+          return;
+        }
+
+        triggerPinError(translations.nav_pin_invalid);
+        return;
+      }
+
+      grantParentProfileAccess();
+      setIsPinModalOpen(false);
+  setPinDigits(Array(PIN_LENGTH).fill(''));
+      setPinError('');
+      setIsPinErrorShaking(false);
+      navigate(PARENT_PROFILE_ROUTE);
+    } catch {
+      triggerPinError(translations.status_error_description);
+    } finally {
+      setIsVerifyingPin(false);
+    }
+  }, [isVerifyingPin, navigate, translations, triggerPinError]);
+
+  const handlePinDigitChange = useCallback(
+    (index: number, rawValue: string) => {
+      if (isVerifyingPin) {
+        return;
+      }
+
+      const nextDigit = rawValue.replace(/\D/g, '').slice(-1);
+      let nextDigits: string[] = [];
+
+      setPinDigits((previousDigits) => {
+        nextDigits = [...previousDigits];
+        nextDigits[index] = nextDigit;
+        return nextDigits;
+      });
+
+      if (pinError) {
+        setPinError('');
+        setIsPinErrorShaking(false);
+      }
+
+      if (nextDigit && index < PIN_LENGTH - 1) {
+        pinInputRefs.current[index + 1]?.focus();
+      }
+
+    },
+    [isVerifyingPin, pinError]
+  );
+
+  const handlePinDigitKeyDown = useCallback(
+    (index: number, event: ReactKeyboardEvent<HTMLInputElement>) => {
+      if (isVerifyingPin) {
+        return;
+      }
+
+      if (event.key === 'Backspace') {
+        event.preventDefault();
+
+        if (pinError) {
+          setPinError('');
+          setIsPinErrorShaking(false);
+        }
+
+        setPinDigits((previousDigits) => {
+          const nextDigits = [...previousDigits];
+
+          if (nextDigits[index]) {
+            nextDigits[index] = '';
+            return nextDigits;
+          }
+
+          if (index > 0) {
+            nextDigits[index - 1] = '';
+            window.setTimeout(() => {
+              pinInputRefs.current[index - 1]?.focus();
+            }, 0);
+          }
+
+          return nextDigits;
+        });
+
+        return;
+      }
+
+      if (event.key === 'ArrowLeft' && index > 0) {
+        event.preventDefault();
+        pinInputRefs.current[index - 1]?.focus();
+      }
+
+      if (event.key === 'ArrowRight' && index < PIN_LENGTH - 1) {
+        event.preventDefault();
+        pinInputRefs.current[index + 1]?.focus();
+      }
+    },
+    [isVerifyingPin, pinError]
+  );
+
+  const handlePinPaste = useCallback(
+    (event: ReactClipboardEvent<HTMLInputElement>) => {
+      if (isVerifyingPin) {
+        return;
+      }
+
+      event.preventDefault();
+
+      const pastedDigits = event.clipboardData
+        .getData('text')
+        .replace(/\D/g, '')
+        .slice(0, PIN_LENGTH)
+        .split('');
+
+      if (pastedDigits.length === 0) {
+        return;
+      }
+
+      const nextDigits = Array(PIN_LENGTH).fill('');
+      pastedDigits.forEach((digit, index) => {
+        nextDigits[index] = digit;
+      });
+
+      setPinDigits(nextDigits);
+      setPinError('');
+      setIsPinErrorShaking(false);
+
+      const focusIndex = Math.min(pastedDigits.length, PIN_LENGTH - 1);
+      pinInputRefs.current[focusIndex]?.focus();
+
+    },
+    [isVerifyingPin]
+  );
+
+  const handleClearPinDigits = useCallback(() => {
+    if (isVerifyingPin) {
+      return;
+    }
+
+    setPinDigits(Array(PIN_LENGTH).fill(''));
+    setPinError('');
+    setIsPinErrorShaking(false);
+    lastSubmittedPinRef.current = null;
+    window.setTimeout(() => {
+      pinInputRefs.current[0]?.focus();
+    }, 0);
+  }, [isVerifyingPin]);
+
+  useEffect(() => {
+    if (!isPinModalOpen) {
+      lastSubmittedPinRef.current = null;
+      return;
+    }
+
+    const isPinComplete = pinDigits.every((digit) => /^\d$/.test(digit));
+    if (!isPinComplete) {
+      lastSubmittedPinRef.current = null;
+      return;
+    }
+
+    const completePin = pinDigits.join('');
+    if (isVerifyingPin || lastSubmittedPinRef.current === completePin) {
+      return;
+    }
+
+    lastSubmittedPinRef.current = completePin;
+    void handleVerifyParentPin(completePin);
+  }, [handleVerifyParentPin, isPinModalOpen, isVerifyingPin, pinDigits]);
 
   const handleLogout = useCallback(async () => {
     if (isLoggingOut) {
@@ -112,6 +358,7 @@ const NavBar = ({
       // Logout should still clear local auth state if the network call fails.
     } finally {
       clearCsrfToken();
+      clearParentProfileAccess();
       dispatchAuthStateChanged();
       window.location.assign('/login');
     }
@@ -136,15 +383,34 @@ const NavBar = ({
   }, []);
 
   useEffect(() => {
+    if (!isPinModalOpen) {
+      return;
+    }
+
+    const focusTimer = window.setTimeout(() => {
+      pinInputRefs.current[0]?.focus();
+    }, 120);
+
+    return () => {
+      window.clearTimeout(focusTimer);
+    };
+  }, [isPinModalOpen]);
+
+  useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        if (isPinModalOpen) {
+          closePinModal();
+          return;
+        }
+
         closeAllDropdownMenus();
         setIsMobileMenuOpen(false);
       }
     };
     document.addEventListener('keydown', handleEscape);
     return () => document.removeEventListener('keydown', handleEscape);
-  }, [closeAllDropdownMenus]);
+  }, [closeAllDropdownMenus, closePinModal, isPinModalOpen]);
 
   useEffect(() => {
     if (!isMobileMenuOpen) {
@@ -162,7 +428,7 @@ const NavBar = ({
     <>
       <nav
         className={`${styles.nav} ${isAtPageTop ? styles.navAtTop : ''} ${shouldHideNav ? styles.navHidden : ''}`}
-        aria-label="Main navigation"
+        aria-label={translations.nav_menu_label}
       >
         <div className={styles.navInner}>
           <a href="/" className={styles.logo}>
@@ -177,12 +443,12 @@ const NavBar = ({
                 onClick={() => setIsLanguageDropdownOpen(!isLanguageDropdownOpen)}
                 aria-expanded={isLanguageDropdownOpen}
                 aria-haspopup="listbox"
-                aria-label="Open language menu"
+                aria-label={translations.nav_language_menu_open}
               >
                 <Languages size={18} strokeWidth={2} aria-hidden="true" />
               </button>
               {isLanguageDropdownOpen && (
-                <div className={styles.langDropdown} role="listbox" aria-label="Select language">
+                <div className={styles.langDropdown} role="listbox" aria-label={translations.nav_language_menu_label}>
                   {LANGUAGES.map((languageOption) => (
                     <button
                       key={languageOption.code}
@@ -211,7 +477,7 @@ const NavBar = ({
                 <button
                   type="button"
                   className={styles.userButton}
-                  aria-label="User account"
+                  aria-label={translations.nav_user_account}
                   aria-haspopup="menu"
                   aria-expanded={isUserDropdownOpen}
                   onClick={handleDesktopUserMenuToggle}
@@ -219,15 +485,17 @@ const NavBar = ({
                   <User size={20} strokeWidth={2} aria-hidden="true" />
                 </button>
                 {isUserDropdownOpen && (
-                  <div className={styles.userDropdown} role="menu" aria-label="User menu">
-                    <Link
-                      to={PARENT_PROFILE_ROUTE}
+                  <div className={styles.userDropdown} role="menu" aria-label={translations.nav_user_menu_label}>
+                    <button
+                      type="button"
                       className={styles.userMenuItem}
                       role="menuitem"
-                      onClick={handleParentProfileClick}
+                      onClick={() => {
+                        void handleParentProfileClick();
+                      }}
                     >
-                      Parent Profile
-                    </Link>
+                      {translations.nav_parent_profile}
+                    </button>
                     <button
                       type="button"
                       className={styles.userMenuItem}
@@ -235,7 +503,7 @@ const NavBar = ({
                       onClick={() => void handleLogout()}
                       disabled={isLoggingOut}
                     >
-                      Logout
+                      {translations.nav_logout}
                     </button>
                   </div>
                 )}
@@ -252,10 +520,10 @@ const NavBar = ({
             className={styles.mobileMenuButton}
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             aria-expanded={isMobileMenuOpen}
-            aria-label={isMobileMenuOpen ? 'Close menu' : 'Open menu'}
+            aria-label={isMobileMenuOpen ? translations.nav_menu_close : translations.nav_menu_open}
           >
             {isMobileMenuOpen ? <X size={20} strokeWidth={2} /> : <Menu size={20} strokeWidth={2} />}
-            <span className={styles.mobileMenuLabel}>Menu</span>
+            <span className={styles.mobileMenuLabel}>{translations.nav_menu_label}</span>
           </button>
         </div>
       </nav>
@@ -287,7 +555,7 @@ const NavBar = ({
             <button
               type="button"
               className={styles.userButton}
-              aria-label="User account"
+              aria-label={translations.nav_user_account}
               aria-haspopup="menu"
               aria-expanded={isMobileUserDropdownOpen}
               onClick={handleMobileUserMenuToggle}
@@ -295,15 +563,17 @@ const NavBar = ({
               <User size={20} strokeWidth={2} aria-hidden="true" />
             </button>
             {isMobileUserDropdownOpen && (
-              <div className={styles.mobileUserDropdown} role="menu" aria-label="User menu">
-                <Link
-                  to={PARENT_PROFILE_ROUTE}
+              <div className={styles.mobileUserDropdown} role="menu" aria-label={translations.nav_user_menu_label}>
+                <button
+                  type="button"
                   className={styles.userMenuItem}
                   role="menuitem"
-                  onClick={handleParentProfileClick}
+                  onClick={() => {
+                    void handleParentProfileClick();
+                  }}
                 >
-                  Parent Profile
-                </Link>
+                  {translations.nav_parent_profile}
+                </button>
                 <button
                   type="button"
                   className={styles.userMenuItem}
@@ -311,7 +581,7 @@ const NavBar = ({
                   onClick={() => void handleLogout()}
                   disabled={isLoggingOut}
                 >
-                  Logout
+                  {translations.nav_logout}
                 </button>
               </div>
             )}
@@ -323,6 +593,99 @@ const NavBar = ({
           </>
         )}
       </div>
+
+      {isPinModalOpen && (
+        <div
+          className={styles.pinModalBackdrop}
+          role="presentation"
+          onClick={() => {
+            closePinModal();
+          }}
+        >
+          <div
+            className={`${styles.pinModal} ${isPinErrorShaking ? styles.pinModalShake : ''}`}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="parent-pin-modal-title"
+            aria-describedby="parent-pin-modal-subtitle"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              className={styles.pinModalCloseButton}
+              onClick={closePinModal}
+              aria-label={translations.nav_pin_cancel}
+              disabled={isVerifyingPin}
+            >
+              <X size={18} strokeWidth={2} aria-hidden="true" />
+            </button>
+
+            <h3 id="parent-pin-modal-title" className={styles.pinModalTitle}>
+              {translations.nav_pin_title}
+            </h3>
+            <p id="parent-pin-modal-subtitle" className={styles.pinModalSubtitle}>
+              {translations.nav_pin_subtitle}
+            </p>
+
+            <div className={styles.pinForm}>
+              <label htmlFor="parent-pin-digit-0" className={styles.pinLabel}>
+                {translations.gs_pin_label}
+              </label>
+
+              <div className={styles.pinInputsRow}>
+                {Array.from({ length: PIN_LENGTH }, (_, index) => (
+                  <input
+                    key={index}
+                    id={`parent-pin-digit-${index}`}
+                    ref={(element) => {
+                      pinInputRefs.current[index] = element;
+                    }}
+                    className={styles.pinInputBox}
+                    type="password"
+                    inputMode="numeric"
+                    autoComplete={index === 0 ? 'one-time-code' : 'off'}
+                    maxLength={1}
+                    value={pinDigits[index]}
+                    onChange={(event) => handlePinDigitChange(index, event.target.value)}
+                    onKeyDown={(event) => handlePinDigitKeyDown(index, event)}
+                    onPaste={handlePinPaste}
+                    aria-label={`${translations.gs_pin_label} ${index + 1}`}
+                    aria-invalid={pinError ? 'true' : 'false'}
+                    aria-describedby={pinError ? 'parent-pin-modal-error' : undefined}
+                    disabled={isVerifyingPin}
+                  />
+                ))}
+              </div>
+
+              <p className={styles.pinHint}>{translations.gs_pin_hint}</p>
+
+              {isVerifyingPin && (
+                <p className={styles.pinStatus}>
+                  <span className={styles.pinStatusSpinner} aria-hidden="true" />
+                  <span>{translations.nav_pin_verifying}</span>
+                </p>
+              )}
+
+              {pinError && (
+                <p id="parent-pin-modal-error" className={styles.pinError}>
+                  {pinError}
+                </p>
+              )}
+
+              <div className={styles.pinActions}>
+                <button
+                  type="button"
+                  className={styles.pinClearButton}
+                  onClick={handleClearPinDigits}
+                  disabled={isVerifyingPin}
+                >
+                  {translations.nav_pin_clear}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };

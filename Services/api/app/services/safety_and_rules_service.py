@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from models.child_profile import ChildProfile
 from models.user import User
 from schemas.safety_and_rules_schema import SafetyAndRulesPatchRequest, SafetyAndRulesPatchResponse
-from utils.manage_pwd import hash_password
+from utils.manage_pwd import hash_password, verify_password
 
 
 class SafetyAndRulesService:
@@ -48,3 +48,15 @@ class SafetyAndRulesService:
             child_id=child_profile.id,
             parent_id=current_user.id,
         )
+
+    def verify_parent_pin(
+        self,
+        parent_pin: str,
+        current_user: User,
+    ) -> None:
+        """Verify parent PIN against the authenticated user's stored hash."""
+        if not current_user.parent_pin_hash:
+            raise HTTPException(status_code=404, detail="Parent PIN is not configured")
+
+        if not verify_password(parent_pin, current_user.parent_pin_hash):
+            raise HTTPException(status_code=403, detail="Invalid parent PIN")
