@@ -53,3 +53,4 @@ dist/
 web-build/
 
 CLAUDE.md
+.claude/

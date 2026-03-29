@@ -9,7 +9,7 @@ export const BREAKPOINTS = {
 } as const;
 
 export const TIMING = {
-  carouselInterval: 3500,
+  carouselInterval: 3000,
   animationDuration: 700,
   staggerDelay: 120,
   hoverTransition: 250,
