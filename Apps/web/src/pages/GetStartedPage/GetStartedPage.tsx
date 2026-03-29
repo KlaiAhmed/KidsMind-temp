@@ -347,7 +347,9 @@ const GetStartedPage = () => {
           settings_json: {
             daily_limit_minutes: data.dailyLimitMinutes,
             allowed_subjects: data.allowedSubjects,
+            allowed_weekdays: data.allowedWeekdays,
             voice_enabled: data.enableVoice,
+            store_audio_history: data.enableVoice ? data.storeAudioHistory : false,
           },
         };
 

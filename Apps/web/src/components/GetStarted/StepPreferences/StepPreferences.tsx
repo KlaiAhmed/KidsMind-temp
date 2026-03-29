@@ -4,6 +4,7 @@ import type {
   TranslationMap,
   PreferencesFormData,
   SubjectId,
+  WeekdayId,
   FormErrors,
 } from '../../../types';
 import { useForm } from '../../../hooks/useForm';
@@ -21,6 +22,26 @@ interface StepPreferencesProps {
 /* ─── Constants ────────────────────────────────────────────────────────────── */
 
 const ALL_SUBJECTS: SubjectId[] = ['math', 'french', 'english', 'science', 'history', 'art'];
+
+const ALL_WEEKDAYS: WeekdayId[] = [
+  'monday',
+  'tuesday',
+  'wednesday',
+  'thursday',
+  'friday',
+  'saturday',
+  'sunday',
+];
+
+const WEEKDAY_LABEL_KEYS: Record<WeekdayId, keyof TranslationMap> = {
+  monday: 'gs_weekday_monday',
+  tuesday: 'gs_weekday_tuesday',
+  wednesday: 'gs_weekday_wednesday',
+  thursday: 'gs_weekday_thursday',
+  friday: 'gs_weekday_friday',
+  saturday: 'gs_weekday_saturday',
+  sunday: 'gs_weekday_sunday',
+};
 
 const SUBJECT_META: Record<SubjectId, { emoji: string; label: string }> = {
   math:    { emoji: '\uD83D\uDD22', label: 'Math' },
@@ -43,7 +64,9 @@ const PIN_LENGTH = 4;
 interface PreferencesInternalForm extends Record<string, unknown> {
   dailyLimitMinutes: number;
   allowedSubjects: SubjectId[];
+  allowedWeekdays: WeekdayId[];
   enableVoice: boolean;
+  storeAudioHistory: boolean;
   parentPinCode: string;
   confirmPinCode: string;
 }
@@ -62,7 +85,9 @@ const StepPreferences = ({
     () => ({
       dailyLimitMinutes: 30,
       allowedSubjects: [...ALL_SUBJECTS],
+      allowedWeekdays: [...ALL_WEEKDAYS],
       enableVoice: true,
+      storeAudioHistory: false,
       parentPinCode: '',
       confirmPinCode: '',
     }),
@@ -120,11 +145,37 @@ const StepPreferences = ({
     [values.allowedSubjects, handleChange]
   );
 
+  const handleWeekdayToggle = useCallback(
+    (weekday: WeekdayId) => {
+      const current = values.allowedWeekdays as WeekdayId[];
+      const isActive = current.includes(weekday);
+      if (isActive) {
+        handleChange(
+          'allowedWeekdays',
+          current.filter((day) => day !== weekday)
+        );
+      } else {
+        handleChange('allowedWeekdays', [...current, weekday]);
+      }
+    },
+    [values.allowedWeekdays, handleChange]
+  );
+
   /* ─── Voice toggle ──────────────────────────────────────────────────────── */
 
   const handleVoiceToggle = useCallback(() => {
-    handleChange('enableVoice', !values.enableVoice);
+    const nextEnableVoice = !values.enableVoice;
+    handleChange('enableVoice', nextEnableVoice);
+
+    // Audio history can only be enabled while voice input is enabled.
+    if (!nextEnableVoice) {
+      handleChange('storeAudioHistory', false);
+    }
   }, [values.enableVoice, handleChange]);
+
+  const handleStoreAudioHistoryToggle = useCallback(() => {
+    handleChange('storeAudioHistory', !values.storeAudioHistory);
+  }, [values.storeAudioHistory, handleChange]);
 
   /* ─── PIN input handlers ─────────────────────────────────────────────────── */
 
@@ -317,6 +368,26 @@ const StepPreferences = ({
               </button>
             ))}
           </div>
+
+          <span className={styles.sliderLabel}>{translations.gs_access_days_label}</span>
+          <div className={styles.subjectGrid} role="group" aria-label={translations.gs_access_days_label}>
+            {ALL_WEEKDAYS.map((weekday) => {
+              const isWeekdayActive = (values.allowedWeekdays as WeekdayId[]).includes(weekday);
+              return (
+                <button
+                  key={weekday}
+                  type="button"
+                  className={`${styles.subjectChip}${
+                    isWeekdayActive ? ` ${styles.subjectChipActive}` : ''
+                  }`}
+                  onClick={() => handleWeekdayToggle(weekday)}
+                  aria-pressed={isWeekdayActive}
+                >
+                  {translations[WEEKDAY_LABEL_KEYS[weekday]]}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         <hr className={styles.divider} />
@@ -375,6 +446,29 @@ const StepPreferences = ({
             />
           </button>
         </div>
+
+        {values.enableVoice && (
+          <div className={styles.toggleWrapper}>
+            <div className={styles.toggleLabel}>
+              <span className={styles.toggleLabelText}>{translations.gs_store_audio_history_label}</span>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={values.storeAudioHistory as boolean}
+              className={`${styles.toggleSwitch}${
+                values.storeAudioHistory ? ` ${styles.toggleSwitchOn}` : ''
+              }`}
+              onClick={handleStoreAudioHistoryToggle}
+            >
+              <span
+                className={`${styles.toggleThumb}${
+                  values.storeAudioHistory ? ` ${styles.toggleThumbOn}` : ''
+                }`}
+              />
+            </button>
+          </div>
+        )}
 
         <hr className={styles.divider} />
 

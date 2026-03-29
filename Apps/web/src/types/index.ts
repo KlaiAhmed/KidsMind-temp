@@ -137,8 +137,17 @@ export interface TranslationMap {
   gs_daily_limit_label: string;
   gs_daily_limit_unit: string;
   gs_subjects_label: string;
+  gs_access_days_label: string;
+  gs_weekday_monday: string;
+  gs_weekday_tuesday: string;
+  gs_weekday_wednesday: string;
+  gs_weekday_thursday: string;
+  gs_weekday_friday: string;
+  gs_weekday_saturday: string;
+  gs_weekday_sunday: string;
   gs_voice_label: string;
   gs_voice_hint: string;
+  gs_store_audio_history_label: string;
   gs_pin_label: string;
   gs_pin_hint: string;
   gs_confirm_pin_label: string;
@@ -264,7 +273,9 @@ export interface ChildProfileFormData {
 export interface PreferencesFormData {
   dailyLimitMinutes: number;
   allowedSubjects: SubjectId[];
+  allowedWeekdays: WeekdayId[];
   enableVoice: boolean;
+  storeAudioHistory: boolean;
   parentPinCode: string;
   confirmPinCode: string;
 }
@@ -274,6 +285,15 @@ export interface PreferencesFormData {
 export type EducationStageId = 'KINDERGARTEN' | 'PRIMARY' | 'SECONDARY';
 
 export type SubjectId = 'math' | 'french' | 'english' | 'science' | 'history' | 'art';
+
+export type WeekdayId =
+  | 'monday'
+  | 'tuesday'
+  | 'wednesday'
+  | 'thursday'
+  | 'friday'
+  | 'saturday'
+  | 'sunday';
 
 // ─── Multi-Step Flow ──────────────────────────────────────────────────────────
 
