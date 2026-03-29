@@ -1,6 +1,5 @@
 /** GetStartedPage — Multi-step onboarding flow for new parent registration with 4 steps. */
 import { useState, useCallback, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../../hooks/useTheme';
 import { useLanguage } from '../../hooks/useLanguage';
 import { useMultiStep } from '../../hooks/useMultiStep';
@@ -20,7 +19,6 @@ import type {
 } from '../../types';
 import AuthLayout from '../../components/shared/AuthLayout/AuthLayout';
 import StepIndicator from '../../components/GetStarted/StepIndicator/StepIndicator';
-import ProgressBar from '../../components/shared/ProgressBar/ProgressBar';
 import StepParentAccount from '../../components/GetStarted/StepParentAccount/StepParentAccount';
 import StepChildProfile from '../../components/GetStarted/StepChildProfile/StepChildProfile';
 import StepPreferences from '../../components/GetStarted/StepPreferences/StepPreferences';
@@ -52,15 +50,16 @@ interface ChildCreateSuccessResponse {
 }
 
 interface ChildSettingsPayload {
-  daily_limit_minutes: number;
-  allowed_subjects: SubjectId[];
-  allowed_weekdays: WeekdayId[];
-  voice_enabled: boolean;
-  store_audio_history: boolean;
+  dailyLimitMinutes: number;
+  allowedSubjects: SubjectId[];
+  allowedWeekdays: WeekdayId[];
+  enableVoice: boolean;
+  storeAudioHistory: boolean;
 }
 
-interface ChildSettingsPatchPayload {
-  settings_json: ChildSettingsPayload;
+interface SafetyAndRulesPatchPayload {
+  childSettings: ChildSettingsPayload;
+  parentPin: string;
 }
 
 const toSafeDailyLimitMinutes = (value: number): number => {
@@ -68,15 +67,16 @@ const toSafeDailyLimitMinutes = (value: number): number => {
   return Math.min(120, Math.max(15, normalizedValue));
 };
 
-const buildChildSettingsPatchPayload = (data: PreferencesFormData): ChildSettingsPatchPayload => {
+const buildSafetyAndRulesPatchPayload = (data: PreferencesFormData): SafetyAndRulesPatchPayload => {
   return {
-    settings_json: {
-      daily_limit_minutes: toSafeDailyLimitMinutes(data.dailyLimitMinutes),
-      allowed_subjects: data.allowedSubjects,
-      allowed_weekdays: data.allowedWeekdays,
-      voice_enabled: data.enableVoice,
-      store_audio_history: data.enableVoice ? data.storeAudioHistory : false,
+    childSettings: {
+      dailyLimitMinutes: toSafeDailyLimitMinutes(data.dailyLimitMinutes),
+      allowedSubjects: data.allowedSubjects,
+      allowedWeekdays: data.allowedWeekdays,
+      enableVoice: data.enableVoice,
+      storeAudioHistory: data.enableVoice ? data.storeAudioHistory : false,
     },
+    parentPin: data.parentPinCode,
   };
 };
 
@@ -201,16 +201,12 @@ const buildStepConfig = (currentIndex: number): OnboardingStep[] => {
 };
 
 const GetStartedPage = () => {
-  const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
   const { language, setLanguage, translations } = useLanguage();
   const { isAuthenticated, isLoading: isAuthLoading } = useAuthStatus();
   const {
     currentStepIndex,
-    progressPercent,
     goToNextStep,
-    goToPreviousStep,
-    isFirstStep,
     goToStep,
   } = useMultiStep(TOTAL_STEPS);
 
@@ -374,9 +370,9 @@ const GetStartedPage = () => {
       }
 
       try {
-        const patchPayload = buildChildSettingsPatchPayload(data);
+        const patchPayload = buildSafetyAndRulesPatchPayload(data);
 
-        const patchResponse = await fetch(`${apiBaseUrl}/api/v1/children/${childId}`, {
+        const patchResponse = await fetch(`${apiBaseUrl}/api/v1/safety-and-rules`, {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
@@ -393,7 +389,8 @@ const GetStartedPage = () => {
         }
 
         setPreferencesData(data);
-        window.location.href = '/dashboard';
+        setDirection('forward');
+        goToNextStep();
       } catch (error) {
         setSubmitError(
           error instanceof Error
@@ -402,19 +399,8 @@ const GetStartedPage = () => {
         );
       }
     },
-    [childId, translations]
+    [childId, goToNextStep, translations]
   );
-
-  const handleBack = () => {
-    if (isAuthenticated && currentStepIndex === 1) {
-      // If logged in on step 2, back button goes to home
-      navigate('/');
-    } else {
-      setSubmitError('');
-      setDirection('backward');
-      goToPreviousStep();
-    }
-  };
 
   const handleFinish = () => {
     window.location.href = '/dashboard';

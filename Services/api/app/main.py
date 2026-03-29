@@ -29,6 +29,7 @@ from routers.admin_users import router as admin_users_router
 from routers.chat import router as chat_router
 from routers.children import router as children_router
 from routers.health import router as health_router
+from routers.safety_and_rules import router as safety_and_rules_router
 from routers.users import router as users_router
 from services.bootstrap_admin import ensure_super_admin_exists
 from utils.limiter import limiter
@@ -116,6 +117,7 @@ def create_app() -> FastAPI:
     app.include_router(auth_router, prefix="/api/v1/auth", tags=["Auth"])
     app.include_router(chat_router, prefix="/api/v1/chat", tags=["Chat"])
     app.include_router(children_router, prefix="/api/v1/children", tags=["Children"])
+    app.include_router(safety_and_rules_router, prefix="/api/v1", tags=["Safety and Rules"])
     app.include_router(admin_users_router, prefix="/api/v1/users", tags=["Admin Users"])
     app.include_router(users_router, prefix="/api/v1/users", tags=["Users"])
 
