@@ -24,6 +24,9 @@ from utils.handle_service_errors import handle_service_errors
 from utils.logger import logger
 
 
+SLOW_CALL_THRESHOLD_SECONDS = 3.0
+
+
 async def voice_chat_controller(
     user_id: str,
     child_id: str,
@@ -61,7 +64,19 @@ async def voice_chat_controller(
         async with handle_service_errors():
             duration = time.perf_counter()
 
+            logger.info(
+                "Processing voice chat request",
+                extra={
+                    "user_id": user_id,
+                    "child_id": child_id,
+                    "session_id": session_id,
+                    "stream": stream,
+                    "store_audio": store_audio,
+                },
+            )
+
             # Upload audio file to storage and get presigned URL
+            upload_start = time.perf_counter()
             upload_result = await run_in_threadpool(
                 upload_audio,
                 audio_file,
@@ -72,24 +87,54 @@ async def voice_chat_controller(
             )
             filename = upload_result["filename"]
             audio_url = upload_result["url"]
+            upload_duration = time.perf_counter() - upload_start
+
+            if upload_duration > SLOW_CALL_THRESHOLD_SECONDS:
+                logger.warning(
+                    "Slow audio upload",
+                    extra={"duration_seconds": round(upload_duration, 3)},
+                )
 
             # Send audio URL to STT Service for transcription
+            stt_start = time.perf_counter()
             stt_response = await client.post(
                 f"{settings.STT_SERVICE_ENDPOINT}/v1/stt/transcriptions",
                 json={"audio_url": audio_url, "context": context},
                 timeout=30.0,
             )
             stt_response.raise_for_status()
+            stt_duration = time.perf_counter() - stt_start
+
+            logger.info(
+                "STT service call completed",
+                extra={
+                    "status_code": stt_response.status_code,
+                    "duration_seconds": round(stt_duration, 3),
+                    "slow": stt_duration > SLOW_CALL_THRESHOLD_SECONDS,
+                },
+            )
 
             text = stt_response.json().get("text", "")
             if not text:
-                logger.warning("STT Service did not return text")
+                logger.warning(
+                    "STT Service returned empty transcription",
+                    extra={"user_id": user_id, "child_id": child_id},
+                )
                 raise HTTPException(status_code=500, detail="STT Service did not return text")
+
+            logger.info(
+                "Transcription received",
+                extra={"text_length": len(text)},
+            )
 
             # Resolve child profile context from cache or DB
             profile_context = await get_child_profile_context(child_id, redis, db)
 
             if stream:
+                logger.info(
+                    "Starting streaming AI response",
+                    extra={"user_id": user_id, "child_id": child_id},
+                )
                 stream_generator = stream_content(
                     user_id=user_id,
                     child_id=child_id,
@@ -112,6 +157,7 @@ async def voice_chat_controller(
                 )
 
             # Non-streaming: generate full AI response
+            ai_start = time.perf_counter()
             ai_response = await generate_content(
                 user_id=user_id,
                 child_id=child_id,
@@ -124,9 +170,18 @@ async def voice_chat_controller(
                 is_below_expected_stage=profile_context["is_below_expected_stage"],
                 client=client,
             )
+            ai_duration = time.perf_counter() - ai_start
 
             duration = time.perf_counter() - duration
-            logger.info(f"Content generation completed in {duration:.3f} seconds")
+            logger.info(
+                "Voice chat completed",
+                extra={
+                    "total_duration_seconds": round(duration, 3),
+                    "ai_duration_seconds": round(ai_duration, 3),
+                    "upload_duration_seconds": round(upload_duration, 3),
+                    "stt_duration_seconds": round(stt_duration, 3),
+                },
+            )
 
             return {"ai_data": ai_response}
 
@@ -169,10 +224,25 @@ async def text_chat_controller(
     async with handle_service_errors():
         duration = time.perf_counter()
 
+        logger.info(
+            "Processing text chat request",
+            extra={
+                "user_id": user_id,
+                "child_id": child_id,
+                "session_id": session_id,
+                "text_length": len(text),
+                "context_length": len(context) if context else 0,
+                "stream": stream,
+            },
+        )
+
         profile_context = await get_child_profile_context(child_id, redis, db)
-        logger.info(f"Received text chat request: {text} with context: {context}")
 
         if stream:
+            logger.info(
+                "Starting streaming AI response",
+                extra={"user_id": user_id, "child_id": child_id},
+            )
             stream_generator = stream_content(
                 user_id=user_id,
                 child_id=child_id,
@@ -195,6 +265,7 @@ async def text_chat_controller(
             )
 
         # Non-streaming: generate full AI response
+        ai_start = time.perf_counter()
         ai_response = await generate_content(
             user_id=user_id,
             child_id=child_id,
@@ -207,9 +278,17 @@ async def text_chat_controller(
             is_below_expected_stage=profile_context["is_below_expected_stage"],
             client=client,
         )
+        ai_duration = time.perf_counter() - ai_start
 
         duration = time.perf_counter() - duration
-        logger.info(f"Content generation completed in {duration:.3f} seconds")
+        logger.info(
+            "Text chat completed",
+            extra={
+                "total_duration_seconds": round(duration, 3),
+                "ai_duration_seconds": round(ai_duration, 3),
+                "response_size_bytes": len(str(ai_response)),
+            },
+        )
 
         return ai_response
 

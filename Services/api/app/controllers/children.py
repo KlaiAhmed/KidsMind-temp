@@ -40,7 +40,10 @@ async def create_child_controller(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error occurred while creating child profile: {e}")
+        logger.exception(
+            "Unexpected error creating child profile",
+            extra={"parent_id": current_user.id},
+        )
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
 
@@ -66,7 +69,10 @@ async def list_children_controller(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error occurred while listing child profiles: {e}")
+        logger.exception(
+            "Unexpected error listing child profiles",
+            extra={"parent_id": current_user.id},
+        )
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
 
@@ -94,7 +100,10 @@ async def get_child_controller(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error occurred while getting child profile: {e}")
+        logger.exception(
+            "Unexpected error getting child profile",
+            extra={"parent_id": current_user.id, "child_id": child_id},
+        )
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
 
@@ -124,7 +133,10 @@ async def update_child_controller(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error occurred while updating child profile: {e}")
+        logger.exception(
+            "Unexpected error updating child profile",
+            extra={"parent_id": current_user.id, "child_id": child_id},
+        )
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
 
@@ -149,5 +161,8 @@ async def delete_child_controller(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error occurred while deleting child profile: {e}")
+        logger.exception(
+            "Unexpected error deleting child profile",
+            extra={"parent_id": current_user.id, "child_id": child_id},
+        )
         raise HTTPException(status_code=500, detail="Internal Server Error")

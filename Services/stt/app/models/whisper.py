@@ -24,10 +24,21 @@ MODEL_CONFIGS: dict[str, dict] = {
 
 
 def _load_model(name: str) -> WhisperModel:
+    logger.info(
+        "Loading Whisper model",
+        extra={
+            "model_name": name,
+            "config": MODEL_CONFIGS[name],
+        },
+    )
+
     if name not in registry:
         config = MODEL_CONFIGS[name]
         registry[name] = WhisperModel(**config)
-        print(f"Whisper model ready: {name}")
+        logger.info(
+            "Whisper model loaded successfully",
+            extra={"model_name": name},
+        )
     return registry[name]
 
 
@@ -43,14 +54,28 @@ def load_tiny_model() -> WhisperModel:
 
 def load_all_models() -> None:
     """Load all models."""
+    logger.info("Starting to load all Whisper models")
     load_whisper_model()
     load_tiny_model()
+    logger.info(
+        "All Whisper models loaded",
+        extra={"loaded_models": list(registry.keys())},
+    )
 
 
 def get_model(name: str) -> WhisperModel:
     """Retrieve an already-loaded model. Raises if not yet loaded."""
     if name not in registry:
-        logger.error(f"Model '{name}' not found in registry", extra={"available_models": list(registry.keys())})
-        raise RuntimeError( f"Model '{name}' has not been loaded. " "Ensure load_all_models() was called during app startup.")
-                           
+        logger.error(
+            "Model not found in registry",
+            extra={
+                "requested_model": name,
+                "available_models": list(registry.keys()),
+            },
+        )
+        raise RuntimeError(
+            f"Model '{name}' has not been loaded. "
+            "Ensure load_all_models() was called during app startup."
+        )
+
     return registry[name]

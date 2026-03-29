@@ -23,14 +23,18 @@ HTTPX_TIMEOUT = httpx.Timeout(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Starting Up. Service Configurations:", extra={
-        "service": settings.SERVICE_NAME,
-        "whisper_mode": settings.WHISPER_MODE,
-        "whisper_model": settings.WHISPER_MODEL,
-        "whisper_device": settings.WHISPER_DEVICE,
-        "whisper_compute_type": settings.WHISPER_COMPUTE_TYPE,
-        "whisper_num_workers": settings.WHISPER_NUM_WORKERS,
-        "stt_timeout_seconds": settings.STT_TIMEOUT_SECONDS}
+    logger.info(
+        "STT service starting up",
+        extra={
+            "service": settings.SERVICE_NAME,
+            "whisper_mode": settings.WHISPER_MODE,
+            "whisper_model": settings.WHISPER_MODEL,
+            "whisper_device": settings.WHISPER_DEVICE,
+            "whisper_compute_type": settings.WHISPER_COMPUTE_TYPE,
+            "whisper_num_workers": settings.WHISPER_NUM_WORKERS,
+            "stt_timeout_seconds": settings.STT_TIMEOUT_SECONDS,
+            "environment": "production" if settings.IS_PROD else "development",
+        },
     )
 
     # Pre-Load models at startup
@@ -42,16 +46,30 @@ async def lifespan(app: FastAPI):
 
     # Initialize the worker semaphore based on the number of workers/threads configured for the mode
     app.state.worker_semaphore = asyncio.Semaphore(settings.WHISPER_NUM_WORKERS if settings.WHISPER_MODE == "gpu" else settings.WHISPER_CPU_THREADS)
-    
+
     async with httpx.AsyncClient(timeout=HTTPX_TIMEOUT) as client:
         app.state.http_client = client
+
+        logger.info(
+            "STT service startup complete",
+            extra={
+                "service": settings.SERVICE_NAME,
+                "max_audio_mb": settings.MAX_AUDIO_BYTES / (1024 * 1024),
+                "supported_formats": list(settings.SUPPORTED_AUDIO_EXTENSIONS),
+            },
+        )
+
         yield
-    
-    logger.info("Shutting Down.")
+
+    logger.info(
+        "STT service shutdown complete",
+        extra={"service": settings.SERVICE_NAME},
+    )
+
 
 def create_app() -> FastAPI:
     # Set up logging for the application
-    setup_logging() 
+    setup_logging()
 
     # Initialize the FastAPI app with a lifespan context manager
     app = FastAPI(title=settings.SERVICE_NAME, lifespan=lifespan)
@@ -75,10 +93,10 @@ def create_app() -> FastAPI:
 
     @app.get("/health")
     def health_check():
+        logger.debug("Health check endpoint called")
         return {"status": "ok"}
-    
+
     return app
 
+
 app = create_app()
-
-

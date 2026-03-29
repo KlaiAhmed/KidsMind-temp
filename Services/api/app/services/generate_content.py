@@ -2,17 +2,22 @@
 Content Generation Service
 
 Responsibility: Handles communication with AI service for content generation
-               including both synchronous and streaming responses.
+including both synchronous and streaming responses.
 Layer: Service
 Domain: Chat / AI
 """
 
+import time
 from collections.abc import AsyncGenerator
 
 import httpx
 
 from core.config import settings
 from utils.logger import logger
+
+
+SLOW_CALL_THRESHOLD_SECONDS = 3.0
+
 
 async def generate_content(
     user_id: str,
@@ -26,10 +31,21 @@ async def generate_content(
     is_accelerated: bool = False,
     is_below_expected_stage: bool = False,
     timeout: int = 30
-    ):
+):
 
     url = f"{settings.AI_SERVICE_ENDPOINT}/v1/ai/chat/{user_id}/{child_id}/{session_id}"
-    logger.info(f"Sending request to AI Service with text length: {len(text)} and context length: {len(context)}")
+
+    logger.info(
+        "Calling AI service",
+        extra={
+            "text_length": len(text),
+            "context_length": len(context),
+            "age_group": age_group,
+            "education_stage": education_stage,
+        },
+    )
+
+    start_time = time.perf_counter()
     res = await client.post(
         url,
         json={
@@ -42,8 +58,27 @@ async def generate_content(
         },
         timeout=timeout,
     )
+    elapsed = time.perf_counter() - start_time
+
     res.raise_for_status()
-    logger.info(f"AI Service responded with status {res.status_code}, content length: {len(res.content)}")
+
+    if elapsed > SLOW_CALL_THRESHOLD_SECONDS:
+        logger.warning(
+            "Slow AI service response",
+            extra={
+                "duration_seconds": round(elapsed, 3),
+                "status_code": res.status_code,
+            },
+        )
+    else:
+        logger.info(
+            "AI service call completed",
+            extra={
+                "duration_seconds": round(elapsed, 3),
+                "status_code": res.status_code,
+                "response_size_bytes": len(res.content),
+            },
+        )
 
     return res.json().get("response", {})
 
@@ -62,7 +97,17 @@ async def stream_content(
     timeout: int = 30,
 ) -> AsyncGenerator[bytes, None]:
     url = f"{settings.AI_SERVICE_ENDPOINT}/v1/ai/chat/stream/{user_id}/{child_id}/{session_id}"
-    logger.info(f"Streaming request to AI Service with text length: {len(text)} and context length: {len(context)}")
+
+    logger.info(
+        "Starting AI service stream",
+        extra={
+            "text_length": len(text),
+            "context_length": len(context),
+            "age_group": age_group,
+            "education_stage": education_stage,
+        },
+    )
+
     async with client.stream(
         "POST",
         url,

@@ -2,7 +2,7 @@
 CSRF Middleware
 
 Responsibility: Validates CSRF tokens for state-changing requests from
-               web clients using cookie-based authentication.
+web clients using cookie-based authentication.
 Layer: Middleware
 Domain: Security
 """
@@ -15,6 +15,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from core.config import settings
 from utils.csrf import verify_csrf_token
+from utils.logger import logger
 
 
 class CSRFMiddleware(BaseHTTPMiddleware):
@@ -63,6 +64,16 @@ class CSRFMiddleware(BaseHTTPMiddleware):
         )
 
         if not is_valid:
+            logger.warning(
+                "CSRF validation failed",
+                extra={
+                    "path": request.url.path,
+                    "method": request.method,
+                    "has_csrf_cookie": bool(csrf_cookie),
+                    "has_csrf_token": bool(csrf_token),
+                    "client_ip": request.client.host if request.client else "unknown",
+                },
+            )
             return JSONResponse(status_code=403, content={"detail": "CSRF token missing or invalid"})
 
         return await call_next(request)

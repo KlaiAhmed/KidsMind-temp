@@ -32,7 +32,10 @@ async def patch_safety_and_rules_controller(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error occurred while updating safety and rules: {e}")
+        logger.exception(
+            "Unexpected error updating safety and rules",
+            extra={"parent_id": current_user.id},
+        )
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
 
@@ -46,12 +49,24 @@ async def verify_parent_pin_controller(
         safety_and_rules_service = SafetyAndRulesService(db)
         safety_and_rules_service.verify_parent_pin(payload.parent_pin, current_user)
 
+        logger.info(
+            "Parent PIN verified successfully",
+            extra={"parent_id": current_user.id},
+        )
+
         return SafetyAndRulesVerifyPinResponse(
             message="Parent PIN verified successfully",
             is_valid=True,
         )
     except HTTPException:
+        logger.warning(
+            "Parent PIN verification failed",
+            extra={"parent_id": current_user.id},
+        )
         raise
     except Exception as e:
-        logger.error(f"Error occurred while verifying parent PIN: {e}")
+        logger.exception(
+            "Unexpected error verifying parent PIN",
+            extra={"parent_id": current_user.id},
+        )
         raise HTTPException(status_code=500, detail="Internal Server Error")

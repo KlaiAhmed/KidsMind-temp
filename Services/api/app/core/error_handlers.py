@@ -12,6 +12,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.requests import Request
 
 from schemas.error_schema import ErrorItem, ErrorResponse
+from utils.logger import logger
 
 
 def _build_error_response(
@@ -73,6 +74,17 @@ async def request_validation_exception_handler(
             )
         )
 
+    logger.warning(
+        "Request validation failed",
+        extra={
+            "status_code": 422,
+            "error_count": len(validation_errors),
+            "path": request.url.path,
+            "method": request.method,
+            "errors": [{"field": e.field, "message": e.message} for e in validation_errors[:3]],
+        },
+    )
+
     return _build_error_response(
         status_code=422,
         message="Validation failed",
@@ -86,6 +98,29 @@ async def http_exception_handler(
     exc: StarletteHTTPException,
 ) -> JSONResponse:
     message, errors = _normalize_http_detail(exc.detail)
+
+    # Log 4xx warnings and 5xx errors
+    if 400 <= exc.status_code < 500:
+        logger.warning(
+            "HTTP exception",
+            extra={
+                "status_code": exc.status_code,
+                "message": message,
+                "path": request.url.path,
+                "method": request.method,
+            },
+        )
+    elif exc.status_code >= 500:
+        logger.error(
+            "HTTP server error",
+            extra={
+                "status_code": exc.status_code,
+                "message": message,
+                "path": request.url.path,
+                "method": request.method,
+            },
+        )
+
     return _build_error_response(
         status_code=exc.status_code,
         message=message,

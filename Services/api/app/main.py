@@ -2,7 +2,7 @@
 Main Application Entry Point
 
 Responsibility: FastAPI application factory, lifespan management, middleware
-               registration, and router mounting. Contains no business logic.
+registration, and router mounting. Contains no business logic.
 Layer: Core
 Domain: Application Infrastructure
 """
@@ -57,24 +57,51 @@ async def lifespan(app: FastAPI):
     Manage application startup and shutdown lifecycle.
 
     On startup:
-        - Initialize shared HTTP client
-        - Connect to cache
-        - Initialize database schema
-        - Bootstrap super admin user
+    - Initialize shared HTTP client
+    - Connect to cache
+    - Initialize database schema
+    - Bootstrap super admin user
 
     On shutdown:
-        - Close cache connection
+    - Close cache connection
     """
+    logger.info(
+        "Application starting up",
+        extra={
+            "service": settings.SERVICE_NAME,
+            "environment": "production" if settings.IS_PROD else "development",
+            "log_level": settings.LOG_LEVEL,
+        },
+    )
+
     async with httpx.AsyncClient(timeout=HTTPX_TIMEOUT, headers=build_service_headers()) as client:
         app.state.http_client = client
+        logger.info("HTTP client initialized")
 
         await get_cache_client()
+        logger.info("Cache connection established")
+
         init_db()
+        logger.info("Database schema initialized")
+
         ensure_super_admin_exists()
+        logger.info("Super admin bootstrap completed")
+
+        logger.info(
+            "Application startup complete",
+            extra={
+                "service": settings.SERVICE_NAME,
+                "rate_limit": settings.RATE_LIMIT,
+            },
+        )
 
         yield
 
         await close_cache_client()
+        logger.info(
+            "Application shutdown complete",
+            extra={"service": settings.SERVICE_NAME},
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -85,7 +112,7 @@ def create_app() -> FastAPI:
     Create and configure the FastAPI application instance.
 
     Returns:
-        Configured FastAPI application with all middleware and routers mounted.
+    Configured FastAPI application with all middleware and routers mounted.
     """
     setup_logging()
 

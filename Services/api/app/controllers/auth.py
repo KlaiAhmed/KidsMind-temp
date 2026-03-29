@@ -33,7 +33,7 @@ async def register_controller(payload: UserRegister, db: Session) -> dict:
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error occurred while registering user: {e}")
+        logger.exception("Unexpected error during user registration")
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
 
@@ -63,7 +63,7 @@ async def login_controller(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error occurred while logging in: {e}")
+        logger.exception("Unexpected error during login")
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
 
@@ -101,7 +101,7 @@ async def refresh_controller(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error occurred while refreshing token: {e}")
+        logger.exception("Unexpected error during token refresh")
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
 
@@ -139,5 +139,5 @@ async def logout_controller(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error occurred while logging out: {e}")
+        logger.exception("Unexpected error during logout")
         raise HTTPException(status_code=500, detail="Internal Server Error")

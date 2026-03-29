@@ -36,10 +36,18 @@ class AuthService:
     async def register(self, payload: UserRegister) -> dict:
         """Register a new parent account from step-1 onboarding fields."""
         if not payload.agreed_to_terms:
+            logger.warning(
+                "Registration rejected: terms not accepted",
+                extra={"email": payload.email[:3] + "***"},
+            )
             raise HTTPException(status_code=400, detail="Terms and conditions must be accepted")
 
         existing_user = self.db.query(User).filter(User.email == payload.email).first()
         if existing_user:
+            logger.warning(
+                "Registration rejected: email already exists",
+                extra={"email": payload.email[:3] + "***"},
+            )
             raise HTTPException(status_code=409, detail="User already exists")
 
         username = self._generate_unique_username(payload.email)
@@ -64,7 +72,14 @@ class AuthService:
         self.db.commit()
         self.db.refresh(user)
 
-        logger.info(f"New parent account registered user_id={user.id} email={user.email}")
+        logger.info(
+            "New parent account registered",
+            extra={
+                "user_id": user.id,
+                "email": user.email[:3] + "***",
+                "role": user.role.value,
+            },
+        )
         return {
             "id": user.id,
             "email": user.email,
@@ -101,6 +116,15 @@ class AuthService:
         create_refresh_session(self.db, user.id, refresh_token, refresh_jti, token_family)
         self.db.commit()
 
+        logger.info(
+            "User login successful",
+            extra={
+                "user_id": user.id,
+                "email": user.email[:3] + "***",
+                "client_type": self.client_type,
+            },
+        )
+
         return deliver_tokens(self.response, self.client_type, user, access_token, refresh_token, "Login successful")
 
     # Refresh Token
@@ -108,6 +132,10 @@ class AuthService:
         """Rotate refresh token session and return newly issued credentials."""
         provided_refresh_token = extract_refresh_token(self.client_type, request, refresh_token, authorization)
         if not provided_refresh_token:
+            logger.warning(
+                "Token refresh rejected: no refresh token provided",
+                extra={"client_type": self.client_type},
+            )
             raise HTTPException(status_code=401, detail="Refresh token is required")
 
         payload = verify_refresh_payload(provided_refresh_token)
@@ -117,6 +145,10 @@ class AuthService:
 
         session = find_refresh_session(self.db, refresh_jti)
         if not session:
+            logger.warning(
+                "Token refresh rejected: session not found",
+                extra={"user_id": user_id, "jti": refresh_jti[:8] + "***"},
+            )
             raise HTTPException(status_code=401, detail="Refresh token session not found")
 
         now = datetime.now(timezone.utc)
@@ -124,15 +156,30 @@ class AuthService:
             session.reuse_detected = True
             revoke_token_family(self.db, user_id, token_family)
             self.db.commit()
+            logger.warning(
+                "Token reuse detected — all sessions revoked",
+                extra={
+                    "user_id": user_id,
+                    "token_family": token_family[:8] + "***",
+                },
+            )
             raise HTTPException(status_code=401, detail="Refresh token reuse detected")
 
         if session.expires_at <= now:
             session.revoked = True
             session.revoked_at = now
             self.db.commit()
+            logger.info(
+                "Token refresh rejected: token expired",
+                extra={"user_id": user_id},
+            )
             raise HTTPException(status_code=401, detail="Refresh token has expired")
 
         if session.token_hash != hash_token(provided_refresh_token):
+            logger.warning(
+                "Token refresh rejected: hash mismatch",
+                extra={"user_id": user_id},
+            )
             raise HTTPException(status_code=401, detail="Invalid refresh token")
 
         user = get_active_user_by_id(self.db, user_id)
@@ -144,6 +191,14 @@ class AuthService:
 
         create_refresh_session(self.db, user.id, new_refresh_token, new_refresh_jti, token_family)
         self.db.commit()
+
+        logger.info(
+            "Token refresh successful",
+            extra={
+                "user_id": user_id,
+                "client_type": self.client_type,
+            },
+        )
 
         return deliver_tokens(
             self.response,
@@ -159,16 +214,27 @@ class AuthService:
         """Revoke a refresh session when provided and clear browser cookies on web."""
         provided_refresh_token = extract_refresh_token(self.client_type, request, refresh_token, authorization)
         if not provided_refresh_token and self.client_type == "mobile":
+            logger.warning("Logout rejected: no refresh token provided for mobile client")
             raise HTTPException(status_code=401, detail="Refresh token is required")
 
         if provided_refresh_token:
             try:
                 payload = verify_refresh_payload(provided_refresh_token)
+                user_id = payload.get("sub")
                 session = find_refresh_session(self.db, payload["jti"])
                 if session and not session.revoked:
                     session.revoked = True
                     session.revoked_at = datetime.now(timezone.utc)
                     self.db.commit()
+                    logger.info(
+                        "User logout successful",
+                        extra={"user_id": user_id, "client_type": self.client_type},
+                    )
+                elif session and session.revoked:
+                    logger.info(
+                        "Logout called with already-revoked token",
+                        extra={"user_id": user_id},
+                    )
             except HTTPException:
                 logger.warning("Logout called with invalid refresh token")
 
@@ -424,7 +490,10 @@ def require_existing_user_or_reject(db: Session, email: str, password: str) -> U
     if user:
         return user
 
-    logger.warning(f"Login attempt with non-existent email: {email}")
+    logger.warning(
+        "Login attempt with non-existent email",
+        extra={"email": email[:3] + "***"},
+    )
     verify_password(password, settings.DUMMY_HASH)
     raise HTTPException(status_code=401, detail="Invalid credentials")
 
@@ -435,7 +504,14 @@ def ensure_account_not_locked(user: User, now: datetime, email: str) -> None:
         locked_until_utc = user.locked_until.replace(tzinfo=timezone.utc) if user.locked_until.tzinfo is None else user.locked_until
         if locked_until_utc > now:
             time_remaining = int((locked_until_utc - now).total_seconds() // 60)
-            logger.warning(f"Login attempt for locked account: {email} time remaining: {time_remaining} more minutes")
+            logger.warning(
+                "Login attempt for locked account",
+                extra={
+                    "email": email[:3] + "***",
+                    "time_remaining_minutes": time_remaining,
+                    "user_id": user.id,
+                },
+            )
             raise HTTPException(status_code=403, detail=f"Account is locked. Please try again in {time_remaining} minutes.")
 
 
@@ -444,7 +520,15 @@ def ensure_account_is_active_for_login(user: User, email: str) -> None:
     if user.is_active and user.deleted_at is None:
         return
 
-    logger.warning(f"Login attempt for deactivated or deleted account: {email}")
+    logger.warning(
+        "Login attempt for deactivated or deleted account",
+        extra={
+            "email": email[:3] + "***",
+            "user_id": user.id,
+            "is_active": user.is_active,
+            "has_deleted_at": user.deleted_at is not None,
+        },
+    )
     raise HTTPException(status_code=403, detail="Account is deactivated")
 
 
@@ -454,15 +538,33 @@ def verify_password_or_apply_lockout(db: Session, user: User, password: str, now
         return
 
     user.failed_login_attempts += 1
-    logger.warning(f"Failed login attempt for user: {email}. Attempt #{user.failed_login_attempts}")
+    logger.warning(
+        "Failed login attempt",
+        extra={
+            "email": email[:3] + "***",
+            "user_id": user.id,
+            "attempt_count": user.failed_login_attempts,
+        },
+    )
 
     if user.failed_login_attempts >= 10:
         user.locked_until = now + timedelta(hours=24)
-        logger.warning(f"Suspicious activity detected for user: {user.email}")
+        logger.warning(
+            "Suspicious activity detected — account locked 24h",
+            extra={"user_id": user.id, "attempt_count": user.failed_login_attempts},
+        )
     elif user.failed_login_attempts >= 8:
         user.locked_until = now + timedelta(hours=12)
+        logger.warning(
+            "Account locked 12h due to repeated failures",
+            extra={"user_id": user.id, "attempt_count": user.failed_login_attempts},
+        )
     elif user.failed_login_attempts >= 5:
         user.locked_until = now + timedelta(minutes=30)
+        logger.info(
+            "Account locked 30min due to failures",
+            extra={"user_id": user.id, "attempt_count": user.failed_login_attempts},
+        )
 
     db.commit()
     raise HTTPException(status_code=401, detail="Invalid credentials")
