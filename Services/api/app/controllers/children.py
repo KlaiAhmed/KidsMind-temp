@@ -6,8 +6,6 @@ Layer: Controller
 Domain: Children
 """
 
-import logging
-
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
@@ -15,8 +13,7 @@ from models.child_profile import ChildProfile
 from models.user import User
 from schemas.child_profile_schema import ChildProfileCreate, ChildProfileUpdate
 from services.child_profile_service import ChildProfileService
-
-logger = logging.getLogger(__name__)
+from utils.logger import logger
 
 
 async def create_child_controller(
@@ -100,4 +97,29 @@ async def update_child_controller(
         raise
     except Exception as e:
         logger.error(f"Error occurred while updating child profile: {e}")
+        raise HTTPException(status_code=500, detail="Internal Server Error")
+
+
+async def delete_child_controller(
+    child_id: int,
+    current_user: User,
+    db: Session,
+) -> None:
+    """Delete a child profile that belongs to the authenticated parent user.
+
+    Args:
+        child_id: Numeric identifier of the child profile to delete.
+        current_user: The authenticated parent user.
+        db: Active database session.
+
+    Raises:
+        HTTPException: 404 if profile not found or doesn't belong to parent.
+    """
+    try:
+        child_service = ChildProfileService(db)
+        child_service.delete_child_profile(child_id, current_user)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error occurred while deleting child profile: {e}")
         raise HTTPException(status_code=500, detail="Internal Server Error")

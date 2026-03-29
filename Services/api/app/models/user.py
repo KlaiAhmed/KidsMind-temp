@@ -11,6 +11,7 @@ import enum
 from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, Column, DateTime, Enum as SAEnum, Integer, String, func
+from sqlalchemy.orm import relationship
 
 from core.database import Base
 
@@ -79,6 +80,13 @@ class User(Base):
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
     deleted_at = Column(DateTime, nullable=True)
+
+    child_profiles = relationship(
+        "ChildProfile",
+        back_populates="parent",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
     # Helpers :
 

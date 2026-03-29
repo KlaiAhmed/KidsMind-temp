@@ -7,7 +7,6 @@ Layer: Router
 Domain: Children
 """
 
-import logging
 import time
 
 from fastapi import APIRouter, Body, Depends, Request
@@ -16,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from controllers.children import (
     create_child_controller,
+    delete_child_controller,
     list_children_controller,
     update_child_controller,
 )
@@ -26,8 +26,7 @@ from models.user import User
 from schemas.child_profile_schema import ChildProfileCreate, ChildProfileResponse, ChildProfileUpdate
 from services.child_profile_context_cache import invalidate_child_profile_context_cache
 from utils.limiter import limiter
-
-logger = logging.getLogger(__name__)
+from utils.logger import logger
 
 router = APIRouter()
 
@@ -40,7 +39,10 @@ async def create_child_profile(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Create a child profile and bind it to the current authenticated parent."""
+    """Create a child profile and bind it to the current authenticated parent.
+
+    A parent account can own at most 5 child profiles.
+    """
     timer = time.perf_counter()
 
     logger.info(f"Create child profile request received for parent_id={current_user.id}")
@@ -92,3 +94,23 @@ async def patch_child_profile(
     logger.info(f"Update child profile request processed in {timer:.3f} seconds")
 
     return result
+
+
+@router.delete("/{child_id}", status_code=204)
+@limiter.limit(settings.RATE_LIMIT)
+async def delete_child_profile(
+    child_id: int,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    redis: Redis = Depends(get_redis),
+):
+    """Delete a child profile when it belongs to the authenticated parent."""
+    timer = time.perf_counter()
+
+    logger.info(f"Delete child profile request received for child_id={child_id} parent_id={current_user.id}")
+    await delete_child_controller(child_id, current_user, db)
+    await invalidate_child_profile_context_cache(child_id, redis)
+
+    timer = time.perf_counter() - timer
+    logger.info(f"Delete child profile request processed in {timer:.3f} seconds")

@@ -9,9 +9,51 @@ Domain: Children
 
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 
-from utils.child_profile_logic import EducationStage, get_age, get_age_group
+from utils.child_profile_logic import (
+    MAX_PROFILE_AGE,
+    MIN_PROFILE_AGE,
+    EducationStage,
+    derive_student_profile_fields,
+    get_age,
+    get_age_group,
+)
+
+
+ALLOWED_LANGUAGE_CODES = {
+    "ar",
+    "en",
+    "es",
+    "fr",
+    "it",
+    "zh",
+}
+
+LANGUAGE_CODE_ALIASES = {
+    "ch": "zh",
+}
+
+
+def _normalize_and_validate_languages(value: list[str]) -> list[str]:
+    normalized_languages: list[str] = []
+    for item in value:
+        candidate = item.strip().lower() if item else ""
+        if not candidate:
+            continue
+
+        candidate = LANGUAGE_CODE_ALIASES.get(candidate, candidate)
+        if candidate not in ALLOWED_LANGUAGE_CODES:
+            raise ValueError(
+                f"Unsupported language code '{candidate}'. Allowed values: {', '.join(sorted(ALLOWED_LANGUAGE_CODES))}"
+            )
+
+        normalized_languages.append(candidate)
+
+    if not normalized_languages:
+        raise ValueError("languages must contain at least one valid ISO language code")
+
+    return normalized_languages
 
 
 
@@ -19,29 +61,38 @@ class ChildProfileCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     nickname: str = Field(min_length=1, max_length=64)
-    birth_date: date
+    birth_date: date | None = None
+    age: int | None = Field(default=None, ge=MIN_PROFILE_AGE, le=MAX_PROFILE_AGE)
+    age_group: str | None = None
     education_stage: EducationStage
-    languages: list[str] = Field(min_length=1)
+    is_accelerated: bool | None = None
+    is_over_age: bool | None = None
+    languages: list[str] = Field(default_factory=lambda: ["en"], min_length=1)
     avatar: str | None = Field(default=None, max_length=64)
     settings_json: dict = Field(default_factory=dict)
 
     @field_validator("languages")
     @classmethod
     def validate_languages(cls, value: list[str]) -> list[str]:
-        cleaned = [item.strip() for item in value if item and item.strip()]
-        if not cleaned:
-            raise ValueError("languages must contain at least one valid language code")
-        return cleaned
+        return _normalize_and_validate_languages(value)
 
-    @field_validator("birth_date")
-    @classmethod
-    def validate_birth_date(cls, value: date) -> date:
-        if value > date.today():
-            raise ValueError("birth_date cannot be in the future")
-        age = get_age(value)
-        if age < 3 or age > 15:
-            raise ValueError("birth_date must correspond to an age between 3 and 15")
-        return value
+    @model_validator(mode="after")
+    def validate_and_derive(self) -> "ChildProfileCreate":
+        derived = derive_student_profile_fields(
+            education_stage=self.education_stage,
+            birth_date=self.birth_date,
+            age=self.age,
+            age_group=self.age_group,
+            input_is_accelerated=self.is_accelerated,
+            input_is_over_age=self.is_over_age,
+        )
+        self.birth_date = derived.birth_date
+        self.age = derived.age
+        self.age_group = derived.age_group
+        self.education_stage = derived.education_stage
+        self.is_accelerated = derived.is_accelerated
+        self.is_over_age = derived.is_over_age
+        return self
 
     @field_validator("settings_json")
     @classmethod
@@ -64,7 +115,11 @@ class ChildProfileUpdate(BaseModel):
 
     nickname: str | None = Field(default=None, min_length=1, max_length=64)
     birth_date: date | None = None
+    age: int | None = Field(default=None, ge=MIN_PROFILE_AGE, le=MAX_PROFILE_AGE)
+    age_group: str | None = None
     education_stage: EducationStage | None = None
+    is_accelerated: bool | None = None
+    is_over_age: bool | None = None
     languages: list[str] | None = None
     avatar: str | None = Field(default=None, max_length=64)
     settings_json: dict | None = None
@@ -74,10 +129,7 @@ class ChildProfileUpdate(BaseModel):
     def validate_languages(cls, value: list[str] | None) -> list[str] | None:
         if value is None:
             return value
-        cleaned = [item.strip() for item in value if item and item.strip()]
-        if not cleaned:
-            raise ValueError("languages must contain at least one valid language code")
-        return cleaned
+        return _normalize_and_validate_languages(value)
 
     @field_validator("birth_date")
     @classmethod
@@ -87,9 +139,15 @@ class ChildProfileUpdate(BaseModel):
         if value > date.today():
             raise ValueError("birth_date cannot be in the future")
         age = get_age(value)
-        if age < 3 or age > 15:
+        if age < MIN_PROFILE_AGE or age > MAX_PROFILE_AGE:
             raise ValueError("birth_date must correspond to an age between 3 and 15")
         return value
+
+    @model_validator(mode="after")
+    def validate_boolean_exclusivity(self) -> "ChildProfileUpdate":
+        if self.is_accelerated and self.is_over_age:
+            raise ValueError("is_accelerated and is_over_age cannot both be true")
+        return self
 
     @field_validator("settings_json")
     @classmethod
@@ -120,6 +178,7 @@ class ChildProfileResponse(BaseModel):
     birth_date: date
     education_stage: EducationStage
     is_accelerated: bool
+    is_over_age: bool
     languages: list[str]
     avatar: str | None
     settings_json: dict
