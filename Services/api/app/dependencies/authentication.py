@@ -59,7 +59,18 @@ async def get_current_user(
     Raises:
         HTTPException: 401 when token is missing/invalid or user is inactive.
     """
-    if not settings.IS_PROD and request.url.path not in STRICT_NON_PROD_AUTH_PATHS:
+    client_type = get_client_type(x_client_type=x_client_type)
+    cookie_token = request.cookies.get("access_token")
+    bearer_token = (
+        authorization.split(" ", 1)[1].strip() if authorization and authorization.lower().startswith("bearer ") else None
+    )
+
+    if client_type == "web":
+        token = cookie_token or bearer_token
+    else:
+        token = bearer_token or cookie_token
+
+    if not settings.IS_PROD and request.url.path not in STRICT_NON_PROD_AUTH_PATHS and not token:
         if settings.DEV_USER_ID is None:
             raise HTTPException(status_code=401, detail="DEV_USER_ID must be configured for non-prod auth bypass")
 
@@ -75,12 +86,6 @@ async def get_current_user(
         if not dev_user:
             raise HTTPException(status_code=401, detail="Configured DEV_USER_ID user not found or inactive")
         return dev_user
-
-    client_type = get_client_type(x_client_type=x_client_type)
-    if client_type == "web":
-        token = request.cookies.get("access_token")
-    else:
-        token = authorization.split(" ", 1)[1].strip() if authorization and authorization.lower().startswith("bearer ") else None
 
     if not token:
         raise HTTPException(status_code=401, detail="Not authenticated")
