@@ -97,34 +97,78 @@ npm run dev
 ## Project Structure (Compact)
 
 ```text
-Apps/web/
-├─ src/
-│  ├─ App.tsx
-│  ├─ main.tsx
-│  ├─ pages/
-│  │  ├─ HomePage/HomePage.tsx
-│  │  ├─ LoginPage/LoginPage.tsx
-│  │  ├─ NotFoundPage/
-│  │  │  ├─ NotFoundPage.tsx
-│  │  │  └─ NotFoundPage.module.css
-│  │  ├─ ErrorPage/
-│  │  │  ├─ ErrorPage.tsx
-│  │  │  └─ ErrorPage.module.css
-│  │  └─ GetStartedPage/
-│  │     ├─ GetStartedPage.tsx
-│  │     └─ GetStartedPage.module.css
-│  ├─ components/
-│  │  ├─ NavBar/ HeroSection/ Footer/
-│  │  ├─ LoginForm/
-│  │  ├─ GetStarted/ (StepParentAccount, StepChildProfile, StepPreferences, StepWelcome, StepIndicator)
-│  │  └─ shared/ (AuthLayout, FormField, PasswordField, AvatarPicker, ProgressBar, StatusPage, AppErrorBoundary)
-│  ├─ hooks/
-│  ├─ utils/
-│  ├─ types/index.ts
-│  └─ styles/ (globals.css, themes.css, animations.css)
-├─ index.html
-├─ package.json
-└─ vite.config.ts
+apps/web/
+├── src/
+│   ├── App.tsx                    # Main app component with routing
+│   ├── main.tsx                   # Entry point that mounts React app
+│   ├── index.css                  # Global styles
+│   │
+│   ├── pages/                     # Route-level page components
+│   │   ├── HomePage/              # Landing page (eager loaded)
+│   │   ├── LoginPage/             # Login page (lazy loaded)
+│   │   ├── GetStartedPage/        # Multi-step registration wizard (lazy loaded)
+│   │   ├── ErrorPage/             # Error fallback page
+│   │   ├── NotFoundPage/          # 404 page (lazy loaded)
+│   │   └── ParentProfilePage/     # Parent profile page
+│   │
+│   ├── components/                # Reusable UI components
+│   │   ├── NavBar/                # Navigation bar with scroll behavior
+│   │   ├── HeroSection/           # Home page hero
+│   │   ├── Footer/                # Site footer
+│   │   ├── LoginForm/             # Login form component
+│   │   ├── GetStarted/            # Registration wizard steps
+│   │   │   ├── StepParentAccount/ # Step 1: Parent account creation
+│   │   │   ├── StepChildProfile/  # Step 2: Child profile setup
+│   │   │   ├── StepPreferences/   # Step 3: Safety & preferences
+│   │   │   ├── StepWelcome/       # Step 4: Confirmation screen
+│   │   │   └── StepIndicator/     # Progress indicator
+│   │   └── shared/                # Shared/reusable components
+│   │       ├── AppErrorBoundary/  # Error boundary wrapper
+│   │       ├── AuthLayout/        # Layout wrapper for auth pages
+│   │       ├── FormField/         # Generic form field component
+│   │       ├── PasswordField/     # Password input with strength meter
+│   │       ├── AvatarPicker/      # Emoji avatar selector
+│   │       ├── ProgressBar/       # Progress indicator
+│   │       └── StatusPage/        # Reusable status/error page
+│   │
+│   ├── hooks/                     # Custom React hooks
+│   │   ├── useForm.ts             # Generic form state management
+│   │   ├── useMultiStep.ts        # Multi-step wizard navigation
+│   │   ├── useLanguage.ts         # Language switching & RTL support
+│   │   ├── useTheme.ts            # Light/dark theme toggle
+│   │   ├── useScrollPosition.ts   # Navbar scroll visibility
+│   │   ├── useScrollReveal.ts     # IntersectionObserver animations
+│   │   ├── useInterval.ts         # Declarative setInterval
+│   │   └── useAuthStatus.ts       # Authentication state
+│   │
+│   ├── utils/                     # Utility functions
+│   │   ├── translations.ts        # Translation dictionaries (6 languages)
+│   │   ├── validators.ts          # Pure validation functions
+│   │   ├── constants.ts           # Static config & content arrays
+│   │   ├── csrf.ts                # CSRF token helpers
+│   │   ├── cssVariables.ts        # Theme variable application
+│   │   ├── api.ts                 # API client configuration
+│   │   ├── countries.ts           # Country data
+│   │   └── childProfileRules.ts   # Child profile validation rules
+│   │
+│   ├── types/                     # TypeScript type definitions
+│   │   └── index.ts               # Central type definitions
+│   │
+│   └── styles/                    # Global styles
+│       ├── globals.css            # Global CSS
+│       ├── themes.css             # Light/dark theme variables
+│       └── animations.css         # Animation keyframes
+│
+├── public/                        # Static assets
+├── index.html                     # HTML template
+├── package.json                   # Dependencies & scripts
+├── tsconfig.json                  # TypeScript configuration
+├── tsconfig.app.json              # App-specific TS config
+├── tsconfig.node.json             # Node-specific TS config
+├── vite.config.ts                 # Vite build configuration
+├── .env                           # Environment variables
+├── .env.example                   # Example environment file
+└── README.md                      # Project documentation
 ```
 
 ---

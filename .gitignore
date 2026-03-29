@@ -52,5 +52,4 @@ nosig
 dist/
 web-build/
 
-API.md
-REGISTER.md
+CLAUDE.md
