@@ -49,6 +49,24 @@ def get_user_by_id(db: Session, user_id: int) -> User | None:
     return db.query(User).filter(User.id == user_id).first()
 
 
+def get_children_by_parent_id(db: Session, parent_id: int) -> list[ChildProfile]:
+    """Retrieve all child profiles owned by a parent user id.
+
+    Args:
+        db: Active database session.
+        parent_id: The parent user numeric identifier.
+
+    Returns:
+        ChildProfile ORM instances owned by the parent.
+    """
+    return (
+        db.query(ChildProfile)
+        .filter(ChildProfile.parent_id == parent_id)
+        .order_by(ChildProfile.id.asc())
+        .all()
+    )
+
+
 def soft_delete_user_account(db: Session, user: User) -> dict:
     """Soft-delete a user account and schedule permanent deletion in 30 days.
 
@@ -119,3 +137,36 @@ def _revoke_active_refresh_sessions(db: Session, user_id: int, revoked_at: datet
     for session in sessions:
         session.revoked = True
         session.revoked_at = revoked_at
+
+
+def hard_delete_child_by_id(db: Session, parent_id: int, child_id: int) -> dict | None:
+    """Permanently delete a child's profile by id for a specific parent.
+
+    Args:
+        db: Active database session.
+        parent_id: The parent user numeric identifier.
+        child_id: The child profile numeric identifier to delete.
+
+    Returns:
+        A serialized deletion result payload, or None when child does not exist.
+    """
+    child_profile = (
+        db.query(ChildProfile)
+        .filter(ChildProfile.id == child_id, ChildProfile.parent_id == parent_id)
+        .first()
+    )
+    if not child_profile:
+        return None
+
+    deleted_at = datetime.now(timezone.utc)
+
+    db.delete(child_profile)
+    db.commit()
+
+    return {
+        "message": "Child profile permanently deleted.",
+        "mode": "hard",
+        "child_id": child_id,
+        "parent_id": parent_id,
+        "deleted_at": deleted_at,
+    }

@@ -71,3 +71,13 @@ class DeleteAccountResponse(BaseModel):
     mode: AccountDeletionMode
     deleted_at: datetime
     scheduled_hard_delete_at: datetime | None
+
+
+class DeleteChildResponse(BaseModel):
+    """Response schema for child profile deletion operations."""
+
+    message: str
+    mode: str
+    child_id: int
+    parent_id: int
+    deleted_at: datetime

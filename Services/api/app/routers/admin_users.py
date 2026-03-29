@@ -13,9 +13,17 @@ from sqlalchemy.orm import Session
 
 from dependencies.authentication import get_current_admin_or_super_admin
 from dependencies.infrastructure import get_db
+from models.child_profile import ChildProfile
 from models.user import User
-from schemas.user_schema import DeleteAccountResponse, UserFullResponse
-from services.user_service import get_all_users, get_user_by_id, hard_delete_user_account_by_id
+from schemas.child_profile_schema import ChildProfileResponse
+from schemas.user_schema import DeleteAccountResponse, DeleteChildResponse, UserFullResponse
+from services.user_service import (
+    get_all_users,
+    get_children_by_parent_id,
+    get_user_by_id,
+    hard_delete_child_by_id,
+    hard_delete_user_account_by_id,
+)
 from utils.limiter import limiter
 from utils.logger import logger
 
@@ -58,6 +66,27 @@ async def get_user_by_id_endpoint(
     return user
 
 
+@router.get("/{parent_id}/children", response_model=list[ChildProfileResponse])
+@limiter.limit("60/minute")
+async def get_children_by_parent_id_endpoint(
+    parent_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> list[ChildProfile]:
+    """Return all children owned by a parent id. Restricted to admin/super_admin roles."""
+    timer = time.perf_counter()
+    parent_user = get_user_by_id(db, parent_id)
+    if not parent_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    child_profiles = get_children_by_parent_id(db, parent_id)
+
+    timer = time.perf_counter() - timer
+    logger.info(f"Children requested for parent_id={parent_id} and returned in {timer:.3f} seconds")
+
+    return child_profiles
+
+
 @router.delete("/{user_id}/hard", response_model=DeleteAccountResponse)
 @limiter.limit("60/minute")
 async def hard_delete_user_by_id_endpoint(
@@ -76,5 +105,32 @@ async def hard_delete_user_by_id_endpoint(
 
     timer = time.perf_counter() - timer
     logger.info(f"Hard delete completed for target_user_id={user_id} in {timer:.3f} seconds")
+
+    return result
+
+
+@router.delete("/{parent_id}/children/{child_id}/hard", response_model=DeleteChildResponse)
+@limiter.limit("60/minute")
+async def hard_delete_child_by_id_endpoint(
+    parent_id: int,
+    child_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> dict:
+    """Hard-delete a child's profile by id for a specific parent."""
+    timer = time.perf_counter()
+    actor_id = getattr(request.state, "access_token_payload", {}).get("sub", "unknown")
+    logger.info(f"Hard delete requested for child_id={child_id} parent_id={parent_id} by actor={actor_id}")
+
+    parent_user = get_user_by_id(db, parent_id)
+    if not parent_user:
+        raise HTTPException(status_code=404, detail="Parent user not found")
+
+    result = hard_delete_child_by_id(db, parent_id, child_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Child profile not found")
+
+    timer = time.perf_counter() - timer
+    logger.info(f"Hard delete completed for child_id={child_id} parent_id={parent_id} in {timer:.3f} seconds")
 
     return result
