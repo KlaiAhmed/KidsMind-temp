@@ -14,7 +14,9 @@ import type {
   ParentAccountFormData,
   ChildProfileFormData,
   PreferencesFormData,
+  SubjectId,
   TranslationMap,
+  WeekdayId,
 } from '../../types';
 import AuthLayout from '../../components/shared/AuthLayout/AuthLayout';
 import StepIndicator from '../../components/GetStarted/StepIndicator/StepIndicator';
@@ -48,6 +50,35 @@ interface ChildCreateSuccessResponse {
   id?: number | string;
   child_id?: number | string;
 }
+
+interface ChildSettingsPayload {
+  daily_limit_minutes: number;
+  allowed_subjects: SubjectId[];
+  allowed_weekdays: WeekdayId[];
+  voice_enabled: boolean;
+  store_audio_history: boolean;
+}
+
+interface ChildSettingsPatchPayload {
+  settings_json: ChildSettingsPayload;
+}
+
+const toSafeDailyLimitMinutes = (value: number): number => {
+  const normalizedValue = Number.isInteger(value) ? value : Math.round(value);
+  return Math.min(120, Math.max(15, normalizedValue));
+};
+
+const buildChildSettingsPatchPayload = (data: PreferencesFormData): ChildSettingsPatchPayload => {
+  return {
+    settings_json: {
+      daily_limit_minutes: toSafeDailyLimitMinutes(data.dailyLimitMinutes),
+      allowed_subjects: data.allowedSubjects,
+      allowed_weekdays: data.allowedWeekdays,
+      voice_enabled: data.enableVoice,
+      store_audio_history: data.enableVoice ? data.storeAudioHistory : false,
+    },
+  };
+};
 
 const API_ERROR_TRANSLATION_PATTERNS: Array<{ pattern: RegExp; key: keyof TranslationMap }> = [
   { pattern: /invalid credentials/i, key: 'login_error_invalid' },
@@ -343,15 +374,7 @@ const GetStartedPage = () => {
       }
 
       try {
-        const patchPayload = {
-          settings_json: {
-            daily_limit_minutes: data.dailyLimitMinutes,
-            allowed_subjects: data.allowedSubjects,
-            allowed_weekdays: data.allowedWeekdays,
-            voice_enabled: data.enableVoice,
-            store_audio_history: data.enableVoice ? data.storeAudioHistory : false,
-          },
-        };
+        const patchPayload = buildChildSettingsPatchPayload(data);
 
         const patchResponse = await fetch(`${apiBaseUrl}/api/v1/children/${childId}`, {
           method: 'PATCH',

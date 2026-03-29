@@ -8,6 +8,7 @@ Domain: Children
 """
 
 from datetime import date, datetime
+from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 
@@ -33,6 +34,75 @@ ALLOWED_LANGUAGE_CODES = {
 LANGUAGE_CODE_ALIASES = {
     "ch": "zh",
 }
+
+
+class ChildSubject(str, Enum):
+    MATH = "math"
+    FRENCH = "french"
+    ENGLISH = "english"
+    SCIENCE = "science"
+    HISTORY = "history"
+    ART = "art"
+
+
+class ChildWeekday(str, Enum):
+    MONDAY = "monday"
+    TUESDAY = "tuesday"
+    WEDNESDAY = "wednesday"
+    THURSDAY = "thursday"
+    FRIDAY = "friday"
+    SATURDAY = "saturday"
+    SUNDAY = "sunday"
+
+
+class ChildProfileSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid", use_enum_values=True)
+
+    daily_limit_minutes: int = Field(strict=True, ge=15, le=120)
+    allowed_subjects: list[ChildSubject] = Field(min_length=1)
+    allowed_weekdays: list[ChildWeekday] = Field(min_length=1)
+    voice_enabled: bool = Field(strict=True)
+    store_audio_history: bool = Field(strict=True)
+
+    @field_validator("allowed_subjects")
+    @classmethod
+    def validate_allowed_subjects_unique(cls, value: list[ChildSubject]) -> list[ChildSubject]:
+        if len(set(value)) != len(value):
+            raise ValueError("allowed_subjects cannot contain duplicate values")
+        return value
+
+    @field_validator("allowed_weekdays")
+    @classmethod
+    def validate_allowed_weekdays_unique(cls, value: list[ChildWeekday]) -> list[ChildWeekday]:
+        if len(set(value)) != len(value):
+            raise ValueError("allowed_weekdays cannot contain duplicate values")
+        return value
+
+    @model_validator(mode="after")
+    def validate_voice_and_audio_history(self) -> "ChildProfileSettings":
+        if not self.voice_enabled and self.store_audio_history:
+            raise ValueError("store_audio_history cannot be true when voice_enabled is false")
+        return self
+
+
+def _normalize_and_validate_settings_json(
+    value: dict | ChildProfileSettings | None,
+    *,
+    allow_empty_dict: bool,
+) -> dict | None:
+    if value is None:
+        return value
+
+    if isinstance(value, ChildProfileSettings):
+        return value.model_dump()
+
+    if not isinstance(value, dict):
+        raise ValueError("settings_json must be a JSON object")
+
+    if not value and allow_empty_dict:
+        return value
+
+    return ChildProfileSettings.model_validate(value).model_dump()
 
 
 def _normalize_and_validate_languages(value: list[str]) -> list[str]:
@@ -69,7 +139,7 @@ class ChildProfileCreate(BaseModel):
     is_over_age: bool | None = None
     languages: list[str] = Field(default_factory=lambda: ["en"], min_length=1)
     avatar: str | None = Field(default=None, max_length=64)
-    settings_json: dict = Field(default_factory=dict)
+    settings_json: dict | ChildProfileSettings = Field(default_factory=dict)
 
     @field_validator("languages")
     @classmethod
@@ -96,10 +166,10 @@ class ChildProfileCreate(BaseModel):
 
     @field_validator("settings_json")
     @classmethod
-    def validate_settings_json(cls, value: dict) -> dict:
-        if not isinstance(value, dict):
-            raise ValueError("settings_json must be a JSON object")
-        return value
+    def validate_settings_json(cls, value: dict | ChildProfileSettings) -> dict:
+        normalized = _normalize_and_validate_settings_json(value, allow_empty_dict=True)
+        assert normalized is not None
+        return normalized
 
     @field_validator("nickname")
     @classmethod
@@ -122,7 +192,7 @@ class ChildProfileUpdate(BaseModel):
     is_over_age: bool | None = None
     languages: list[str] | None = None
     avatar: str | None = Field(default=None, max_length=64)
-    settings_json: dict | None = None
+    settings_json: dict | ChildProfileSettings | None = None
 
     @field_validator("languages")
     @classmethod
@@ -151,12 +221,8 @@ class ChildProfileUpdate(BaseModel):
 
     @field_validator("settings_json")
     @classmethod
-    def validate_settings_json(cls, value: dict | None) -> dict | None:
-        if value is None:
-            return value
-        if not isinstance(value, dict):
-            raise ValueError("settings_json must be a JSON object")
-        return value
+    def validate_settings_json(cls, value: dict | ChildProfileSettings | None) -> dict | None:
+        return _normalize_and_validate_settings_json(value, allow_empty_dict=False)
 
     @field_validator("nickname")
     @classmethod

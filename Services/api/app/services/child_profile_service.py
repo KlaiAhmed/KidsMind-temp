@@ -10,7 +10,7 @@ from fastapi import HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from models.child_profile import ChildProfile
+from models.child_profile import ChildProfile, default_child_profile_settings
 from models.user import User
 from schemas.child_profile_schema import ChildProfileCreate, ChildProfileUpdate
 from utils.child_profile_logic import derive_student_profile_fields
@@ -62,7 +62,7 @@ class ChildProfileService:
             is_over_age=derived.is_over_age,
             languages=payload.languages,
             avatar=payload.avatar,
-            settings_json=payload.settings_json,
+            settings_json=payload.settings_json or default_child_profile_settings(),
         )
         self.db.add(child_profile)
         self.db.commit()

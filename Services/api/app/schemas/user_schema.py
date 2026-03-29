@@ -81,3 +81,17 @@ class DeleteChildResponse(BaseModel):
     child_id: int
     parent_id: int
     deleted_at: datetime
+
+
+class AdminUserUpdate(BaseModel):
+    """Schema for admin patching user fields."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    username: str | None = None
+    is_active: bool | None = None
+    is_verified: bool | None = None
+    role: UserRole | None = None
+    default_language: str | None = None
+    country: str | None = None
+    timezone: str | None = None

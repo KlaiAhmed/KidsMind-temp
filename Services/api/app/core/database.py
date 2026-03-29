@@ -186,6 +186,88 @@ def _sync_child_profiles_schema_for_non_prod() -> None:
             connection.execute(text("ALTER TABLE child_profiles ALTER COLUMN grade_level DROP NOT NULL"))
 
 
+def _sync_child_profile_settings_schema_for_non_prod() -> None:
+    """
+    Reconcile child profile settings schema for local/dev databases.
+
+    Ensures `settings_json` exists and is always a JSON object.
+    """
+    if settings.IS_PROD:
+        return
+
+    default_settings_json = (
+        '{"daily_limit_minutes":30,'
+        '"allowed_subjects":["math","french","english","science","history","art"],'
+        '"allowed_weekdays":["monday","tuesday","wednesday","thursday","friday","saturday","sunday"],'
+        '"voice_enabled":true,'
+        '"store_audio_history":false}'
+    )
+
+    with engine.begin() as connection:
+        inspector = inspect(connection)
+        if not inspector.has_table("child_profiles"):
+            return
+
+        existing_columns = {column["name"] for column in inspector.get_columns("child_profiles")}
+
+        if "settings_json" not in existing_columns:
+            logger.warning("Adding missing settings_json column to child_profiles in non-production mode")
+            connection.execute(text("ALTER TABLE child_profiles ADD COLUMN IF NOT EXISTS settings_json JSON"))
+
+        connection.execute(
+            text(
+                """
+                UPDATE child_profiles
+                SET settings_json = CAST(:default_settings_json AS json)
+                WHERE settings_json IS NULL OR json_typeof(settings_json) <> 'object'
+                """
+            ),
+            {"default_settings_json": default_settings_json},
+        )
+
+        # Legacy cleanup: enforce audio-history off whenever voice is disabled.
+        connection.execute(
+            text(
+                """
+                UPDATE child_profiles
+                SET settings_json = jsonb_set(settings_json::jsonb, '{store_audio_history}', 'false'::jsonb, true)::json
+                WHERE lower(COALESCE(settings_json->>'voice_enabled', 'false')) = 'false'
+                  AND lower(COALESCE(settings_json->>'store_audio_history', 'false')) = 'true'
+                """
+            )
+        )
+
+        connection.execute(
+            text(
+                """
+                ALTER TABLE child_profiles
+                ALTER COLUMN settings_json SET DEFAULT CAST(:default_settings_json AS json)
+                """
+            ),
+            {"default_settings_json": default_settings_json},
+        )
+        connection.execute(text("ALTER TABLE child_profiles ALTER COLUMN settings_json SET NOT NULL"))
+
+        connection.execute(
+            text(
+                """
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1
+                        FROM pg_constraint
+                        WHERE conname = 'ck_child_profiles_settings_json_object'
+                    ) THEN
+                        ALTER TABLE child_profiles
+                        ADD CONSTRAINT ck_child_profiles_settings_json_object
+                        CHECK (json_typeof(settings_json) = 'object');
+                    END IF;
+                END$$;
+                """
+            )
+        )
+
+
 def init_db() -> None:
     """
     Initialize database schema for local/dev environments.
@@ -198,3 +280,4 @@ def init_db() -> None:
 
     Base.metadata.create_all(bind=engine)
     _sync_child_profiles_schema_for_non_prod()
+    _sync_child_profile_settings_schema_for_non_prod()
