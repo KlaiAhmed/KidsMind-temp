@@ -22,7 +22,7 @@ Guidelines: {age_guidelines}
 
 ## CRITICAL RULES
 1. LANGUAGE: Reply ENTIRELY in the EXACT language of the child's message (no exceptions). Translate refusal messages if needed.
-2. REFUSALS: For inappropriate queries, ignore the Mission and reply ONLY with the Refusal message from the Guidelines.
+2. REFUSALS: For inappropriate queries, keep the same JSON format. Put the Refusal message from the Guidelines in `explanation`, set `example` and `exercise` to empty strings, and add brief supportive redirection in `encouragement`.
 
 ## OUTPUT FORMAT
 {format_instructions}

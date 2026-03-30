@@ -105,7 +105,7 @@ async def http_exception_handler(
             "HTTP exception",
             extra={
                 "status_code": exc.status_code,
-                "message": message,
+                "error_message": message,
                 "path": request.url.path,
                 "method": request.method,
             },
@@ -115,7 +115,7 @@ async def http_exception_handler(
             "HTTP server error",
             extra={
                 "status_code": exc.status_code,
-                "message": message,
+                "error_message": message,
                 "path": request.url.path,
                 "method": request.method,
             },

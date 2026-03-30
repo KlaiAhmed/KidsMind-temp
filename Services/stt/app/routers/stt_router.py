@@ -25,7 +25,7 @@ async def transcribe(request: TranscriptionRequest, models: tuple = Depends(get_
     try:
         logger.info(
             "Transcription request received",
-            extra={"audio_url": request.audio_url[:50] + "***" if len(request.audio_url) > 50 else request.audio_url},
+            extra={"audio_url": str(request.audio_url)[:50] + "***" if len(str(request.audio_url)) > 50 else str(request.audio_url)},
         )
 
         return await stt_controller(request, client, models)
@@ -35,7 +35,7 @@ async def transcribe(request: TranscriptionRequest, models: tuple = Depends(get_
             "Unsupported audio format error",
             extra={
                 "error": str(exc),
-                "audio_url": request.audio_url[:50] + "***" if len(request.audio_url) > 50 else request.audio_url,
+                "audio_url": str(request.audio_url)[:50] + "***" if len(str(request.audio_url)) > 50 else str(request.audio_url),
             },
         )
         raise HTTPException(status_code=415, detail="Unsupported audio format.")
@@ -45,7 +45,7 @@ async def transcribe(request: TranscriptionRequest, models: tuple = Depends(get_
             "Audio file too large",
             extra={
                 "error": str(exc),
-                "audio_url": request.audio_url[:50] + "***" if len(request.audio_url) > 50 else request.audio_url,
+                "audio_url": str(request.audio_url)[:50] + "***" if len(str(request.audio_url)) > 50 else str(request.audio_url),
             },
         )
         raise HTTPException(status_code=413, detail="Audio file too large.")
@@ -55,7 +55,7 @@ async def transcribe(request: TranscriptionRequest, models: tuple = Depends(get_
             "Failed to fetch audio",
             extra={
                 "error": str(exc),
-                "audio_url": request.audio_url[:50] + "***" if len(request.audio_url) > 50 else request.audio_url,
+                "audio_url": str(request.audio_url)[:50] + "***" if len(str(request.audio_url)) > 50 else str(request.audio_url),
             },
         )
         raise HTTPException(status_code=502, detail="Failed to fetch audio.")
@@ -65,7 +65,7 @@ async def transcribe(request: TranscriptionRequest, models: tuple = Depends(get_
             "Audio decoding failed",
             extra={
                 "error": str(exc),
-                "audio_url": request.audio_url[:50] + "***" if len(request.audio_url) > 50 else request.audio_url,
+                "audio_url": str(request.audio_url)[:50] + "***" if len(str(request.audio_url)) > 50 else str(request.audio_url),
             },
         )
         raise HTTPException(status_code=422, detail="Audio decoding failed.")
@@ -74,7 +74,7 @@ async def transcribe(request: TranscriptionRequest, models: tuple = Depends(get_
         logger.exception(
             "Transcription failed",
             extra={
-                "audio_url": request.audio_url[:50] + "***" if len(request.audio_url) > 50 else request.audio_url,
+                "audio_url": str(request.audio_url)[:50] + "***" if len(str(request.audio_url)) > 50 else str(request.audio_url),
             },
         )
         raise HTTPException(status_code=500, detail="Transcription failed. Please try again later.")

@@ -4,6 +4,15 @@ import httpx
 from utils.logger import logger
 from pydantic import BaseModel
 import time
+import asyncio
+
+
+DEV_GUARD_TIMEOUT = httpx.Timeout(
+    connect=2.0,
+    read=4.0,
+    write=4.0,
+    pool=2.0,
+)
 
 class ModerationResponse(BaseModel):
     moderation_classes: dict[str, float]
@@ -36,7 +45,14 @@ async def dev_check_moderation(message: str, context: str, client: httpx.AsyncCl
         }
 
         # In development mode, use the dev guard API for testing
-        response = await client.post(settings.DEV_GUARD_API_URL, data=payload)
+        response = await asyncio.wait_for(
+            client.post(
+                settings.DEV_GUARD_API_URL,
+                data=payload,
+                timeout=DEV_GUARD_TIMEOUT,
+            ),
+            timeout=6.0,
+        )
         response.raise_for_status()
 
         data = response.json()
@@ -68,6 +84,26 @@ async def dev_check_moderation(message: str, context: str, client: httpx.AsyncCl
 
     except HTTPException:
         raise
+    except (httpx.TimeoutException, httpx.RequestError, TimeoutError):
+        # Dev moderation uses a best-effort free-tier external provider.
+        # If unavailable, keep chat available in development and log diagnostics.
+        logger.warning(
+            "Dev moderation provider unavailable; skipping moderation in development",
+            extra={"provider_url": settings.DEV_GUARD_API_URL},
+            exc_info=True,
+        )
+        return
+    except httpx.HTTPStatusError as exc:
+        status_code = exc.response.status_code
+        logger.warning(
+            "Dev moderation provider returned HTTP error",
+            extra={
+                "provider_url": settings.DEV_GUARD_API_URL,
+                "status_code": status_code,
+            },
+            exc_info=True,
+        )
+        raise HTTPException(status_code=502, detail="Dev moderation provider error")
     except Exception:
         logger.exception("Unexpected error during dev moderation check")
         raise HTTPException(status_code=500, detail="Internal Dev Moderation Error")

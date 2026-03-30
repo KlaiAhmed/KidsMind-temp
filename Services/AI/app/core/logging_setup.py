@@ -18,6 +18,13 @@ request_id_var: ContextVar[str] = ContextVar("request_id", default="-")
 # Fields that the middleware injects into log records via `extra={}`.
 _MIDDLEWARE_FIELDS = frozenset({"http_method", "http_path", "client_ip", "status_code", "duration_s"})
 
+_STANDARD_LOG_RECORD_FIELDS = frozenset({
+    "name", "msg", "args", "levelname", "levelno", "pathname", "filename", "module",
+    "exc_info", "exc_text", "stack_info", "lineno", "funcName", "created", "msecs",
+    "relativeCreated", "thread", "threadName", "processName", "process", "message",
+    "taskName",
+})
+
 # Igonred paths. Logging them would flood log storage with useless noise.
 _IGNORED_PATHS = frozenset({"/metrics", "/health", "/favicon.ico"})
 
@@ -60,6 +67,14 @@ class _JsonFormatter(logging.Formatter):
             value = getattr(record, field, None)
             if value is not None:
                 log_entry[field] = value
+
+        # Include custom `extra={...}` fields provided by callers.
+        for key, value in record.__dict__.items():
+            if key in _STANDARD_LOG_RECORD_FIELDS or key in _MIDDLEWARE_FIELDS:
+                continue
+            if key.startswith("_") or value is None:
+                continue
+            log_entry[key] = value
 
         # If the log call included exc_info=True (or an exception was active),
         if record.exc_info:
