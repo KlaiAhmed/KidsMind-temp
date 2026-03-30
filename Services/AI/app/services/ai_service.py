@@ -15,10 +15,10 @@ class AIService:
 
     async def get_response(self, user: dict, payload) -> dict:
         """Non-streaming path: returns the fully structured dict."""
-        timer=time.perf_counter()
+        timer = time.perf_counter()
 
         guidelines = age_guidelines(payload.age_group)
-        
+
         session_id = self.build_session_key(user['id'], user['child_id'], user['session_id'])
 
         try:
@@ -35,15 +35,21 @@ class AIService:
                 config={"configurable": {"session_id": session_id}}
             )
             elapsed = time.perf_counter() - timer
-            logger.info("AIService.get_response completed", extra={
-                "session_id": session_id,
-                "elapsed_seconds": elapsed
-            })
+            logger.info(
+                "AIService.get_response completed",
+                extra={
+                    "session_id": session_id,
+                    "elapsed_seconds": elapsed,
+                },
+            )
             return response
-        except Exception as exc:
-            logger.exception("AIService.get_response failed", exc_info=exc, extra={"session_id": session_id})
+        except Exception:
+            logger.exception(
+                "AIService.get_response failed",
+                extra={"session_id": session_id},
+            )
             raise
-    
+
     async def stream_response(self, user: dict, payload) -> AsyncGenerator[str, None]:
         """
         Streaming path: yields cumulative JSON dicts.
@@ -54,15 +60,18 @@ class AIService:
 
         session_id = self.build_session_key(user['id'], user['child_id'], user['session_id'])
 
-        logger.info("AIService.stream_response started", extra={
-            "user_id": user.get("id"),
-            "child_id": user.get("child_id"),
-            "session_id": session_id,
-            "age_group": payload.age_group,
-            "education_stage": payload.education_stage,
-            "is_accelerated": payload.is_accelerated,
-            "is_below_expected_stage": payload.is_below_expected_stage,
-        })
+        logger.info(
+            "AIService.stream_response started",
+            extra={
+                "user_id": user.get("id"),
+                "child_id": user.get("child_id"),
+                "session_id": session_id,
+                "age_group": payload.age_group,
+                "education_stage": payload.education_stage,
+                "is_accelerated": payload.is_accelerated,
+                "is_below_expected_stage": payload.is_below_expected_stage,
+            },
+        )
 
         try:
             async for chunk in self.chain.astream(
@@ -79,12 +88,21 @@ class AIService:
             ):
 
                 yield json.dumps(chunk)
-        except Exception as exc:
-            logger.exception("AIService.stream_response failed", exc_info=exc, extra={"session_id": session_id})
+        except Exception:
+            logger.exception(
+                "AIService.stream_response failed",
+                extra={"session_id": session_id},
+            )
             raise
         finally:
             elapsed = time.perf_counter() - timer
-            logger.info("AIService.stream_response finished", extra={"session_id": session_id, "elapsed_seconds": elapsed})
+            logger.info(
+                "AIService.stream_response finished",
+                extra={
+                    "session_id": session_id,
+                    "elapsed_seconds": elapsed,
+                },
+            )
 
 
 ai_service = AIService()

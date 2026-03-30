@@ -26,8 +26,11 @@ class HistoryService:
             )
             logger.debug("Created RedisChatMessageHistory", extra={"session_id": session_id})
             return history
-        except Exception as exc:
-            logger.exception("Failed to construct RedisChatMessageHistory", exc_info=exc, extra={"session_id": session_id})
+        except Exception:
+            logger.exception(
+                "Failed to construct RedisChatMessageHistory",
+                extra={"session_id": session_id},
+            )
             raise
 
 

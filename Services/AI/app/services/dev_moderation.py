@@ -8,7 +8,7 @@ import time
 class ModerationResponse(BaseModel):
     moderation_classes: dict[str, float]
 
-# Cusotom thresholds for Dev Guard API (Development mode only)
+# Custom thresholds for Dev Guard API (Development mode only)
 DEV_KIDS_THRESHOLDS = {
     "violent": 0.5,
     "insulting": 0.4,
@@ -22,16 +22,22 @@ DEV_KIDS_THRESHOLDS = {
 async def dev_check_moderation(message: str, context: str, client: httpx.AsyncClient ):
     """ Checks if the content is appropriate for kids using Sightengine moderation API(free Tier)."""
     try:
-        timer= time.perf_counter()
+        timer = time.perf_counter()
 
-        text= f"APP CONTEXT: {context}\nUSER Input: {message}"
+        text = f"APP CONTEXT: {context}\nUSER Input: {message}"
 
-        payload = { "text": text, "mode": "ml", "models": "general,self-harm", "lang": "en",
-                    "api_user": settings.DEV_API_USER,"api_secret": settings.DEV_GUARD_API_KEY}
+        payload = {
+            "text": text,
+            "mode": "ml",
+            "models": "general,self-harm",
+            "lang": "en",
+            "api_user": settings.DEV_API_USER,
+            "api_secret": settings.DEV_GUARD_API_KEY,
+        }
 
         # In development mode, use the dev guard API for testing
         response = await client.post(settings.DEV_GUARD_API_URL, data=payload)
-        response.raise_for_status() 
+        response.raise_for_status()
 
         data = response.json()
 
@@ -41,15 +47,27 @@ async def dev_check_moderation(message: str, context: str, client: httpx.AsyncCl
         for category, threshold in DEV_KIDS_THRESHOLDS.items():
             api_score = scores.get(category, 0)
             if api_score > threshold:
-                logger.warning(f"Content blocked | category='{category}' | score={api_score:.3f} | threshold={threshold}")
-                raise HTTPException(status_code=400, detail=f"text contains inappropriate content for your age.")
-                    
+                logger.warning(
+                    "Content blocked by dev moderation",
+                    extra={
+                        "category": category,
+                        "score": round(api_score, 3),
+                        "threshold": threshold,
+                    },
+                )
+                raise HTTPException(status_code=400, detail="text contains inappropriate content for your age.")
+
         timer = time.perf_counter() - timer
-        logger.info(f"Dev Moderation check completed in {timer:.3f} seconds with scores: {scores}.")
-                
+        logger.info(
+            "Dev moderation check completed",
+            extra={
+                "duration_seconds": round(timer, 3),
+                "scores": scores,
+            },
+        )
+
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Unexpected error during moderation check: {e}")
+    except Exception:
+        logger.exception("Unexpected error during dev moderation check")
         raise HTTPException(status_code=500, detail="Internal Dev Moderation Error")
-

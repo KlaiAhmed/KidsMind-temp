@@ -4,10 +4,10 @@ from utils.token_count import get_token_count
 from utils.logger import logger
 
 def validate_token_limit(
-    payload: ChatRequest, 
-    text_limit: int = 600, 
+    payload: ChatRequest,
+    text_limit: int = 600,
     context_limit: int = 600
-) :
+):
     """
     Validates if the number of tokens is within the specified limit.
 
@@ -20,12 +20,24 @@ def validate_token_limit(
     # Encode text
     text_tokens = get_token_count(payload.text)
     if text_tokens > text_limit:
-        logger.warning(f"text token count: {text_tokens} exceeds limit of {text_limit}.")
+        logger.warning(
+            "Text token count exceeds limit",
+            extra={
+                "token_count": text_tokens,
+                "limit": text_limit,
+            },
+        )
         raise HTTPException(status_code=422, detail=f"text exceeds token limit of {text_limit}.")
 
     # Encode context if it exists
     if payload.context:
         context_tokens = get_token_count(payload.context)
         if context_tokens > context_limit:
-            logger.warning(f"Context token count: {context_tokens} exceeds limit of {context_limit}.")
-            raise HTTPException(status_code=422, detail=f"context exceeds token limit of {context_limit}.") 
+            logger.warning(
+                "Context token count exceeds limit",
+                extra={
+                    "token_count": context_tokens,
+                    "limit": context_limit,
+                },
+            )
+            raise HTTPException(status_code=422, detail=f"context exceeds token limit of {context_limit}.")
