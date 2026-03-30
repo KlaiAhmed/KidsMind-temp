@@ -136,7 +136,7 @@ class ChildProfileCreate(BaseModel):
     age_group: str | None = None
     education_stage: EducationStage
     is_accelerated: bool | None = None
-    is_over_age: bool | None = None
+    is_below_expected_stage: bool | None = None
     languages: list[str] = Field(default_factory=lambda: ["en"], min_length=1)
     avatar: str | None = Field(default=None, max_length=64)
     settings_json: dict | ChildProfileSettings = Field(default_factory=dict)
@@ -154,14 +154,14 @@ class ChildProfileCreate(BaseModel):
             age=self.age,
             age_group=self.age_group,
             input_is_accelerated=self.is_accelerated,
-            input_is_over_age=self.is_over_age,
+            input_is_below_expected_stage=self.is_below_expected_stage,
         )
         self.birth_date = derived.birth_date
         self.age = derived.age
         self.age_group = derived.age_group
         self.education_stage = derived.education_stage
         self.is_accelerated = derived.is_accelerated
-        self.is_over_age = derived.is_over_age
+        self.is_below_expected_stage = derived.is_below_expected_stage
         return self
 
     @field_validator("settings_json")
@@ -189,7 +189,7 @@ class ChildProfileUpdate(BaseModel):
     age_group: str | None = None
     education_stage: EducationStage | None = None
     is_accelerated: bool | None = None
-    is_over_age: bool | None = None
+    is_below_expected_stage: bool | None = None
     languages: list[str] | None = None
     avatar: str | None = Field(default=None, max_length=64)
     settings_json: dict | ChildProfileSettings | None = None
@@ -215,8 +215,8 @@ class ChildProfileUpdate(BaseModel):
 
     @model_validator(mode="after")
     def validate_boolean_exclusivity(self) -> "ChildProfileUpdate":
-        if self.is_accelerated and self.is_over_age:
-            raise ValueError("is_accelerated and is_over_age cannot both be true")
+        if self.is_accelerated and self.is_below_expected_stage:
+            raise ValueError("is_accelerated and is_below_expected_stage cannot both be true")
         return self
 
     @field_validator("settings_json")
@@ -244,7 +244,7 @@ class ChildProfileResponse(BaseModel):
     birth_date: date
     education_stage: EducationStage
     is_accelerated: bool
-    is_over_age: bool
+    is_below_expected_stage: bool
     languages: list[str]
     avatar: str | None
     settings_json: dict

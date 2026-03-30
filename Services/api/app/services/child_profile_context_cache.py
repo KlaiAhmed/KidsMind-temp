@@ -48,18 +48,36 @@ async def get_child_profile_context(child_id: str | int, redis: Any, db: Session
     if cached_value:
         try:
             profile_context = json.loads(cached_value)
-            total_ms = (time.perf_counter() - timer_total_start) * 1000
-            logger.info(
-                "Child profile context resolved from cache",
-                extra={
-                    "child_id": parsed_child_id,
-                    "cache_key": cache_key,
-                    "source": "cache",
-                    "cache_read_ms": round(cache_read_ms, 2),
-                    "total_ms": round(total_ms, 2),
-                },
-            )
-            return profile_context
+
+            required_keys = {
+                "nickname",
+                "age_group",
+                "education_stage",
+                "is_accelerated",
+                "is_below_expected_stage",
+            }
+            if not required_keys.issubset(profile_context.keys()):
+                await redis.delete(cache_key)
+                logger.info(
+                    "Child profile context cache entry missing required keys; forcing DB refresh",
+                    extra={
+                        "child_id": parsed_child_id,
+                        "cache_key": cache_key,
+                    },
+                )
+            else:
+                total_ms = (time.perf_counter() - timer_total_start) * 1000
+                logger.info(
+                    "Child profile context resolved from cache",
+                    extra={
+                        "child_id": parsed_child_id,
+                        "cache_key": cache_key,
+                        "source": "cache",
+                        "cache_read_ms": round(cache_read_ms, 2),
+                        "total_ms": round(total_ms, 2),
+                    },
+                )
+                return profile_context
         except json.JSONDecodeError:
             await redis.delete(cache_key)
             logger.warning(
@@ -102,10 +120,10 @@ async def get_child_profile_context(child_id: str | int, redis: Any, db: Session
 
     profile_context = {
         "child_id": str(child_profile.id),
+        "nickname": child_profile.nickname,
         "age_group": get_age_group(child_profile.birth_date),
         "education_stage": child_profile.education_stage.value,
         "is_accelerated": is_accelerated,
-        "is_over_age": is_below_expected_stage,
         "is_below_expected_stage": is_below_expected_stage,
     }
 

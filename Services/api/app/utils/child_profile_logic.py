@@ -103,7 +103,7 @@ class StudentProfileDerivation:
     education_stage: EducationStage
     standard_age_group: str
     is_accelerated: bool
-    is_over_age: bool
+    is_below_expected_stage: bool
 
 
 def _expected_stage_for_age_group(age_group: str) -> EducationStage:
@@ -122,10 +122,10 @@ def derive_student_profile_fields(
     age: int | None = None,
     age_group: str | None = None,
     input_is_accelerated: bool | None = None,
-    input_is_over_age: bool | None = None,
+    input_is_below_expected_stage: bool | None = None,
 ) -> StudentProfileDerivation:
-    if input_is_accelerated is True and input_is_over_age is True:
-        raise ValueError("is_accelerated and is_over_age cannot both be true")
+    if input_is_accelerated is True and input_is_below_expected_stage is True:
+        raise ValueError("is_accelerated and is_below_expected_stage cannot both be true")
 
     if birth_date is None and age is None:
         raise ValueError("Either birth_date or age must be provided")
@@ -158,14 +158,14 @@ def derive_student_profile_fields(
     standard_age_group = get_standard_age_group_for_stage(resolved_stage)
 
     is_accelerated = AGE_GROUP_ORDER[resolved_age_group] < AGE_GROUP_ORDER[standard_age_group]
-    is_over_age = AGE_GROUP_ORDER[resolved_age_group] > AGE_GROUP_ORDER[standard_age_group]
+    is_below_expected_stage = AGE_GROUP_ORDER[resolved_age_group] > AGE_GROUP_ORDER[standard_age_group]
 
     if input_is_accelerated is not None and input_is_accelerated != is_accelerated:
         raise ValueError("is_accelerated is derived from age and education_stage")
-    if input_is_over_age is not None and input_is_over_age != is_over_age:
-        raise ValueError("is_over_age is derived from age and education_stage")
-    if is_accelerated and is_over_age:
-        raise ValueError("is_accelerated and is_over_age cannot both be true")
+    if input_is_below_expected_stage is not None and input_is_below_expected_stage != is_below_expected_stage:
+        raise ValueError("is_below_expected_stage is derived from age and education_stage")
+    if is_accelerated and is_below_expected_stage:
+        raise ValueError("is_accelerated and is_below_expected_stage cannot both be true")
 
     return StudentProfileDerivation(
         birth_date=birth_date,
@@ -174,7 +174,7 @@ def derive_student_profile_fields(
         education_stage=resolved_stage,
         standard_age_group=standard_age_group,
         is_accelerated=is_accelerated,
-        is_over_age=is_over_age,
+        is_below_expected_stage=is_below_expected_stage,
     )
 
 
@@ -193,5 +193,5 @@ def evaluate_stage_alignment(birth_date: date, education_stage: EducationStage) 
         birth_date=birth_date,
     )
     expected_stage = _expected_stage_for_age_group(derived.age_group)
-    is_below_expected_stage = derived.is_over_age
+    is_below_expected_stage = derived.is_below_expected_stage
     return derived.is_accelerated, is_below_expected_stage, expected_stage, derived.age_group

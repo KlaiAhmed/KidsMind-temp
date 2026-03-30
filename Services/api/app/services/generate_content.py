@@ -26,6 +26,7 @@ async def generate_content(
     text: str,
     client: httpx.AsyncClient,
     context: str = "",
+    nickname: str = "Child",
     age_group: str = "3-6",
     education_stage: str = "KINDERGARTEN",
     is_accelerated: bool = False,
@@ -40,6 +41,7 @@ async def generate_content(
         extra={
             "text_length": len(text),
             "context_length": len(context),
+            "nickname": nickname,
             "age_group": age_group,
             "education_stage": education_stage,
         },
@@ -51,6 +53,7 @@ async def generate_content(
         json={
             "text": text,
             "context": context,
+            "nickname": nickname,
             "age_group": age_group,
             "education_stage": education_stage,
             "is_accelerated": is_accelerated,
@@ -90,6 +93,7 @@ async def stream_content(
     text: str,
     client: httpx.AsyncClient,
     context: str = "",
+    nickname: str = "Child",
     age_group: str = "3-6",
     education_stage: str = "KINDERGARTEN",
     is_accelerated: bool = False,
@@ -103,6 +107,7 @@ async def stream_content(
         extra={
             "text_length": len(text),
             "context_length": len(context),
+            "nickname": nickname,
             "age_group": age_group,
             "education_stage": education_stage,
         },
@@ -114,6 +119,7 @@ async def stream_content(
         json={
             "text": text,
             "context": context,
+            "nickname": nickname,
             "age_group": age_group,
             "education_stage": education_stage,
             "is_accelerated": is_accelerated,

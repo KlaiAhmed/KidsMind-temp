@@ -48,7 +48,7 @@ class ChildProfileService:
                 age=payload.age,
                 age_group=payload.age_group,
                 input_is_accelerated=payload.is_accelerated,
-                input_is_over_age=payload.is_over_age,
+                input_is_below_expected_stage=payload.is_below_expected_stage,
             )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -59,7 +59,7 @@ class ChildProfileService:
             birth_date=derived.birth_date,
             education_stage=derived.education_stage,
             is_accelerated=derived.is_accelerated,
-            is_over_age=derived.is_over_age,
+            is_below_expected_stage=derived.is_below_expected_stage,
             languages=payload.languages,
             avatar=payload.avatar,
             settings_json=payload.settings_json or default_child_profile_settings(),
@@ -120,7 +120,7 @@ class ChildProfileService:
                 "age_group",
                 "education_stage",
                 "is_accelerated",
-                "is_over_age",
+                "is_below_expected_stage",
             )
         )
 
@@ -132,14 +132,14 @@ class ChildProfileService:
                     age=update_data.get("age"),
                     age_group=update_data.get("age_group"),
                     input_is_accelerated=update_data.get("is_accelerated"),
-                    input_is_over_age=update_data.get("is_over_age"),
+                    input_is_below_expected_stage=update_data.get("is_below_expected_stage"),
                 )
             except ValueError as exc:
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
             child_profile.birth_date = derived.birth_date
             child_profile.education_stage = derived.education_stage
             child_profile.is_accelerated = derived.is_accelerated
-            child_profile.is_over_age = derived.is_over_age
+            child_profile.is_below_expected_stage = derived.is_below_expected_stage
 
         self.db.commit()
         self.db.refresh(child_profile)

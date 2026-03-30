@@ -24,6 +24,7 @@ class AIService:
         try:
             response = await self.chain.ainvoke(
                 {
+                    "nickname": payload.nickname,
                     "age_group": payload.age_group,
                     "education_stage": payload.education_stage,
                     "is_accelerated": payload.is_accelerated,
@@ -66,6 +67,7 @@ class AIService:
                 "user_id": user.get("id"),
                 "child_id": user.get("child_id"),
                 "session_id": session_id,
+                "nickname": payload.nickname,
                 "age_group": payload.age_group,
                 "education_stage": payload.education_stage,
                 "is_accelerated": payload.is_accelerated,
@@ -76,6 +78,7 @@ class AIService:
         try:
             async for chunk in self.chain.astream(
                 {
+                    "nickname": payload.nickname,
                     "age_group": payload.age_group,
                     "education_stage": payload.education_stage,
                     "is_accelerated": payload.is_accelerated,
@@ -87,7 +90,7 @@ class AIService:
                 config={"configurable": {"session_id": session_id}}
             ):
 
-                yield json.dumps(chunk)
+                yield json.dumps(chunk, ensure_ascii=False)
         except Exception:
             logger.exception(
                 "AIService.stream_response failed",

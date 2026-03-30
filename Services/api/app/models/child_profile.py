@@ -43,7 +43,7 @@ class ChildProfile(Base):
         birth_date: Child's date of birth.
         education_stage: Current educational level.
         is_accelerated: Whether child is in an advanced stage for their age.
-        is_over_age: Whether child is older than the standard age group for stage.
+        is_below_expected_stage: Whether child's education stage is below the expected stage for age.
         languages: JSON array of language codes.
         avatar: Optional avatar identifier.
         settings_json: Custom settings as JSON object.
@@ -58,7 +58,7 @@ class ChildProfile(Base):
     birth_date = Column(Date, nullable=False)
     education_stage = Column(Enum(EducationStage, name="education_stage"), nullable=False)
     is_accelerated = Column(Boolean, nullable=False, default=False)
-    is_over_age = Column(Boolean, nullable=False, default=False)
+    is_below_expected_stage = Column(Boolean, nullable=False, default=False)
     languages = Column(JSON, nullable=False)
     avatar = Column(String(64), nullable=True)
     settings_json = Column(JSON, nullable=False, default=default_child_profile_settings)

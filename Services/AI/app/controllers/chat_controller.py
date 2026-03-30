@@ -100,7 +100,7 @@ async def chat_stream_controller(payload: ChatRequest, user: dict, client) -> As
 
         except Exception as e:
             logger.exception("Stream generation error")
-            error_event = json.dumps({"error": "Stream interrupted. Please try again."})
+            error_event = json.dumps({"error": "Stream interrupted. Please try again."}, ensure_ascii=False)
             yield f"data: {error_event}\n\n"
 
     return generate()
