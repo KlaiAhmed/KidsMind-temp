@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import WeeklyBarChart from '../../components/parent/dashboard/WeeklyBarChart';
+import { WeeklyBarChartContainer } from '../../components/parent/dashboard/WeeklyBarChart';
 import { useChildProgress } from '../../hooks/api/useChildProgress';
 import { useChildSessions } from '../../hooks/api/useChildSessions';
 import { useChildBadges, type BadgeCategory } from '../../hooks/api/useChildBadges';
@@ -306,7 +306,7 @@ const InsightsPage = () => {
               })
             )}
 
-            <WeeklyBarChart childId={childId} dailyLimitMinutes={dailyLimit} />
+            <WeeklyBarChartContainer childId={childId} dailyLimitMinutes={dailyLimit} />
           </section>
         )}
 

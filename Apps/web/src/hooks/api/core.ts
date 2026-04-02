@@ -41,6 +41,12 @@ export interface UseApiMutationResult<TData, TVariables> {
 
 const queryCache = new Map<string, QueryCacheEntry<unknown>>();
 
+const isAbortError = (requestError: unknown): boolean => {
+  return typeof DOMException !== 'undefined'
+    && requestError instanceof DOMException
+    && requestError.name === 'AbortError';
+};
+
 export const toUiError = (error: unknown): UiError => {
   const typedError = error as ApiError;
 
@@ -91,6 +97,13 @@ export const useApiQuery = <TData>(options: UseApiQueryOptions<TData>): UseApiQu
   const [isLoading, setIsLoading] = useState<boolean>(enabled && !initialCached);
   const [isFetching, setIsFetching] = useState<boolean>(false);
   const hasDataRef = useRef<boolean>(Boolean(initialCached));
+  const queryFnRef = useRef(queryFn);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const requestPromiseRef = useRef<Promise<void> | null>(null);
+
+  useEffect(() => {
+    queryFnRef.current = queryFn;
+  }, [queryFn]);
 
   const runQuery = useCallback(
     async (force: boolean): Promise<void> => {
@@ -98,50 +111,109 @@ export const useApiQuery = <TData>(options: UseApiQueryOptions<TData>): UseApiQu
         return;
       }
 
+      if (requestPromiseRef.current) {
+        return requestPromiseRef.current;
+      }
+
       const cached = force ? null : getCachedResult<TData>(queryKey, staleTime);
       if (cached) {
         setData(cached.data);
         setHeaders(cached.headers);
         setError(null);
+        hasDataRef.current = true;
         setIsLoading(false);
+        setIsFetching(false);
         return;
       }
 
       const abortController = new AbortController();
+      abortControllerRef.current = abortController;
 
-      setIsFetching(true);
-      setIsLoading((current) => (hasDataRef.current ? current : true));
+      const requestPromise = (async (): Promise<void> => {
+        setIsFetching(true);
+        setIsLoading((current) => (hasDataRef.current ? current : true));
 
-      try {
-        const response = await queryFn(abortController.signal);
-        queryCache.set(queryKey, {
-          data: response.data,
-          headers: response.headers,
-          cachedAt: Date.now(),
-        });
+        try {
+          const response = await queryFnRef.current(abortController.signal);
 
-        setData(response.data);
-        setHeaders(response.headers);
-        setError(null);
-        hasDataRef.current = true;
-      } catch (requestError) {
-        setError(toUiError(requestError));
-      } finally {
-        setIsFetching(false);
-        setIsLoading(false);
-      }
+          if (abortController.signal.aborted) {
+            return;
+          }
+
+          queryCache.set(queryKey, {
+            data: response.data,
+            headers: response.headers,
+            cachedAt: Date.now(),
+          });
+
+          setData(response.data);
+          setHeaders(response.headers);
+          setError(null);
+          hasDataRef.current = true;
+        } catch (requestError) {
+          if (abortController.signal.aborted || isAbortError(requestError)) {
+            return;
+          }
+
+          setError(toUiError(requestError));
+        } finally {
+          if (abortControllerRef.current === abortController) {
+            abortControllerRef.current = null;
+            requestPromiseRef.current = null;
+          }
+
+          if (!abortController.signal.aborted) {
+            setIsFetching(false);
+            setIsLoading(false);
+          }
+        }
+      })();
+
+      requestPromiseRef.current = requestPromise;
+      return requestPromise;
     },
-    [enabled, queryFn, queryKey, staleTime]
+    [enabled, queryKey, staleTime]
   );
 
   useEffect(() => {
     if (!enabled) {
+      abortControllerRef.current?.abort();
+      requestPromiseRef.current = null;
+      hasDataRef.current = false;
+      setData(null);
+      setHeaders(null);
+      setError(null);
       setIsLoading(false);
+      setIsFetching(false);
       return;
     }
 
+    const cached = getCachedResult<TData>(queryKey, staleTime);
+    if (cached) {
+      hasDataRef.current = true;
+      requestPromiseRef.current = null;
+      setData(cached.data);
+      setHeaders(cached.headers);
+      setError(null);
+      setIsLoading(false);
+      setIsFetching(false);
+      return;
+    }
+
+    abortControllerRef.current?.abort();
+    requestPromiseRef.current = null;
+    hasDataRef.current = false;
+    setData(null);
+    setHeaders(null);
+    setError(null);
+    setIsLoading(true);
+
     void runQuery(false);
-  }, [enabled, runQuery]);
+
+    return () => {
+      abortControllerRef.current?.abort();
+    };
+  }, [enabled, queryKey, runQuery, staleTime]);
 
   const refetch = useCallback(async () => {
     invalidateQuery(queryKey);

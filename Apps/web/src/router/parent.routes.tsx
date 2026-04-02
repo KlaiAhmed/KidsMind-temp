@@ -2,13 +2,8 @@ import { lazy, Suspense } from 'react';
 import { Navigate, Outlet, Route } from 'react-router-dom';
 import PinGate from '../components/PinGate';
 import { useAuthStatus } from '../hooks/useAuthStatus';
+import { useLanguage } from '../hooks/useLanguage';
 import '../styles/parent-portal.css';
-
-const COPY = {
-  loading: 'Loading parent portal...',
-  subscriptionTitle: 'Subscription',
-  subscriptionDescription: 'Subscription controls are coming soon.',
-} as const;
 
 const ParentLayout = lazy(() => import('../layouts/ParentLayout'));
 const DashboardPage = lazy(() => import('../pages/parent/DashboardPage'));
@@ -17,8 +12,10 @@ const InsightsPage = lazy(() => import('../pages/parent/InsightsPage'));
 const SettingsPage = lazy(() => import('../pages/parent/SettingsPage'));
 
 const LoadingFallback = () => {
+  const { translations } = useLanguage();
+
   return (
-    <div className="pp-root" style={{ minHeight: '100vh', display: 'grid', placeItems: 'center' }} aria-label={COPY.loading}>
+    <div className="pp-root" style={{ minHeight: '100vh', display: 'grid', placeItems: 'center' }} aria-label={translations.loading}>
       <div className="pp-skeleton" style={{ width: 220, height: 42 }} />
     </div>
   );
@@ -43,11 +40,13 @@ const ParentRoute = () => {
 };
 
 const ParentSubscriptionPage = () => {
+  const { translations } = useLanguage();
+
   return (
     <main className="pp-content">
       <article className="pp-card">
-        <h1 className="pp-title">{COPY.subscriptionTitle}</h1>
-        <p className="pp-empty">{COPY.subscriptionDescription}</p>
+        <h1 className="pp-title">{translations.settings_privacy}</h1>
+        <p className="pp-empty">{translations.no_data}</p>
       </article>
     </main>
   );

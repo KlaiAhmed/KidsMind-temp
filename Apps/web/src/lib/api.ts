@@ -1,5 +1,5 @@
 import { getCsrfHeader } from '../utils/csrf';
-import { authStore } from '../store/auth.store';
+import { logoutAuthSession, refreshAuthSession } from './authSession';
 
 const COPY = {
   unauthorized: 'Your session expired. Please log in again.',
@@ -27,6 +27,7 @@ export interface RequestOptions {
   body?: unknown;
   headers?: Record<string, string>;
   signal?: AbortSignal;
+  skipAuthRecovery?: boolean;
 }
 
 const buildQueryString = (query?: RequestOptions['query']): string => {
@@ -91,7 +92,7 @@ const extractErrorMessage = async (response: Response): Promise<string> => {
     // Ignore malformed payloads and return status-based fallback.
   }
 
-  if (response.status === 401) {
+  if (response.status === 401 || response.status === 403) {
     return COPY.unauthorized;
   }
 
@@ -120,15 +121,26 @@ const request = async <TData>(
   });
 
   if (!response.ok) {
+    const shouldAttemptAuthRecovery = !options?.skipAuthRecovery && (response.status === 401 || response.status === 403);
+
+    if (shouldAttemptAuthRecovery) {
+      const didRefresh = await refreshAuthSession();
+
+      if (didRefresh) {
+        return request<TData>(method, path, {
+          ...options,
+          skipAuthRecovery: true,
+        });
+      }
+
+      await logoutAuthSession();
+    }
+
     const message = await extractErrorMessage(response);
     const error: ApiError = {
       message,
       status: response.status,
     };
-
-    if (response.status === 401) {
-      authStore.logout({ redirectToLogin: true });
-    }
 
     throw error;
   }

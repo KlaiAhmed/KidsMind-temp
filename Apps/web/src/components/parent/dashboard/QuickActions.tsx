@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { FileText, PenLine, ShieldCheck, Sparkles } from 'lucide-react';
 import { useExportPdf } from '../../../hooks/api/useExportPdf';
 import { useLanguage } from '../../../hooks/useLanguage';
 
@@ -29,64 +30,70 @@ const QuickActions = ({ childId }: QuickActionsProps) => {
 
   return (
     <section className="pp-card pp-col-span-3" aria-labelledby="quick-actions-title">
-      <h3 id="quick-actions-title" className="pp-title">{translations.actions_title}</h3>
+      <div className="pp-section-heading">
+        <span className="pp-section-heading-icon" aria-hidden="true">
+          <Sparkles size={16} strokeWidth={2.25} />
+        </span>
+        <h3 id="quick-actions-title" className="pp-title">{translations.dashboard_settings_title}</h3>
+      </div>
+      <p className="pp-section-subtitle">{translations.dashboard_settings_about}</p>
 
       <div className="pp-actions-grid" style={{ marginTop: '0.7rem' }}>
         <button
           type="button"
           className="pp-action-button pp-touch pp-focusable"
-          aria-label={translations.actions_edit_profile}
+          aria-label={translations.dashboard_child_edit_profile}
           onClick={() => {
             navigate('/parent/children');
           }}
         >
-          <strong>{translations.actions_edit_profile}</strong>
-          <span style={{ color: 'var(--text-secondary)' }}>{translations.actions_edit_hint}</span>
+          <strong><PenLine size={14} strokeWidth={2.2} /> {translations.dashboard_child_edit_profile}</strong>
+          <span style={{ color: 'var(--text-secondary)' }}>{translations.dashboard_settings_profile}</span>
         </button>
 
         <button
           type="button"
           className="pp-action-button pp-touch pp-focusable"
-          aria-label={translations.actions_adjust_limit}
+          aria-label={translations.dashboard_settings_limits}
           onClick={() => {
             navigate('/parent/children?tab=safety');
           }}
         >
-          <strong>{translations.actions_adjust_limit}</strong>
-          <span style={{ color: 'var(--text-secondary)' }}>{translations.actions_limit_hint}</span>
+          <strong><ShieldCheck size={14} strokeWidth={2.2} /> {translations.dashboard_settings_limits}</strong>
+          <span style={{ color: 'var(--text-secondary)' }}>{translations.dashboard_limits_daily_usage}</span>
         </button>
 
         <button
           type="button"
           className="pp-action-button pp-touch pp-focusable"
-          aria-label={translations.actions_conversation_log}
+          aria-label={translations.dashboard_conversation_title}
           onClick={() => {
             navigate('/parent/insights?tab=conversation-log');
           }}
         >
-          <strong>{translations.actions_conversation_log}</strong>
-          <span style={{ color: 'var(--text-secondary)' }}>{translations.actions_log_hint}</span>
+          <strong><FileText size={14} strokeWidth={2.2} /> {translations.dashboard_conversation_title}</strong>
+          <span style={{ color: 'var(--text-secondary)' }}>{translations.dashboard_child_view_history}</span>
         </button>
 
         <button
           type="button"
           className="pp-action-button pp-touch pp-focusable"
-          aria-label={translations.actions_export_pdf}
+          aria-label={translations.profile_save}
           disabled={exportPdf.isPending}
           onClick={() => {
             exportPdf
               .mutateAsync(undefined)
               .then(() => {
-                setToastMessage(translations.actions_download_ready);
+                setToastMessage(translations.success);
               })
               .catch(() => {
-                setToastMessage(exportPdf.error?.message ?? translations.actions_export_failed);
+                setToastMessage(exportPdf.error?.message ?? translations.error);
               });
           }}
         >
-          <strong>{exportPdf.isPending ? translations.actions_exporting : translations.actions_export_pdf}</strong>
+          <strong><FileText size={14} strokeWidth={2.2} /> {exportPdf.isPending ? translations.loading : translations.profile_save}</strong>
           <span style={{ color: 'var(--text-secondary)' }}>
-            {exportPdf.isPending ? translations.actions_exporting : translations.actions_export_hint}
+            {exportPdf.isPending ? translations.loading : translations.learn_more}
           </span>
         </button>
       </div>

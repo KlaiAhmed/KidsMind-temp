@@ -1,8 +1,7 @@
 import { useMemo, useState } from 'react';
-import { useChildAnalytics } from '../../../hooks/api/useChildAnalytics';
+import { CalendarDays } from 'lucide-react';
+import { useChildAnalytics, type UseChildAnalyticsResult } from '../../../hooks/api/useChildAnalytics';
 import { useLanguage } from '../../../hooks/useLanguage';
-
-const SHORT_WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
 
 export interface WeeklyBarDatum {
   dayLabel: string;
@@ -14,6 +13,11 @@ export interface WeeklyBarDatum {
 }
 
 export interface WeeklyBarChartProps {
+  dailyLimitMinutes: number;
+  analytics: UseChildAnalyticsResult;
+}
+
+export interface WeeklyBarChartContainerProps {
   childId: number | null;
   dailyLimitMinutes: number;
 }
@@ -29,10 +33,29 @@ const startOfWeekMonday = (referenceDate: Date): Date => {
 
 const toIsoDate = (date: Date): string => date.toISOString().slice(0, 10);
 
-const WeeklyBarChart = ({ childId, dailyLimitMinutes }: WeeklyBarChartProps) => {
+const WeeklyBarChart = ({ dailyLimitMinutes, analytics }: WeeklyBarChartProps) => {
   const { translations } = useLanguage();
-  const analytics = useChildAnalytics(childId, '7d');
   const [activeTooltip, setActiveTooltip] = useState<WeeklyBarDatum | null>(null);
+
+  const weekdayLabels = useMemo(() => {
+    return [
+      translations.gs_weekday_monday,
+      translations.gs_weekday_tuesday,
+      translations.gs_weekday_wednesday,
+      translations.gs_weekday_thursday,
+      translations.gs_weekday_friday,
+      translations.gs_weekday_saturday,
+      translations.gs_weekday_sunday,
+    ] as const;
+  }, [
+    translations.gs_weekday_friday,
+    translations.gs_weekday_monday,
+    translations.gs_weekday_saturday,
+    translations.gs_weekday_sunday,
+    translations.gs_weekday_thursday,
+    translations.gs_weekday_tuesday,
+    translations.gs_weekday_wednesday,
+  ]);
 
   const weekData = useMemo(() => {
     const today = new Date();
@@ -43,7 +66,7 @@ const WeeklyBarChart = ({ childId, dailyLimitMinutes }: WeeklyBarChartProps) => 
       (analytics.data?.by_day ?? []).map((day) => [day.date.slice(0, 10), day])
     );
 
-    return SHORT_WEEKDAYS.map((weekday, index) => {
+    return weekdayLabels.map((weekday, index) => {
       const date = new Date(weekStart);
       date.setDate(weekStart.getDate() + index);
       const isoDate = toIsoDate(date);
@@ -58,12 +81,12 @@ const WeeklyBarChart = ({ childId, dailyLimitMinutes }: WeeklyBarChartProps) => 
         isFuture: isoDate > todayIso,
       } satisfies WeeklyBarDatum;
     });
-  }, [analytics.data]);
+  }, [analytics.data, weekdayLabels]);
 
   if (analytics.isLoading) {
     return (
-      <section className="pp-card pp-col-span-2" aria-label={translations.weekly_loading}>
-        <h3 className="pp-title">{translations.weekly_title}</h3>
+      <section className="pp-card pp-col-span-2" aria-label={translations.loading}>
+        <h3 className="pp-title">{translations.dashboard_child_this_week}</h3>
         <div className="pp-skeleton" style={{ height: 220, marginTop: '0.75rem' }} />
       </section>
     );
@@ -72,8 +95,19 @@ const WeeklyBarChart = ({ childId, dailyLimitMinutes }: WeeklyBarChartProps) => 
   if (analytics.error) {
     return (
       <section className="pp-card pp-col-span-2" role="alert">
-        <h3 className="pp-title">{translations.weekly_title}</h3>
+        <h3 className="pp-title">{translations.dashboard_child_this_week}</h3>
         <p className="pp-error">{analytics.error.message}</p>
+        <button
+          type="button"
+          className="pp-button pp-touch pp-focusable"
+          aria-label={translations.try_again}
+          disabled={analytics.isFetching}
+          onClick={() => {
+            void analytics.refetch();
+          }}
+        >
+          {analytics.isFetching ? translations.loading : translations.try_again}
+        </button>
       </section>
     );
   }
@@ -88,22 +122,25 @@ const WeeklyBarChart = ({ childId, dailyLimitMinutes }: WeeklyBarChartProps) => 
 
   return (
     <section className="pp-card pp-col-span-2" aria-labelledby="weekly-chart-title">
-      <h3 id="weekly-chart-title" className="pp-title">{translations.weekly_title}</h3>
+      <div className="pp-section-heading">
+        <span className="pp-section-heading-icon" aria-hidden="true">
+          <CalendarDays size={16} strokeWidth={2.25} />
+        </span>
+        <h3 id="weekly-chart-title" className="pp-title">{translations.dashboard_child_this_week}</h3>
+      </div>
+      <p className="pp-section-subtitle">{translations.dashboard_child_activity_title}</p>
 
       {!hasAnyData ? (
-        <p className="pp-empty" style={{ marginTop: '0.65rem' }}>{translations.weekly_empty}</p>
+        <p className="pp-empty" style={{ marginTop: '0.65rem' }}>{translations.today_empty}</p>
       ) : (
         <div className="pp-chart-wrap" style={{ marginTop: '0.65rem' }}>
           {activeTooltip && (
             <p className="pp-cache-badge" role="status">
-              {translations.weekly_tooltip
-                .replace('{day}', activeTooltip.dayLabel)
-                .replace('{minutes}', String(activeTooltip.minutes))
-                .replace('{sessions}', String(activeTooltip.sessions))}
+              {activeTooltip.dayLabel} · {activeTooltip.minutes} {translations.dashboard_child_minutes} · {activeTooltip.sessions} {translations.dashboard_child_conversations}
             </p>
           )}
 
-          <div className="pp-bars" role="img" aria-label={translations.weekly_title}>
+          <div className="pp-bars" role="img" aria-label={translations.dashboard_child_this_week}>
             {weekData.map((bar) => {
               const height = Math.max(8, Math.round((bar.minutes / maxMinutes) * 150));
               const colorClass = bar.isFuture
@@ -127,7 +164,7 @@ const WeeklyBarChart = ({ childId, dailyLimitMinutes }: WeeklyBarChartProps) => 
                     type="button"
                     className={`pp-bar ${colorClass} pp-touch pp-focusable`}
                     style={{ height }}
-                    aria-label={`${bar.dayLabel}: ${bar.minutes} minutes, ${bar.sessions} sessions`}
+                    aria-label={`${bar.dayLabel}: ${bar.minutes} ${translations.dashboard_child_minutes}, ${bar.sessions} ${translations.dashboard_child_conversations}`}
                     onFocus={() => {
                       setActiveTooltip(bar);
                     }}
@@ -142,14 +179,20 @@ const WeeklyBarChart = ({ childId, dailyLimitMinutes }: WeeklyBarChartProps) => 
           </div>
 
           <div className="pp-chart-legend" aria-hidden="true">
-            <span><span className="pp-legend-dot pp-bar-under" />{translations.weekly_under_limit}</span>
-            <span><span className="pp-legend-dot pp-bar-today" />{translations.weekly_today}</span>
-            <span><span className="pp-legend-dot pp-bar-upcoming" />{translations.weekly_upcoming}</span>
+            <span><span className="pp-legend-dot pp-bar-under" />{translations.dashboard_limits_daily_usage}</span>
+            <span><span className="pp-legend-dot pp-bar-today" />{translations.dashboard_child_today}</span>
+            <span><span className="pp-legend-dot pp-bar-upcoming" />{translations.info}</span>
           </div>
         </div>
       )}
     </section>
   );
+};
+
+export const WeeklyBarChartContainer = ({ childId, dailyLimitMinutes }: WeeklyBarChartContainerProps) => {
+  const analytics = useChildAnalytics(childId, '7d');
+
+  return <WeeklyBarChart dailyLimitMinutes={dailyLimitMinutes} analytics={analytics} />;
 };
 
 export default WeeklyBarChart;

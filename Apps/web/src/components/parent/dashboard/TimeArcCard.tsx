@@ -1,22 +1,22 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useChildAnalytics } from '../../../hooks/api/useChildAnalytics';
+import { Clock3 } from 'lucide-react';
+import type { UseChildAnalyticsResult } from '../../../hooks/api/useChildAnalytics';
 import { useLanguage } from '../../../hooks/useLanguage';
 
 const ARC_RADIUS = 70;
 const ARC_CIRCUMFERENCE = 2 * Math.PI * ARC_RADIUS;
 
 export interface TimeArcCardProps {
-  childId: number | null;
   dailyLimitMinutes: number;
+  analytics: UseChildAnalyticsResult;
 }
 
 const clamp = (value: number, min: number, max: number): number => {
   return Math.min(max, Math.max(min, value));
 };
 
-const TimeArcCard = ({ childId, dailyLimitMinutes }: TimeArcCardProps) => {
+const TimeArcCard = ({ dailyLimitMinutes, analytics }: TimeArcCardProps) => {
   const { translations } = useLanguage();
-  const analytics = useChildAnalytics(childId, '7d');
   const [displayRatio, setDisplayRatio] = useState(0);
 
   const todayUsage = useMemo(() => {
@@ -47,8 +47,8 @@ const TimeArcCard = ({ childId, dailyLimitMinutes }: TimeArcCardProps) => {
 
   if (analytics.isLoading) {
     return (
-      <section className="pp-card pp-col-span-1" aria-label={translations.time_arc_loading}>
-        <h3 className="pp-title">{translations.time_arc_title}</h3>
+      <section className="pp-card pp-col-span-1" aria-label={translations.loading}>
+        <h3 className="pp-title">{translations.dashboard_limits_daily_usage}</h3>
         <div className="pp-skeleton" style={{ height: 190, marginTop: '0.75rem' }} />
       </section>
     );
@@ -57,8 +57,19 @@ const TimeArcCard = ({ childId, dailyLimitMinutes }: TimeArcCardProps) => {
   if (analytics.error) {
     return (
       <section className="pp-card pp-col-span-1" role="alert">
-        <h3 className="pp-title">{translations.time_arc_title}</h3>
+        <h3 className="pp-title">{translations.dashboard_limits_daily_usage}</h3>
         <p className="pp-error">{analytics.error.message}</p>
+        <button
+          type="button"
+          className="pp-button pp-touch pp-focusable"
+          aria-label={translations.try_again}
+          disabled={analytics.isFetching}
+          onClick={() => {
+            void analytics.refetch();
+          }}
+        >
+          {analytics.isFetching ? translations.loading : translations.try_again}
+        </button>
       </section>
     );
   }
@@ -66,8 +77,8 @@ const TimeArcCard = ({ childId, dailyLimitMinutes }: TimeArcCardProps) => {
   if (!analytics.data) {
     return (
       <section className="pp-card pp-col-span-1">
-        <h3 className="pp-title">{translations.time_arc_title}</h3>
-        <p className="pp-empty">{translations.time_arc_no_data}</p>
+        <h3 className="pp-title">{translations.dashboard_limits_daily_usage}</h3>
+        <p className="pp-empty">{translations.no_data}</p>
       </section>
     );
   }
@@ -75,15 +86,21 @@ const TimeArcCard = ({ childId, dailyLimitMinutes }: TimeArcCardProps) => {
   const strokeOffset = ARC_CIRCUMFERENCE * (1 - displayRatio);
   const remaining = safeLimit - todayUsage;
   const remainingText = remaining >= 0
-    ? translations.time_arc_remaining.replace('{minutes}', String(remaining))
-    : translations.time_arc_exceeded.replace('{minutes}', String(Math.abs(remaining)));
+    ? `${translations.info}: ${remaining}`
+    : `${translations.warning}: ${Math.abs(remaining)}`;
 
   return (
     <section className="pp-card pp-col-span-1" aria-labelledby="time-arc-title">
-      <h3 id="time-arc-title" className="pp-title">{translations.time_arc_title}</h3>
+      <div className="pp-section-heading">
+        <span className="pp-section-heading-icon" aria-hidden="true">
+          <Clock3 size={16} strokeWidth={2.25} />
+        </span>
+        <h3 id="time-arc-title" className="pp-title">{translations.dashboard_limits_daily_usage}</h3>
+      </div>
+      <p className="pp-section-subtitle">{translations.dashboard_child_today}</p>
 
       <div className="pp-arc-wrap">
-        <svg width="180" height="180" viewBox="0 0 180 180" aria-label={`Used ${todayUsage} of ${safeLimit} minutes`}>
+        <svg width="180" height="180" viewBox="0 0 180 180" aria-label={`${translations.dashboard_limits_daily_usage}: ${todayUsage}/${safeLimit}`}>
           <circle
             cx="90"
             cy="90"
@@ -109,7 +126,7 @@ const TimeArcCard = ({ childId, dailyLimitMinutes }: TimeArcCardProps) => {
             {todayUsage}
           </text>
           <text x="90" y="108" textAnchor="middle" fontSize="12" fill="var(--text-secondary)">
-            / {safeLimit} min
+            / {safeLimit} {translations.dashboard_child_minutes}
           </text>
         </svg>
 

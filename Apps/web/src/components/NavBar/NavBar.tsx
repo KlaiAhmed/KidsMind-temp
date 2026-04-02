@@ -13,13 +13,9 @@ import type { ThemeMode, LanguageCode, TranslationMap } from '../../types';
 import { LANGUAGES } from '../../utils/constants';
 import { useScrollPosition } from '../../hooks/useScrollPosition';
 import { apiBaseUrl } from '../../utils/api';
-import { clearCsrfToken, getCsrfHeader } from '../../utils/csrf';
-import { dispatchAuthStateChanged } from '../../utils/authEvents';
-import {
-  clearParentProfileAccess,
-  grantParentProfileAccess,
-  hasParentProfileAccess,
-} from '../../utils/parentProfileAccess';
+import { getCsrfHeader } from '../../utils/csrf';
+import { logoutAuthSession } from '../../lib/authSession';
+import { grantParentProfileAccess, hasParentProfileAccess } from '../../utils/parentProfileAccess';
 import styles from './NavBar.module.css';
 
 interface NavBarProps {
@@ -373,23 +369,9 @@ const NavBar = ({
     setIsMobileMenuOpen(false);
 
     try {
-      await fetch(`${apiBaseUrl}/api/v1/auth/logout`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Client-Type': 'web',
-          ...getCsrfHeader(),
-        },
-        credentials: 'include',
-        body: JSON.stringify({}),
-      });
+      await logoutAuthSession();
     } catch {
       // Logout should still clear local auth state if the network call fails.
-    } finally {
-      clearCsrfToken();
-      clearParentProfileAccess();
-      dispatchAuthStateChanged();
-      window.location.assign('/login');
     }
   }, [closeAllDropdownMenus, isLoggingOut]);
 

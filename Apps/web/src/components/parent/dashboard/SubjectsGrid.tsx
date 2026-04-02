@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import { BookOpen } from 'lucide-react';
 import { useChildProgress } from '../../../hooks/api/useChildProgress';
 import { useLanguage } from '../../../hooks/useLanguage';
 
@@ -29,8 +30,8 @@ const SubjectsGrid = ({ childId }: SubjectsGridProps) => {
 
   if (progress.isLoading) {
     return (
-      <section className="pp-card pp-col-span-1" aria-label={translations.subjects_loading}>
-        <h3 className="pp-title">{translations.subjects_title}</h3>
+      <section className="pp-card pp-col-span-1" aria-label={translations.loading}>
+        <h3 className="pp-title">{translations.dashboard_limits_subjects}</h3>
         <div className="pp-skeleton" style={{ height: 180, marginTop: '0.75rem' }} />
       </section>
     );
@@ -39,17 +40,18 @@ const SubjectsGrid = ({ childId }: SubjectsGridProps) => {
   if (progress.error) {
     return (
       <section className="pp-card pp-col-span-1" role="alert">
-        <h3 className="pp-title">{translations.subjects_title}</h3>
+        <h3 className="pp-title">{translations.dashboard_limits_subjects}</h3>
         <p className="pp-error">{progress.error.message}</p>
         <button
           type="button"
           className="pp-button pp-touch pp-focusable"
-          aria-label={translations.subjects_retry}
+          aria-label={translations.try_again}
+          disabled={progress.isFetching}
           onClick={() => {
             void progress.refetch();
           }}
         >
-          {translations.subjects_retry}
+          {progress.isFetching ? translations.loading : translations.try_again}
         </button>
       </section>
     );
@@ -59,22 +61,28 @@ const SubjectsGrid = ({ childId }: SubjectsGridProps) => {
   if (subjects.length === 0) {
     return (
       <section className="pp-card pp-col-span-1">
-        <h3 className="pp-title">{translations.subjects_title}</h3>
-        <p className="pp-empty">{translations.subjects_empty}</p>
+        <h3 className="pp-title">{translations.dashboard_limits_subjects}</h3>
+        <p className="pp-empty">{translations.no_data}</p>
       </section>
     );
   }
 
   return (
     <section className="pp-card pp-col-span-1" aria-labelledby="subjects-grid-title">
-      <h3 id="subjects-grid-title" className="pp-title">{translations.subjects_title}</h3>
+      <div className="pp-section-heading">
+        <span className="pp-section-heading-icon" aria-hidden="true">
+          <BookOpen size={16} strokeWidth={2.25} />
+        </span>
+        <h3 id="subjects-grid-title" className="pp-title">{translations.dashboard_limits_subjects}</h3>
+      </div>
+      <p className="pp-section-subtitle">{translations.dashboard_child_activity_title}</p>
       <div className="pp-subject-grid" style={{ marginTop: '0.7rem' }}>
         {subjects.map((subject) => (
           <button
             key={subject.subject}
             type="button"
             className={`pp-subject-chip pp-touch pp-focusable ${getBorderClassName(subject.mastery_pct)}`}
-            aria-label={`Open ${subject.subject} insights`}
+            aria-label={`${translations.learn_more}: ${subject.subject}`}
             onClick={() => {
               navigate(`/parent/insights?subject=${encodeURIComponent(subject.subject)}`);
             }}

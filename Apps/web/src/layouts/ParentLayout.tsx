@@ -1,57 +1,21 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Languages, Menu, Moon, Sun } from 'lucide-react';
 import ChildSelector from '../components/parent/ChildSelector';
-import { authStore } from '../store/auth.store';
+import { useLanguage } from '../hooks/useLanguage';
+import { useTheme } from '../hooks/useTheme';
 import { useChildStore } from '../store/child.store';
 import { useCurrentUser } from '../hooks/api/useCurrentUser';
 import { useExportPdf } from '../hooks/api/useExportPdf';
+import { logoutAuthSession } from '../lib/authSession';
+import { LANGUAGES } from '../utils/constants';
+import navStyles from '../components/NavBar/NavBar.module.css';
 import '../styles/parent-portal.css';
-
-const COPY = {
-  logo: 'KidsMind',
-  subtitle: 'Parent Portal',
-  pinActive: 'PIN session active',
-  pinLocked: 'PIN required',
-  menu: 'Open navigation menu',
-  exportPdf: 'Export PDF',
-  aiReport: 'AI report',
-  profile: 'Profile',
-  logout: 'Logout',
-  overview: 'Overview',
-  childProfiles: 'Child Profiles',
-  insights: 'Insights',
-  appSettings: 'App Settings',
-  subscription: 'Subscription',
-  main: 'Main',
-  account: 'Account',
-  loading: 'Loading account...',
-  exportDone: 'Download ready',
-  exportError: 'Unable to export right now.',
-} as const;
 
 interface NavItem {
   label: string;
   to: string;
 }
-
-const MAIN_NAV: NavItem[] = [
-  { label: COPY.overview, to: '/parent/dashboard' },
-  { label: COPY.childProfiles, to: '/parent/children' },
-  { label: COPY.insights, to: '/parent/insights' },
-];
-
-const ACCOUNT_NAV: NavItem[] = [
-  { label: COPY.appSettings, to: '/parent/settings' },
-  { label: COPY.subscription, to: '/parent/subscription' },
-];
-
-const PAGE_TITLES: Array<{ pattern: RegExp; title: string }> = [
-  { pattern: /^\/parent\/dashboard/, title: COPY.overview },
-  { pattern: /^\/parent\/children/, title: COPY.childProfiles },
-  { pattern: /^\/parent\/insights/, title: COPY.insights },
-  { pattern: /^\/parent\/settings/, title: COPY.appSettings },
-  { pattern: /^\/parent\/subscription/, title: COPY.subscription },
-];
 
 const hasPinCookie = (): boolean => {
   if (typeof document === 'undefined') {
@@ -62,6 +26,8 @@ const hasPinCookie = (): boolean => {
 };
 
 const ParentLayout = () => {
+  const { language, setLanguage, translations } = useLanguage();
+  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
   const { activeChild } = useChildStore();
@@ -70,20 +36,101 @@ const ParentLayout = () => {
 
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState<boolean>(false);
+  const [isLanguageDropdownOpen, setIsLanguageDropdownOpen] = useState<boolean>(false);
   const [actionMessage, setActionMessage] = useState<string>('');
+  const languageDropdownRef = useRef<HTMLDivElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+
+  const mainNav: NavItem[] = [
+    { label: translations.dashboard_page_title, to: '/parent/dashboard' },
+    { label: translations.dashboard_settings_profile, to: '/parent/children' },
+    { label: translations.dashboard_child_activity_title, to: '/parent/insights' },
+  ];
+
+  const accountNav: NavItem[] = [
+    { label: translations.dashboard_settings_title, to: '/parent/settings' },
+    { label: translations.settings_privacy, to: '/parent/subscription' },
+  ];
 
   const pageTitle = useMemo(() => {
-    const match = PAGE_TITLES.find((item) => item.pattern.test(location.pathname));
-    return match?.title ?? COPY.overview;
-  }, [location.pathname]);
+    if (/^\/parent\/dashboard/.test(location.pathname)) {
+      return translations.dashboard_page_title;
+    }
 
-  const pinStatusClassName = hasPinCookie() ? 'pp-pin-active' : 'pp-pin-locked';
-  const pinStatusLabel = hasPinCookie() ? COPY.pinActive : COPY.pinLocked;
+    if (/^\/parent\/children/.test(location.pathname)) {
+      return translations.dashboard_settings_profile;
+    }
+
+    if (/^\/parent\/insights/.test(location.pathname)) {
+      return translations.dashboard_child_activity_title;
+    }
+
+    if (/^\/parent\/settings/.test(location.pathname)) {
+      return translations.dashboard_settings_title;
+    }
+
+    if (/^\/parent\/subscription/.test(location.pathname)) {
+      return translations.settings_privacy;
+    }
+
+    return translations.dashboard_page_title;
+  }, [
+    location.pathname,
+    translations.dashboard_child_activity_title,
+    translations.dashboard_page_title,
+    translations.dashboard_settings_profile,
+    translations.dashboard_settings_title,
+    translations.settings_privacy,
+  ]);
+
+  const pinIsActive = hasPinCookie();
+  const pinStatusClassName = pinIsActive ? 'pp-pin-active' : 'pp-pin-locked';
+  const pinStatusLabel = pinIsActive ? translations.success : translations.warning;
 
   const userInitial = useMemo(() => {
-    const username = userQuery.data?.username ?? userQuery.data?.email ?? 'P';
+    const fallbackInitial = translations.nav_parent_profile.slice(0, 1) || translations.info.slice(0, 1);
+    const username = userQuery.data?.username ?? userQuery.data?.email ?? fallbackInitial;
     return username.slice(0, 1).toUpperCase();
-  }, [userQuery.data]);
+  }, [translations.info, translations.nav_parent_profile, userQuery.data]);
+
+  const closeTopbarMenus = useCallback(() => {
+    setIsLanguageDropdownOpen(false);
+    setIsUserMenuOpen(false);
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (languageDropdownRef.current && !languageDropdownRef.current.contains(event.target as Node)) {
+        setIsLanguageDropdownOpen(false);
+      }
+
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setIsUserMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closeTopbarMenus();
+      }
+    };
+
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [closeTopbarMenus]);
+
+  useEffect(() => {
+    closeTopbarMenus();
+  }, [closeTopbarMenus, location.pathname]);
 
   const closeSidebarOnMobile = (): void => {
     setIsSidebarOpen(false);
@@ -112,16 +159,16 @@ const ParentLayout = () => {
     <div className="pp-root pp-layout">
       <aside className={`pp-sidebar ${isSidebarOpen ? 'pp-sidebar-open' : ''}`}>
         <div className="pp-logo">
-          <h1 className="pp-title">{COPY.logo}</h1>
-          <p>{COPY.subtitle}</p>
+          <h1 className="pp-title">{translations.dashboard_page_title}</h1>
+          <p>{translations.nav_parent_profile}</p>
         </div>
 
         <div className={`pp-pin-banner ${pinStatusClassName}`} role="status" aria-live="polite">
           {pinStatusLabel}
         </div>
 
-        {renderNavSection(COPY.main, MAIN_NAV)}
-        {renderNavSection(COPY.account, ACCOUNT_NAV)}
+        {renderNavSection(translations.info, mainNav)}
+        {renderNavSection(translations.profile_edit, accountNav)}
 
         <div style={{ marginTop: 'auto' }}>
           <ChildSelector />
@@ -134,53 +181,103 @@ const ParentLayout = () => {
             <button
               type="button"
               className="pp-button pp-sidebar-drawer-toggle pp-touch pp-focusable"
-              aria-label={COPY.menu}
+              aria-label={translations.nav_menu_open}
               onClick={() => {
                 setIsSidebarOpen((current) => !current);
               }}
             >
-              ☰
+              <Menu size={18} strokeWidth={2.25} aria-hidden="true" />
             </button>
             <h2 className="pp-title">{pageTitle}</h2>
           </div>
 
           <div className="pp-topbar-actions">
+            <div className="pp-topbar-switches">
+              <div className={navStyles.langSelector} ref={languageDropdownRef}>
+                <button
+                  type="button"
+                  className={`${navStyles.langButton} pp-focusable`}
+                  aria-label={translations.nav_language_menu_open}
+                  aria-haspopup="listbox"
+                  aria-expanded={isLanguageDropdownOpen}
+                  onClick={() => {
+                    setIsLanguageDropdownOpen((current) => !current);
+                    setIsUserMenuOpen(false);
+                  }}
+                >
+                  <Languages size={18} strokeWidth={2} aria-hidden="true" />
+                </button>
+
+                {isLanguageDropdownOpen && (
+                  <div className={navStyles.langDropdown} role="listbox" aria-label={translations.nav_language_menu_label}>
+                    {LANGUAGES.map((languageOption) => (
+                      <button
+                        key={languageOption.code}
+                        type="button"
+                        role="option"
+                        aria-selected={languageOption.code === language}
+                        className={`${navStyles.langOption} ${languageOption.code === language ? navStyles.langOptionActive : ''}`}
+                        onClick={() => {
+                          setLanguage(languageOption.code);
+                          setIsLanguageDropdownOpen(false);
+                        }}
+                      >
+                        <span>{languageOption.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <button
+                type="button"
+                className={`${navStyles.themeToggle} pp-focusable`}
+                aria-label={translations.nav_change_theme}
+                onClick={toggleTheme}
+              >
+                {theme === 'light' ? <Moon size={20} strokeWidth={2} aria-hidden="true" /> : <Sun size={20} strokeWidth={2} aria-hidden="true" />}
+              </button>
+            </div>
+
             <button
               type="button"
               className="pp-button pp-touch pp-focusable"
-              aria-label={COPY.exportPdf}
+              aria-label={translations.profile_save}
               disabled={exportPdf.isPending}
               onClick={() => {
                 exportPdf
                   .mutateAsync(undefined)
                   .then(() => {
-                    setActionMessage(COPY.exportDone);
+                    setActionMessage(translations.success);
                   })
                   .catch(() => {
-                    setActionMessage(exportPdf.error?.message ?? COPY.exportError);
+                    setActionMessage(exportPdf.error?.message ?? translations.error);
                   });
               }}
             >
-              {exportPdf.isPending ? `${COPY.exportPdf}...` : COPY.exportPdf}
+              {exportPdf.isPending ? translations.loading : translations.profile_save}
             </button>
 
             <button
               type="button"
               className="pp-button pp-touch pp-focusable"
-              aria-label={COPY.aiReport}
+              aria-label={translations.dashboard_conversation_title}
               onClick={() => {
                 navigate('/parent/insights?tab=progress');
               }}
             >
-              {COPY.aiReport}
+              {translations.dashboard_conversation_title}
             </button>
 
-            <div style={{ position: 'relative' }}>
+            <div className={`${navStyles.userMenuWrapper} pp-topbar-user-menu`} ref={userMenuRef}>
               <button
                 type="button"
                 className="pp-avatar-chip pp-touch pp-focusable"
-                aria-label={COPY.profile}
+                aria-label={translations.profile_edit}
+                aria-haspopup="menu"
+                aria-expanded={isUserMenuOpen}
                 onClick={() => {
+                  setIsLanguageDropdownOpen(false);
                   setIsUserMenuOpen((current) => !current);
                 }}
               >
@@ -188,32 +285,34 @@ const ParentLayout = () => {
               </button>
 
               {isUserMenuOpen && (
-                <div className="pp-card" style={{ position: 'absolute', right: 0, top: '110%', minWidth: 150, zIndex: 20 }}>
+                <div className={`${navStyles.userDropdown} pp-topbar-user-dropdown`} role="menu" aria-label={translations.nav_user_menu_label}>
                   {userQuery.isLoading ? (
-                    <p>{COPY.loading}</p>
+                    <p className="pp-topbar-user-loading">{translations.loading}</p>
                   ) : (
                     <>
                       <button
                         type="button"
-                        className="pp-button pp-touch pp-focusable"
-                        aria-label={COPY.profile}
+                        className={`${navStyles.userMenuItem} pp-focusable`}
+                        aria-label={translations.profile_edit}
+                        role="menuitem"
                         onClick={() => {
                           setIsUserMenuOpen(false);
                           navigate('/parent/settings?tab=profile');
                         }}
                       >
-                        {COPY.profile}
+                        {translations.profile_edit}
                       </button>
                       <button
                         type="button"
-                        className="pp-button pp-touch pp-focusable"
-                        aria-label={COPY.logout}
+                        className={`${navStyles.userMenuItem} pp-focusable`}
+                        aria-label={translations.nav_logout}
+                        role="menuitem"
                         onClick={() => {
                           setIsUserMenuOpen(false);
-                          authStore.logout({ redirectToLogin: true });
+                          void logoutAuthSession();
                         }}
                       >
-                        {COPY.logout}
+                        {translations.nav_logout}
                       </button>
                     </>
                   )}
