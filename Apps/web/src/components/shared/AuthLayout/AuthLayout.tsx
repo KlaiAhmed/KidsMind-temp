@@ -45,69 +45,93 @@ const AuthLayout = ({
 
       {/* ─── Left Panel (Desktop Illustration) ────────────────────────── */}
       <div className={styles.illustrationPanel} aria-hidden="true">
-        <div className={styles.brandLogo}>
-          <RocketIcon size={32} />
-          <span>KidsMind</span>
+        {/* ── Layered background ────────────────────────────────────── */}
+        <div className={styles.illustrationBg} />
+        <div className={styles.illustrationFade} />
+
+        {/* ── Floating decorative elements ──────────────────────────── */}
+        <div className={styles.floatingElements}>
+          <span className={styles.floatingElement}>⭐</span>
+          <span className={styles.floatingElement}>📚</span>
+          <span className={styles.floatingElement}>✨</span>
+          <span className={styles.floatingElement}>🎨</span>
+          <span className={styles.floatingElement}>🌈</span>
+          <span className={styles.floatingElement}>🚀</span>
         </div>
 
-        <div className={styles.illustrationContainer}>
-          {illustrationVariant === 'login' ? (
-            <LoginIllustration />
-          ) : (
-            <RegisterIllustration />
-          )}
-        </div>
+        {/* ── Content layer ─────────────────────────────────────────── */}
+        <div className={styles.illustrationContent}>
+          <div className={styles.brandLogo}>
+            <RocketIcon size={32} />
+            <span>KidsMind</span>
+          </div>
 
-        <div className={styles.featurePills}>
-          <span className={styles.featurePill}>{translations.trust_safe}</span>
-          <span className={styles.featurePill}>{translations.trust_languages}</span>
-          <span className={styles.featurePill}>{translations.trust_levels}</span>
+          <div className={styles.illustrationContainer}>
+            {illustrationVariant === 'login' ? (
+              <LoginIllustration />
+            ) : (
+              <RegisterIllustration />
+            )}
+          </div>
+
+          {/* ── Tagline ───────────────────────────────────────────── */}
+          <div className={styles.illustrationTagline}>
+            <p>{translations.gs_illustration_tagline}</p>
+          </div>
+
+          <div className={styles.featurePills}>
+            <span className={styles.featurePill}>{translations.trust_safe}</span>
+            <span className={styles.featurePill}>{translations.trust_languages}</span>
+            <span className={styles.featurePill}>{translations.trust_levels}</span>
+          </div>
         </div>
       </div>
 
       {/* ─── Right Panel (Form) ───────────────────────────────────────── */}
       <div className={styles.formPanel}>
         <div className={styles.formTopBar}>
-          <div className={styles.languageSelector} ref={languageDropdownRef}>
+          <a href="/" className={styles.backLink}>
+            <ArrowLeft size={16} />
+            <span>KidsMind</span>
+          </a>
+
+          <div className={styles.topBarActions}>
+            <div className={styles.languageSelector} ref={languageDropdownRef}>
+              <button
+                className={styles.languageButton}
+                onClick={() => setIsLanguageDropdownOpen((prev) => !prev)}
+                aria-expanded={isLanguageDropdownOpen}
+                aria-haspopup="listbox"
+                aria-label="Open language menu"
+              >
+                <Languages size={18} aria-hidden="true" />
+              </button>
+              {isLanguageDropdownOpen && (
+                <div className={styles.languageDropdown} role="listbox" aria-label="Languages">
+                  {LANGUAGES.map((languageOption) => (
+                    <button
+                      key={languageOption.code}
+                      className={`${styles.languageOption} ${languageOption.code === language ? styles.languageOptionActive : ''}`}
+                      onClick={() => handleLanguageSelect(languageOption.code)}
+                      role="option"
+                      aria-selected={languageOption.code === language}
+                    >
+                      <span>{languageOption.label}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <button
-              className={styles.languageButton}
-              onClick={() => setIsLanguageDropdownOpen((prev) => !prev)}
-              aria-expanded={isLanguageDropdownOpen}
-              aria-haspopup="listbox"
-              aria-label="Open language menu"
+              className={styles.themeToggle}
+              onClick={onToggleTheme}
+              aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
             >
-              <Languages size={18} aria-hidden="true" />
+              {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
             </button>
-            {isLanguageDropdownOpen && (
-              <div className={styles.languageDropdown} role="listbox" aria-label="Languages">
-                {LANGUAGES.map((languageOption) => (
-                  <button
-                    key={languageOption.code}
-                    className={`${styles.languageOption} ${languageOption.code === language ? styles.languageOptionActive : ''}`}
-                    onClick={() => handleLanguageSelect(languageOption.code)}
-                    role="option"
-                    aria-selected={languageOption.code === language}
-                  >
-                    <span>{languageOption.label}</span>
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
-
-          <button
-            className={styles.themeToggle}
-            onClick={onToggleTheme}
-            aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
-          >
-            {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
-          </button>
         </div>
-
-        <a href="/" className={styles.backLink}>
-          <ArrowLeft size={16} />
-          <span>KidsMind</span>
-        </a>
 
         <div className={styles.formContent}>
           {children}
@@ -182,6 +206,10 @@ const LoginIllustration = () => {
 const RegisterIllustration = () => {
   return (
     <svg viewBox="0 0 300 280" fill="none" xmlns="http://www.w3.org/2000/svg">
+      {/* Orbiting star - placed first so it's behind the rocket */}
+      <circle r="4" fill="rgba(255,230,109,0.8)">
+        <animateMotion path="M150,140 m-70,0 a70,70 0 1,1 140,0 a70,70 0 1,1 -140,0" dur="6s" repeatCount="indefinite" />
+      </circle>
       {/* Rocket body */}
       <g transform="translate(150, 140)">
         <g>
@@ -202,11 +230,6 @@ const RegisterIllustration = () => {
           </path>
         </g>
       </g>
-      {/* Orbiting star */}
-      <circle cx="150" cy="140" r="4" fill="rgba(255,230,109,0.8)">
-        <animateTransform attributeName="transform" type="rotate" from="0 150 140" to="360 150 140" dur="6s" repeatCount="indefinite" />
-        <animateMotion path="M0,0 a70,70 0 1,1 0,0.1" dur="6s" repeatCount="indefinite" />
-      </circle>
       {/* Stars scattered around */}
       <circle cx="40" cy="40" r="3" fill="rgba(255,255,255,0.7)">
         <animate attributeName="opacity" values="1;0.3;1" dur="2s" repeatCount="indefinite" />

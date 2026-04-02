@@ -1,7 +1,8 @@
 .authLayout {
   display: grid;
   grid-template-columns: 1fr;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   background: var(--bg-primary);
 }
 
@@ -15,21 +16,161 @@
 
 .illustrationPanel {
   display: none;
-  position: relative;
+  position: sticky;
+  top: 0;
+  height: 100vh;
   overflow: hidden;
-  background: var(--gradient-cta);
-  background-size: 200% 200%;
-  animation: gradientShift 8s ease infinite;
-  padding: var(--spacing-2xl);
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  padding: var(--spacing-2xl);
   color: #FFFFFF;
 }
 
 @media (min-width: 768px) {
   .illustrationPanel {
     display: flex;
+  }
+}
+
+/* RTL: Mirror illustration panel to the right */
+[dir="rtl"] .illustrationPanel {
+  order: 2;
+}
+
+/* ─── Layered Background ───────────────────────────────────────────────────── */
+
+.illustrationBg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: linear-gradient(135deg,
+    rgba(255, 107, 53, 1) 0%,
+    rgba(78, 205, 196, 1) 50%,
+    rgba(108, 99, 255, 0.9) 100%
+  );
+  background-size: 200% 200%;
+  animation: gradientShift 12s ease infinite;
+}
+
+/* Gradient fade on inner edge for smooth panel transition */
+.illustrationFade {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  width: 80px;
+  background: linear-gradient(to inline-start, rgba(255, 255, 255, 0.15) 0%, transparent 100%);
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* ─── Floating Decorative Elements ────────────────────────────────────────── */
+
+.floatingElements {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.floatingElement {
+  position: absolute;
+  opacity: 0.6;
+  animation: gentleFloat 6s ease-in-out infinite;
+}
+
+.floatingElement:nth-child(1) {
+  top: 12%;
+  inset-inline-start: 8%;
+  font-size: 24px;
+  animation-delay: 0s;
+  animation-duration: 5s;
+}
+
+.floatingElement:nth-child(2) {
+  top: 25%;
+  inset-inline-end: 12%;
+  font-size: 20px;
+  animation-delay: -1.5s;
+  animation-duration: 6s;
+}
+
+.floatingElement:nth-child(3) {
+  top: 65%;
+  inset-inline-start: 15%;
+  font-size: 22px;
+  animation-delay: -2.5s;
+  animation-duration: 7s;
+}
+
+.floatingElement:nth-child(4) {
+  top: 78%;
+  inset-inline-end: 18%;
+  font-size: 18px;
+  animation-delay: -3s;
+  animation-duration: 5.5s;
+}
+
+.floatingElement:nth-child(5) {
+  top: 45%;
+  inset-inline-start: 5%;
+  font-size: 16px;
+  animation-delay: -4s;
+  animation-duration: 6.5s;
+}
+
+.floatingElement:nth-child(6) {
+  top: 35%;
+  inset-inline-end: 8%;
+  font-size: 28px;
+  animation-delay: -0.5s;
+  animation-duration: 7.5s;
+}
+
+/* ─── Tagline ─────────────────────────────────────────────────────────────── */
+
+.illustrationTagline {
+  position: relative;
+  z-index: 2;
+  text-align: center;
+  margin-block-start: var(--spacing-xl);
+  max-width: 280px;
+  opacity: 0;
+  animation: illustrationEntrance 0.6s ease forwards;
+  animation-delay: 0.5s;
+}
+
+.illustrationTagline p {
+  font-family: var(--font-display);
+  font-size: var(--font-size-xl);
+  font-weight: 700;
+  line-height: 1.3;
+  color: #FFFFFF;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* ─── Content layer (logo, illustration, pills) ───────────────────────────── */
+
+.illustrationContent {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  width: 100%;
+}
+
+@keyframes illustrationEntrance {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
@@ -59,6 +200,9 @@
   font-size: var(--font-size-2xl);
   font-weight: 700;
   color: #FFFFFF;
+  opacity: 0;
+  animation: illustrationEntrance 0.6s ease forwards;
+  animation-delay: 0.1s;
 }
 
 .brandLogoMobile {
@@ -78,6 +222,9 @@
   justify-content: center;
   max-width: 320px;
   width: 100%;
+  opacity: 0;
+  animation: illustrationEntrance 0.7s ease forwards;
+  animation-delay: 0.3s;
 }
 
 .featurePills {
@@ -86,6 +233,9 @@
   flex-wrap: wrap;
   justify-content: center;
   margin-block-start: var(--spacing-xl);
+  opacity: 0;
+  animation: illustrationEntrance 0.6s ease forwards;
+  animation-delay: 0.7s;
 }
 
 .featurePill {
@@ -101,22 +251,33 @@
   color: #FFFFFF;
 }
 
-/* ─── Right Panel (Form) ─────────────────────────────────────────────────── */
-
 .formPanel {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100vh;
   overflow-y: auto;
+  overflow-x: hidden;
   background: var(--bg-primary);
+  scroll-behavior: smooth;
+}
+
+/* RTL: Mirror form panel to the left */
+[dir="rtl"] .formPanel {
+  order: 1;
 }
 
 .formTopBar {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: var(--spacing-md);
   padding: var(--spacing-md) var(--spacing-lg);
+}
+
+.topBarActions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
 }
 
 .languageSelector {
@@ -213,16 +374,18 @@
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-xs);
-  padding: var(--spacing-sm) var(--spacing-lg);
   font-family: var(--font-display);
   font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--text-secondary);
   transition: color 0.2s ease;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-sm);
 }
 
 .backLink:hover {
   color: var(--accent-main);
+  background: var(--bg-surface-hover);
 }
 
 .backLink:focus-visible {
@@ -234,7 +397,7 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: var(--spacing-md) var(--spacing-lg) var(--spacing-2xl);
+  padding: var(--spacing-md) var(--spacing-lg) var(--spacing-3xl);
   max-width: 480px;
   width: 100%;
   margin-inline: auto;
@@ -242,7 +405,7 @@
 
 @media (min-width: 768px) {
   .formContent {
-    padding: var(--spacing-xl) var(--spacing-2xl) var(--spacing-2xl);
+    padding: var(--spacing-xl) var(--spacing-2xl) var(--spacing-3xl);
   }
 }
 
@@ -251,7 +414,23 @@
     animation: none;
   }
 
+  .illustrationBg {
+    animation: none;
+  }
+
+  .floatingElement {
+    animation: none;
+  }
+
   .mobileBanner {
     animation: none;
+  }
+
+  .brandLogo,
+  .illustrationContainer,
+  .illustrationTagline,
+  .featurePills {
+    animation: none;
+    opacity: 1;
   }
 }

@@ -85,6 +85,9 @@ export interface TranslationMap {
   cta_footnote: string;
   footer_tagline: string;
 
+  // ─── Auth Layout Illustration ────────────────────────────────────────────────
+  gs_illustration_tagline: string;
+
   // ─── Login Page ───────────────────────────────────────────────────────────────
   login_page_title: string;
   login_page_subtitle: string;

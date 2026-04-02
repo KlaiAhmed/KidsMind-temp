@@ -425,16 +425,20 @@
   border: none;
   border-radius: var(--radius-md);
   cursor: pointer;
-  min-height: 48px;
-  transition: background 0.2s ease, transform 0.1s ease;
+  min-height: 56px;
+  transition: background 0.2s ease, transform 0.1s ease, box-shadow 0.2s ease;
+  box-shadow: 0 4px 16px rgba(255, 107, 53, 0.3);
 }
 
 .submitButton:hover {
   background: var(--accent-main-hover);
+  box-shadow: 0 6px 20px rgba(255, 107, 53, 0.4);
+  transform: translateY(-1px);
 }
 
 .submitButton:active {
-  transform: scale(0.98);
+  transform: scale(0.98) translateY(0);
+  box-shadow: 0 2px 8px rgba(255, 107, 53, 0.3);
 }
 
 .submitButton:focus-visible {

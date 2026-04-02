@@ -74,7 +74,11 @@ const translations: Translations = {
     cta_subtitle: 'Join thousands of families already learning with KidsMind. Free to start, no credit card required.',
     cta_button: 'Create Free Account',
     cta_footnote: 'Free plan includes 20 conversations per month. Upgrade anytime.',
-    footer_tagline: 'Nurturing curious minds with the power of safe AI.',
+footer_tagline: 'Nurturing curious minds with the power of safe AI.',
+
+  // ─── Auth Layout Illustration ───────────────────────────────────────
+  gs_illustration_tagline: 'Where every question sparks a new adventure',
+
 
     // ─── Login Page ─────────────────────────────────────────────────────
     login_page_title: 'Welcome back',
@@ -276,8 +280,12 @@ const translations: Translations = {
     cta_title: 'Prêt à éveiller leur curiosité ?',
     cta_subtitle: 'Rejoignez des milliers de familles qui apprennent déjà avec KidsMind. Gratuit pour commencer, sans carte bancaire.',
     cta_button: 'Créer un compte gratuit',
-    cta_footnote: 'Le plan gratuit inclut 20 conversations par mois. Mise à niveau possible à tout moment.',
-    footer_tagline: 'Nourrir les esprits curieux avec la puissance d\'une IA sûre.',
+cta_footnote: 'Le plan gratuit inclut 20 conversations par mois. Mise à niveau possible à tout moment.',
+footer_tagline: 'Nourrir les esprits curieux avec la puissance d\'une IA sûre.',
+
+  // ─── Auth Layout Illustration ───────────────────────────────────────
+  gs_illustration_tagline: 'Où chaque question allume une nouvelle aventure',
+
 
     // ─── Login Page ─────────────────────────────────────────────────────
     login_page_title: 'Bon retour',
@@ -480,7 +488,11 @@ const translations: Translations = {
     cta_subtitle: 'Únete a miles de familias que ya aprenden con KidsMind. Gratis para empezar, sin tarjeta de crédito.',
     cta_button: 'Crear cuenta gratuita',
     cta_footnote: 'El plan gratuito incluye 20 conversaciones al mes. Mejora en cualquier momento.',
-    footer_tagline: 'Nutriendo mentes curiosas con el poder de una IA segura.',
+footer_tagline: 'Nutriendo mentes curiosas con el poder de una IA segura.',
+
+  // ─── Auth Layout Illustration ───────────────────────────────────────
+  gs_illustration_tagline: 'Donde cada pregunta enciende una nueva aventura',
+
 
     // ─── Login Page ─────────────────────────────────────────────────────
     login_page_title: 'Bienvenido de nuevo',
@@ -681,9 +693,13 @@ const translations: Translations = {
     safety_point_4: 'Conforme a COPPA, GDPR-K e standard internazionali sulla privacy dei minori.',
     cta_title: 'Pronti a risvegliare la loro curiosità?',
     cta_subtitle: 'Unisciti a migliaia di famiglie che già imparano con KidsMind. Gratuito per iniziare, nessuna carta di credito richiesta.',
-    cta_button: 'Crea un account gratuito',
-    cta_footnote: 'Il piano gratuito include 20 conversazioni al mese. Aggiorna quando vuoi.',
-    footer_tagline: 'Nutrire menti curiose con il potere di un\'IA sicura.',
+cta_button: 'Crea un account gratuito',
+cta_footnote: 'Il piano gratuito include 20 conversazioni al mese. Aggiorna quando vuoi.',
+footer_tagline: 'Nutrire menti curiose con il potere di un\'IA sicura.',
+
+  // ─── Auth Layout Illustration ───────────────────────────────────────
+  gs_illustration_tagline: 'Dove ogni domanda accende una nuova avventura',
+
 
     // ─── Login Page ─────────────────────────────────────────────────────
     login_page_title: 'Bentornato',
@@ -886,7 +902,11 @@ const translations: Translations = {
     cta_subtitle: 'انضم لآلاف العائلات التي تتعلّم بالفعل مع KidsMind. مجاني للبدء، بدون بطاقة ائتمان.',
     cta_button: 'أنشئ حساباً مجانياً',
     cta_footnote: 'الخطة المجانية تشمل ٢٠ محادثة شهرياً. يمكنك الترقية في أي وقت.',
-    footer_tagline: 'رعاية العقول الفضولية بقوة الذكاء الاصطناعي الآمن.',
+footer_tagline: 'رعاية العقول الفضولية بقوة الذكاء الاصطناعي الآمن.',
+
+  // ─── Auth Layout Illustration ───────────────────────────────────────
+  gs_illustration_tagline: 'حيث كل سؤال يضيء مغامرة جديدة',
+
 
     // ─── Login Page ─────────────────────────────────────────────────────
     login_page_title: 'مرحباً بعودتك',
@@ -1089,7 +1109,11 @@ const translations: Translations = {
     cta_subtitle: '加入数千个已经在KidsMind学习的家庭。免费开始，无需信用卡。',
     cta_button: '创建免费账户',
     cta_footnote: '免费计划每月包含20次对话。随时可升级。',
-    footer_tagline: '以安全AI的力量，培育好奇的心灵。',
+footer_tagline: '以安全AI的力量，培育好奇的心灵。',
+
+  // ─── Auth Layout Illustration ───────────────────────────────────────
+  gs_illustration_tagline: '每个问题都能点亮新的冒险',
+
 
     // ─── Login Page ─────────────────────────────────────────────────────
     login_page_title: '欢迎回来',
