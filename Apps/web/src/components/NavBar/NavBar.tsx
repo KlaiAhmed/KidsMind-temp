@@ -27,7 +27,7 @@ interface NavBarProps {
   isAuthenticated: boolean;
 }
 
-const PARENT_PROFILE_ROUTE = '/parent-profile';
+const PARENT_PROFILE_ROUTE = '/parent/dashboard';
 const PIN_LENGTH = 4;
 type MobileMenuView = 'main' | 'language' | 'theme';
 
@@ -69,7 +69,6 @@ const NavBar = ({
   const [isLanguageDropdownOpen, setIsLanguageDropdownOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [activeMobileMenu, setActiveMobileMenu] = useState<MobileMenuView>('main');
-  const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
   const [pinDigits, setPinDigits] = useState<string[]>(Array(PIN_LENGTH).fill(''));
@@ -77,7 +76,6 @@ const NavBar = ({
   const [isVerifyingPin, setIsVerifyingPin] = useState(false);
   const [isPinErrorShaking, setIsPinErrorShaking] = useState(false);
   const languageDropdownRef = useRef<HTMLDivElement>(null);
-  const userDropdownRef = useRef<HTMLDivElement>(null);
   const pinInputRefs = useRef<Array<HTMLInputElement | null>>([]);
   const lastSubmittedPinRef = useRef<string | null>(null);
   const shouldHideNav = isHiddenByScroll && !isMobileMenuOpen;
@@ -85,7 +83,6 @@ const NavBar = ({
 
   const closeAllDropdownMenus = useCallback(() => {
     setIsLanguageDropdownOpen(false);
-    setIsUserDropdownOpen(false);
   }, []);
 
   const handleDesktopLanguageSelect = useCallback(
@@ -113,11 +110,6 @@ const NavBar = ({
     },
     [onToggleTheme, theme]
   );
-
-  const handleDesktopUserMenuToggle = useCallback(() => {
-    setIsLanguageDropdownOpen(false);
-    setIsUserDropdownOpen((previousValue) => !previousValue);
-  }, []);
 
   const handleMobileMenuToggle = useCallback(() => {
     setIsMobileMenuOpen((previousValue) => {
@@ -380,10 +372,6 @@ const NavBar = ({
       if (languageDropdownRef.current && !languageDropdownRef.current.contains(e.target as Node)) {
         setIsLanguageDropdownOpen(false);
       }
-
-      if (userDropdownRef.current && !userDropdownRef.current.contains(e.target as Node)) {
-        setIsUserDropdownOpen(false);
-      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -480,282 +468,255 @@ const NavBar = ({
             </button>
 
             {isAuthenticated ? (
-              <div className={styles.userMenuWrapper} ref={userDropdownRef}>
-                <button
+              {/* User icon now directly links to Dashboard */}<button
                   type="button"
                   className={styles.userButton}
-                  aria-label={translations.nav_user_account}
-                  aria-haspopup="menu"
-                  aria-expanded={isUserDropdownOpen}
-                  onClick={handleDesktopUserMenuToggle}
+                  aria-label={translations.nav_parent_profile}
+                  onClick={handleParentProfileClick}
                 >
                   <User size={20} strokeWidth={2} aria-hidden="true" />
                 </button>
-                {isUserDropdownOpen && (
-                  <div className={styles.userDropdown} role="menu" aria-label={translations.nav_user_menu_label}>
-                    <button
-                      type="button"
-                      className={styles.userMenuItem}
-                      role="menuitem"
-                      onClick={() => {
-                        void handleParentProfileClick();
-                      }}
-                    >
-                      {translations.nav_parent_profile}
-                    </button>
-                    <button
-                      type="button"
-                      className={styles.userMenuItem}
-                      role="menuitem"
-                      onClick={() => void handleLogout()}
-                      disabled={isLoggingOut}
-                    >
-                      {translations.nav_logout}
-                    </button>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <>
-                <Link to="/login" className={styles.loginButton}>{translations.nav_login}</Link>
-                <Link to="/get-started" className={styles.startButton}>{translations.nav_start}</Link>
-              </>
-            )}
-          </div>
+              ) : (
+                <>
+                  <Link to="/login" className={styles.loginButton}>{translations.nav_login}</Link>
+                  <Link to="/get-started" className={styles.startButton}>{translations.nav_start}</Link>
+                </>
+              )}
+            </div>
 
-          <button
-            className={styles.mobileMenuButton}
-            onClick={handleMobileMenuToggle}
-            aria-expanded={isMobileMenuOpen}
-            aria-label={isMobileMenuOpen ? translations.nav_menu_close : translations.nav_menu_open}
-          >
-            {isMobileMenuOpen ? <X size={20} strokeWidth={2} /> : <Menu size={20} strokeWidth={2} />}
-            <span className={styles.mobileMenuLabel}>{translations.nav_menu_label}</span>
-          </button>
-        </div>
-      </nav>
-
-      <div
-        className={`${styles.mobileDrawer} ${isMobileMenuOpen ? styles.mobileDrawerOpen : styles.mobileDrawerClosed}`}
-        aria-hidden={!isMobileMenuOpen}
-      >
-        <div className={styles.mobileMenuViewport}>
-          <div className={styles.mobileMenuTrack} style={{ transform: `translateX(-${mobileMenuOffset}%)` }}>
-            <section className={styles.mobileMenuPanel} aria-hidden={activeMobileMenu !== 'main'}>
-              <div className={styles.mobileMenuSection}>
-                {isAuthenticated ? (
-                  <>
-                    <button
-                      type="button"
-                      className={styles.userMenuItem}
-                      onClick={() => {
-                        void handleParentProfileClick();
-                      }}
-                    >
-                      {translations.nav_parent_profile}
-                    </button>
-                    <button
-                      type="button"
-                      className={styles.userMenuItem}
-                      onClick={() => void handleLogout()}
-                      disabled={isLoggingOut}
-                    >
-                      {translations.nav_logout}
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <Link to="/login" className={styles.loginButton} onClick={() => setIsMobileMenuOpen(false)}>{translations.nav_login}</Link>
-                    <Link to="/get-started" className={styles.startButton} onClick={() => setIsMobileMenuOpen(false)}>{translations.nav_start}</Link>
-                  </>
-                )}
-              </div>
-
-              <div className={styles.mobileMenuSection}>
-                <button
-                  type="button"
-                  className={styles.mobileSubmenuTrigger}
-                  onClick={() => setActiveMobileMenu('language')}
-                  aria-haspopup="listbox"
-                >
-                  <span>{translations.nav_change_language}</span>
-                  <ChevronRight size={18} strokeWidth={2} aria-hidden="true" />
-                </button>
-              </div>
-
-              <div className={styles.mobileMenuSection}>
-                <button
-                  type="button"
-                  className={styles.mobileSubmenuTrigger}
-                  onClick={() => setActiveMobileMenu('theme')}
-                  aria-haspopup="listbox"
-                >
-                  <span>{translations.nav_change_theme}</span>
-                  <ChevronRight size={18} strokeWidth={2} aria-hidden="true" />
-                </button>
-              </div>
-            </section>
-
-            <section className={styles.mobileMenuPanel} aria-hidden={activeMobileMenu !== 'language'}>
-              <div className={styles.mobileSubmenuHeader}>
-                <button
-                  type="button"
-                  className={styles.mobileBackButton}
-                  onClick={() => setActiveMobileMenu('main')}
-                >
-                  <ChevronLeft size={18} strokeWidth={2} aria-hidden="true" />
-                  <span>{translations.gs_back_button}</span>
-                </button>
-                <h3 className={styles.mobileSubmenuTitle}>{translations.nav_change_language}</h3>
-              </div>
-
-              <div className={styles.mobileMenuSection} role="listbox" aria-label={translations.nav_language_menu_label}>
-                {LANGUAGES.map((languageOption) => (
-                  <button
-                    key={languageOption.code}
-                    className={`${styles.mobileOptionButton} ${languageOption.code === language ? styles.mobileOptionButtonActive : ''}`}
-                    onClick={() => handleMobileLanguageSelect(languageOption.code)}
-                    role="option"
-                    aria-selected={languageOption.code === language}
-                  >
-                    <span>{languageOption.label}</span>
-                  </button>
-                ))}
-              </div>
-            </section>
-
-            <section className={styles.mobileMenuPanel} aria-hidden={activeMobileMenu !== 'theme'}>
-              <div className={styles.mobileSubmenuHeader}>
-                <button
-                  type="button"
-                  className={styles.mobileBackButton}
-                  onClick={() => setActiveMobileMenu('main')}
-                >
-                  <ChevronLeft size={18} strokeWidth={2} aria-hidden="true" />
-                  <span>{translations.gs_back_button}</span>
-                </button>
-                <h3 className={styles.mobileSubmenuTitle}>{translations.nav_change_theme}</h3>
-              </div>
-
-              <div className={styles.mobileMenuSection} role="listbox" aria-label={translations.nav_change_theme}>
-                <button
-                  type="button"
-                  className={`${styles.mobileOptionButton} ${theme === 'light' ? styles.mobileOptionButtonActive : ''}`}
-                  onClick={() => handleThemeSelect('light')}
-                  role="option"
-                  aria-selected={theme === 'light'}
-                >
-                  <span>{translations.nav_theme_light}</span>
-                </button>
-                <button
-                  type="button"
-                  className={`${styles.mobileOptionButton} ${theme === 'dark' ? styles.mobileOptionButtonActive : ''}`}
-                  onClick={() => handleThemeSelect('dark')}
-                  role="option"
-                  aria-selected={theme === 'dark'}
-                >
-                  <span>{translations.nav_theme_dark}</span>
-                </button>
-              </div>
-            </section>
-          </div>
-        </div>
-      </div>
-
-      {isPinModalOpen && (
-        <div
-          className={styles.pinModalBackdrop}
-          role="presentation"
-          onClick={() => {
-            closePinModal();
-          }}
-        >
-          <div
-            className={`${styles.pinModal} ${isPinErrorShaking ? styles.pinModalShake : ''}`}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="parent-pin-modal-title"
-            aria-describedby="parent-pin-modal-subtitle"
-            onClick={(event) => event.stopPropagation()}
-          >
             <button
-              type="button"
-              className={styles.pinModalCloseButton}
-              onClick={closePinModal}
-              aria-label={translations.nav_pin_cancel}
-              disabled={isVerifyingPin}
+              className={styles.mobileMenuButton}
+              onClick={handleMobileMenuToggle}
+              aria-expanded={isMobileMenuOpen}
+              aria-label={isMobileMenuOpen ? translations.nav_menu_close : translations.nav_menu_open}
             >
-              <X size={18} strokeWidth={2} aria-hidden="true" />
+              {isMobileMenuOpen ? <X size={20} strokeWidth={2} /> : <Menu size={20} strokeWidth={2} />}
+              <span className={styles.mobileMenuLabel}>{translations.nav_menu_label}</span>
             </button>
+          </div>
+        </nav>
 
-            <h3 id="parent-pin-modal-title" className={styles.pinModalTitle}>
-              {translations.nav_pin_title}
-            </h3>
-            <p id="parent-pin-modal-subtitle" className={styles.pinModalSubtitle}>
-              {translations.nav_pin_subtitle}
-            </p>
+        <div
+          className={`${styles.mobileDrawer} ${isMobileMenuOpen ? styles.mobileDrawerOpen : styles.mobileDrawerClosed}`}
+          aria-hidden={!isMobileMenuOpen}
+        >
+          <div className={styles.mobileMenuViewport}>
+            <div className={styles.mobileMenuTrack} style={{ transform: `translateX(-${mobileMenuOffset}%)` }}>
+              <section className={styles.mobileMenuPanel} aria-hidden={activeMobileMenu !== 'main'}>
+                <div className={styles.mobileMenuSection}>
+                  {isAuthenticated ? (
+                    <>
+                      <button
+                        type="button"
+                        className={styles.userMenuItem}
+                        onClick={() => {
+                          void handleParentProfileClick();
+                        }}
+                      >
+                        {translations.nav_parent_profile}
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.userMenuItem}
+                        onClick={() => void handleLogout()}
+                        disabled={isLoggingOut}
+                      >
+                        {translations.nav_logout}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <Link to="/login" className={styles.loginButton} onClick={() => setIsMobileMenuOpen(false)}>{translations.nav_login}</Link>
+                      <Link to="/get-started" className={styles.startButton} onClick={() => setIsMobileMenuOpen(false)}>{translations.nav_start}</Link>
+                    </>
+                  )}
+                </div>
 
-            <div className={styles.pinForm}>
-              <label htmlFor="parent-pin-digit-0" className={styles.pinLabel}>
-                {translations.gs_pin_label}
-              </label>
+                <div className={styles.mobileMenuSection}>
+                  <button
+                    type="button"
+                    className={styles.mobileSubmenuTrigger}
+                    onClick={() => setActiveMobileMenu('language')}
+                    aria-haspopup="listbox"
+                  >
+                    <span>{translations.nav_change_language}</span>
+                    <ChevronRight size={18} strokeWidth={2} aria-hidden="true" />
+                  </button>
+                </div>
 
-              <div className={styles.pinInputsRow}>
-                {Array.from({ length: PIN_LENGTH }, (_, index) => (
-                  <input
-                    key={index}
-                    id={`parent-pin-digit-${index}`}
-                    ref={(element) => {
-                      pinInputRefs.current[index] = element;
-                    }}
-                    className={styles.pinInputBox}
-                    type="password"
-                    inputMode="numeric"
-                    autoComplete={index === 0 ? 'one-time-code' : 'off'}
-                    maxLength={1}
-                    value={pinDigits[index]}
-                    onChange={(event) => handlePinDigitChange(index, event.target.value)}
-                    onKeyDown={(event) => handlePinDigitKeyDown(index, event)}
-                    onPaste={handlePinPaste}
-                    aria-label={`${translations.gs_pin_label} ${index + 1}`}
-                    aria-invalid={pinError ? 'true' : 'false'}
-                    aria-describedby={pinError ? 'parent-pin-modal-error' : undefined}
-                    disabled={isVerifyingPin}
-                  />
-                ))}
-              </div>
+                <div className={styles.mobileMenuSection}>
+                  <button
+                    type="button"
+                    className={styles.mobileSubmenuTrigger}
+                    onClick={() => setActiveMobileMenu('theme')}
+                    aria-haspopup="listbox"
+                  >
+                    <span>{translations.nav_change_theme}</span>
+                    <ChevronRight size={18} strokeWidth={2} aria-hidden="true" />
+                  </button>
+                </div>
+              </section>
 
-              <p className={styles.pinHint}>{translations.gs_pin_hint}</p>
+              <section className={styles.mobileMenuPanel} aria-hidden={activeMobileMenu !== 'language'}>
+                <div className={styles.mobileSubmenuHeader}>
+                  <button
+                    type="button"
+                    className={styles.mobileBackButton}
+                    onClick={() => setActiveMobileMenu('main')}
+                  >
+                    <ChevronLeft size={18} strokeWidth={2} aria-hidden="true" />
+                    <span>{translations.gs_back_button}</span>
+                  </button>
+                  <h3 className={styles.mobileSubmenuTitle}>{translations.nav_change_language}</h3>
+                </div>
 
-              {isVerifyingPin && (
-                <p className={styles.pinStatus}>
-                  <span className={styles.pinStatusSpinner} aria-hidden="true" />
-                  <span>{translations.nav_pin_verifying}</span>
-                </p>
-              )}
+                <div className={styles.mobileMenuSection} role="listbox" aria-label={translations.nav_language_menu_label}>
+                  {LANGUAGES.map((languageOption) => (
+                    <button
+                      key={languageOption.code}
+                      className={`${styles.mobileOptionButton} ${languageOption.code === language ? styles.mobileOptionButtonActive : ''}`}
+                      onClick={() => handleMobileLanguageSelect(languageOption.code)}
+                      role="option"
+                      aria-selected={languageOption.code === language}
+                    >
+                      <span>{languageOption.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </section>
 
-              {pinError && (
-                <p id="parent-pin-modal-error" className={styles.pinError}>
-                  {pinError}
-                </p>
-              )}
+              <section className={styles.mobileMenuPanel} aria-hidden={activeMobileMenu !== 'theme'}>
+                <div className={styles.mobileSubmenuHeader}>
+                  <button
+                    type="button"
+                    className={styles.mobileBackButton}
+                    onClick={() => setActiveMobileMenu('main')}
+                  >
+                    <ChevronLeft size={18} strokeWidth={2} aria-hidden="true" />
+                    <span>{translations.gs_back_button}</span>
+                  </button>
+                  <h3 className={styles.mobileSubmenuTitle}>{translations.nav_change_theme}</h3>
+                </div>
 
-              <div className={styles.pinActions}>
-                <button
-                  type="button"
-                  className={styles.pinClearButton}
-                  onClick={handleClearPinDigits}
-                  disabled={isVerifyingPin}
-                >
-                  {translations.nav_pin_clear}
-                </button>
-              </div>
+                <div className={styles.mobileMenuSection} role="listbox" aria-label={translations.nav_change_theme}>
+                  <button
+                    type="button"
+                    className={`${styles.mobileOptionButton} ${theme === 'light' ? styles.mobileOptionButtonActive : ''}`}
+                    onClick={() => handleThemeSelect('light')}
+                    role="option"
+                    aria-selected={theme === 'light'}
+                  >
+                    <span>{translations.nav_theme_light}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.mobileOptionButton} ${theme === 'dark' ? styles.mobileOptionButtonActive : ''}`}
+                    onClick={() => handleThemeSelect('dark')}
+                    role="option"
+                    aria-selected={theme === 'dark'}
+                  >
+                    <span>{translations.nav_theme_dark}</span>
+                  </button>
+                </div>
+              </section>
             </div>
           </div>
         </div>
-      )}
-    </>
-  );
-};
+
+        {isPinModalOpen && (
+          <div
+            className={styles.pinModalBackdrop}
+            role="presentation"
+            onClick={() => {
+              closePinModal();
+            }}
+          >
+            <div
+              className={`${styles.pinModal} ${isPinErrorShaking ? styles.pinModalShake : ''}`}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="parent-pin-modal-title"
+              aria-describedby="parent-pin-modal-subtitle"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <button
+                type="button"
+                className={styles.pinModalCloseButton}
+                onClick={closePinModal}
+                aria-label={translations.nav_pin_cancel}
+                disabled={isVerifyingPin}
+              >
+                <X size={18} strokeWidth={2} aria-hidden="true" />
+              </button>
+
+              <h3 id="parent-pin-modal-title" className={styles.pinModalTitle}>
+                {translations.nav_pin_title}
+              </h3>
+              <p id="parent-pin-modal-subtitle" className={styles.pinModalSubtitle}>
+                {translations.nav_pin_subtitle}
+              </p>
+
+              <div className={styles.pinForm}>
+                <label htmlFor="parent-pin-digit-0" className={styles.pinLabel}>
+                  {translations.gs_pin_label}
+                </label>
+
+                <div className={styles.pinInputsRow}>
+                  {Array.from({ length: PIN_LENGTH }, (_, index) => (
+                    <input
+                      key={index}
+                      id={`parent-pin-digit-${index}`}
+                      ref={(element) => {
+                        pinInputRefs.current[index] = element;
+                      }}
+                      className={styles.pinInputBox}
+                      type="password"
+                      inputMode="numeric"
+                      autoComplete={index === 0 ? 'one-time-code' : 'off'}
+                      maxLength={1}
+                      value={pinDigits[index]}
+                      onChange={(event) => handlePinDigitChange(index, event.target.value)}
+                      onKeyDown={(event) => handlePinDigitKeyDown(index, event)}
+                      onPaste={handlePinPaste}
+                      aria-label={`${translations.gs_pin_label} ${index + 1}`}
+                      aria-invalid={pinError ? 'true' : 'false'}
+                      aria-describedby={pinError ? 'parent-pin-modal-error' : undefined}
+                      disabled={isVerifyingPin}
+                    />
+                  ))}
+                </div>
+
+                <p className={styles.pinHint}>{translations.gs_pin_hint}</p>
+
+                {isVerifyingPin && (
+                  <p className={styles.pinStatus}>
+                    <span className={styles.pinStatusSpinner} aria-hidden="true" />
+                    <span>{translations.nav_pin_verifying}</span>
+                  </p>
+                )}
+
+                {pinError && (
+                  <p id="parent-pin-modal-error" className={styles.pinError}>
+                    {pinError}
+                  </p>
+                )}
+
+                <div className={styles.pinActions}>
+                  <button
+                    type="button"
+                    className={styles.pinClearButton}
+                    onClick={handleClearPinDigits}
+                    disabled={isVerifyingPin}
+                  >
+                    {translations.nav_pin_clear}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </>
+    );
+  };
 
 export default NavBar;

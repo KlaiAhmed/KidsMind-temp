@@ -7,6 +7,7 @@ import '../styles/parent-portal.css';
 
 const ParentLayout = lazy(() => import('../layouts/ParentLayout'));
 const DashboardPage = lazy(() => import('../pages/parent/DashboardPage'));
+const ProfilePage = lazy(() => import('../pages/parent/ProfilePage'));
 const ChildProfilesPage = lazy(() => import('../pages/parent/ChildProfilesPage'));
 const InsightsPage = lazy(() => import('../pages/parent/InsightsPage'));
 const SettingsPage = lazy(() => import('../pages/parent/SettingsPage'));
@@ -61,12 +62,20 @@ export const ParentRoutes = (
         </Suspense>
       )}
     >
-      <Route index element={<Navigate to="dashboard" replace />} />
+      <Route index element={<Navigate to="profile" replace />} />
       <Route
         path="dashboard"
         element={(
           <Suspense fallback={<LoadingFallback />}>
             <DashboardPage />
+          </Suspense>
+        )}
+      />
+      <Route
+        path="profile"
+        element={(
+          <Suspense fallback={<LoadingFallback />}>
+            <ProfilePage />
           </Suspense>
         )}
       />
