@@ -8,6 +8,7 @@ import { apiClient } from '../../lib/api';
 import { logout } from '../../lib/logout';
 import { queryKeys } from '../../lib/queryKeys';
 import { ModernInput, ModernSelect } from '../../components/shared/ModernInput';
+import { ModernSwitch } from '../../components/shared/ModernSwitch';
 import PasswordField from '../../components/shared/PasswordField/PasswordField';
 import { PinInput } from '../../components/shared/PinInput';
 import '../../styles/parent-portal.css';
@@ -558,44 +559,41 @@ const SettingsPage = () => {
               <h2 className="pp-title">Consent</h2>
 
               <div className="pp-toggle-row" style={{ marginTop: '0.75rem' }}>
-                <span>{COPY.notificationsEmail}</span>
-                <button
-                  type="button"
-                  className={`pp-switch pp-touch pp-focusable ${consentForm.notificationsEmail ? 'pp-switch-on' : ''}`}
-                  aria-label={COPY.notificationsEmail}
-                  onClick={() => {
-                    updateConsentForm((current) => ({ ...current, notificationsEmail: !current.notificationsEmail }));
-                  }}
-                />
-              </div>
+            <span>{COPY.notificationsEmail}</span>
+            <ModernSwitch
+              checked={consentForm.notificationsEmail}
+              ariaLabel={COPY.notificationsEmail}
+              onChange={(checked) => {
+                updateConsentForm((current) => ({ ...current, notificationsEmail: checked }));
+              }}
+            />
+          </div>
 
               <div className="pp-toggle-row" style={{ marginTop: '0.5rem' }}>
-                <span>{COPY.notificationsPush}</span>
-                <button
-                  type="button"
-                  className={`pp-switch pp-touch pp-focusable ${consentForm.notificationsPush ? 'pp-switch-on' : ''}`}
-                  aria-label={COPY.notificationsPush}
-                  onClick={() => {
-                    updateConsentForm((current) => ({ ...current, notificationsPush: !current.notificationsPush }));
-                  }}
-                />
-              </div>
+            <span>{COPY.notificationsPush}</span>
+            <ModernSwitch
+              checked={consentForm.notificationsPush}
+              ariaLabel={COPY.notificationsPush}
+              onChange={(checked) => {
+                updateConsentForm((current) => ({ ...current, notificationsPush: checked }));
+              }}
+            />
+          </div>
 
               <div className="pp-toggle-row" style={{ marginTop: '0.5rem' }}>
-                <span>{COPY.optOutAiTraining}</span>
-                <button
-                  type="button"
-                  className={`pp-switch pp-touch pp-focusable ${!consentForm.consentAnalytics ? 'pp-switch-on' : ''}`}
-                  aria-label={COPY.optOutAiTraining}
-                  onClick={() => {
-                    if (consentForm.consentAnalytics) {
-                      setIsAnalyticsDialogOpen(true);
-                    } else {
-                      updateConsentForm((current) => ({ ...current, consentAnalytics: true }));
-                    }
-                  }}
-                />
-              </div>
+            <span>{COPY.optOutAiTraining}</span>
+            <ModernSwitch
+              checked={!consentForm.consentAnalytics}
+              ariaLabel={COPY.optOutAiTraining}
+              onChange={(checked) => {
+                if (checked) {
+                  setIsAnalyticsDialogOpen(true);
+                } else {
+                  updateConsentForm((current) => ({ ...current, consentAnalytics: true }));
+                }
+              }}
+            />
+          </div>
 
               {isConsentDirty && (
                 <button
@@ -642,34 +640,32 @@ const SettingsPage = () => {
           <section style={{ marginTop: '1.25rem', display: 'grid', gap: '1rem' }}>
             <article className="pp-card">
               <div className="pp-toggle-row">
-                <span>{COPY.reduceMotion}</span>
-                <button
-                  type="button"
-                  className={`pp-switch pp-touch pp-focusable ${accessibility.reduceMotion ? 'pp-switch-on' : ''}`}
-                  aria-label={COPY.reduceMotion}
-                  onClick={() => {
-                    setAccessibility((current) => ({
-                      ...current,
-                      reduceMotion: !current.reduceMotion,
-                    }));
-                  }}
-                />
-              </div>
+            <span>{COPY.reduceMotion}</span>
+            <ModernSwitch
+              checked={accessibility.reduceMotion}
+              ariaLabel={COPY.reduceMotion}
+              onChange={(checked) => {
+                setAccessibility((current) => ({
+                  ...current,
+                  reduceMotion: checked,
+                }));
+              }}
+            />
+          </div>
 
               <div className="pp-toggle-row" style={{ marginTop: '0.5rem' }}>
-                <span>{COPY.highContrast}</span>
-                <button
-                  type="button"
-                  className={`pp-switch pp-touch pp-focusable ${accessibility.highContrast ? 'pp-switch-on' : ''}`}
-                  aria-label={COPY.highContrast}
-                  onClick={() => {
-                    setAccessibility((current) => ({
-                      ...current,
-                      highContrast: !current.highContrast,
-                    }));
-                  }}
-                />
-              </div>
+            <span>{COPY.highContrast}</span>
+            <ModernSwitch
+              checked={accessibility.highContrast}
+              ariaLabel={COPY.highContrast}
+              onChange={(checked) => {
+                setAccessibility((current) => ({
+                  ...current,
+                  highContrast: checked,
+                }));
+              }}
+            />
+          </div>
 
               <div style={{ marginTop: '0.75rem' }}>
                 <ModernSelect
