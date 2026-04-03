@@ -11,7 +11,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Sun, Moon, Menu, X, Languages, User, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { ThemeMode, LanguageCode, TranslationMap } from '../../types';
 import { LANGUAGES } from '../../utils/constants';
-import { useScrollPosition } from '../../hooks/useScrollPosition';
+import { useScrollStore } from '../../store/scroll.store';
 import { apiBaseUrl } from '../../utils/api';
 import { getCsrfHeader } from '../../utils/csrf';
 import { logoutAuthSession } from '../../lib/authSession';
@@ -65,7 +65,7 @@ const NavBar = ({
   isAuthenticated,
 }: NavBarProps) => {
   const navigate = useNavigate();
-  const { isAtPageTop, isHiddenByScroll } = useScrollPosition();
+  const { isAtPageTop, isHiddenByScroll } = useScrollStore();
   const [isLanguageDropdownOpen, setIsLanguageDropdownOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [activeMobileMenu, setActiveMobileMenu] = useState<MobileMenuView>('main');

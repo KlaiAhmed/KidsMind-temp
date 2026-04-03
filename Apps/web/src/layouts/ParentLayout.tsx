@@ -18,7 +18,7 @@ import {
 import NavBar from '../components/NavBar/NavBar';
 import { useLanguage } from '../hooks/useLanguage';
 import { useTheme } from '../hooks/useTheme';
-import { useScrollPosition } from '../hooks/useScrollPosition';
+import { useScrollStore } from '../store/scroll.store';
 import { childStore, useChildStore } from '../store/child.store';
 import { useCurrentUser } from '../hooks/api/useCurrentUser';
 import { useChildren } from '../hooks/api/useChildren';
@@ -40,7 +40,7 @@ const ParentLayout = () => {
   const { activeChild } = useChildStore();
   const userQuery = useCurrentUser();
   const childrenQuery = useChildren();
-  const { isHiddenByScroll: isNavbarHidden } = useScrollPosition();
+  const { isHiddenByScroll: isNavbarHidden } = useScrollStore();
 
   // Sidebar state: 'expanded' | 'collapsed'
   const [sidebarState, setSidebarState] = useState<'expanded' | 'collapsed'>('expanded');
