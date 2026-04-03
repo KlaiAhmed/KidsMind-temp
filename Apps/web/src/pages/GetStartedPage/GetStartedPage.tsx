@@ -51,7 +51,7 @@ const toSafeDailyLimitMinutes = (value: number): number => {
 };
 
 const buildSafetyAndRulesPatchPayload = (data: PreferencesFormData): SafetyAndRulesPatchPayload => {
-  return {
+  const payload: SafetyAndRulesPatchPayload = {
     childSettings: {
       dailyLimitMinutes: toSafeDailyLimitMinutes(data.dailyLimitMinutes),
       allowedSubjects: data.allowedSubjects,
@@ -59,8 +59,13 @@ const buildSafetyAndRulesPatchPayload = (data: PreferencesFormData): SafetyAndRu
       enableVoice: data.enableVoice,
       storeAudioHistory: data.enableVoice ? data.storeAudioHistory : false,
     },
-    parentPin: data.parentPinCode,
   };
+
+  if (data.parentPinCode && data.parentPinCode.length === 4) {
+    payload.parentPin = data.parentPinCode;
+  }
+
+  return payload;
 };
 
 const API_ERROR_TRANSLATION_PATTERNS: Array<{ pattern: RegExp; key: keyof TranslationMap }> = [

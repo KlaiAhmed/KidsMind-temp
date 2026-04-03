@@ -1,0 +1,864 @@
+/** AddChildModal — Modal styles for adding new child profile
+ * Design: Modern minimalist matching parent portal aesthetic
+ */
+
+/* ─── Overlay ────────────────────────────────────────────────────────────── */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 15, 26, 0.6);
+  backdrop-filter: blur(4px);
+  display: grid;
+  place-items: center;
+  z-index: 100;
+  padding: 1rem;
+  animation: fadeIn 0.2s ease;
+}
+
+/* ─── Modal Container ─────────────────────────────────────────────────────── */
+
+.modal {
+  background: var(--bg-surface);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border-subtle);
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.2);
+  animation: slideUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ─── Header ──────────────────────────────────────────────────────────────── */
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.stepIndicator {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.stepDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border-subtle);
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.stepDotActive {
+  background: var(--accent-main);
+  transform: scale(1.25);
+}
+
+.stepDotComplete {
+  background: var(--accent-grow);
+}
+
+.closeButton {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.closeButton:hover {
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+}
+
+.closeButton:focus-visible {
+  outline: 2px solid var(--accent-main);
+  outline-offset: 2px;
+}
+
+/* ─── Content ─────────────────────────────────────────────────────────────── */
+
+.content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.5rem 1.5rem 2rem;
+}
+
+/* ─── Step Container ──────────────────────────────────────────────────────── */
+
+.stepContainer {
+  animation-duration: 0.35s;
+  animation-fill-mode: forwards;
+  animation-timing-function: ease-out;
+}
+
+.slideInForward {
+  animation-name: slideInFromRight;
+}
+
+.slideInBackward {
+  animation-name: slideInFromLeft;
+}
+
+.stepTitle {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 0.25rem;
+}
+
+.stepSubtitle {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin-bottom: 1.5rem;
+}
+
+/* ─── Form ────────────────────────────────────────────────────────────────── */
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.formGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.required {
+  color: #E53E3E;
+}
+
+/* ─── Input & Select ──────────────────────────────────────────────────────── */
+
+.input,
+.select {
+  width: 100%;
+  min-height: 48px;
+  padding: 0.75rem 1rem;
+  font-family: var(--font-body);
+  font-size: 1rem;
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border: 2px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  outline: none;
+}
+
+.input::placeholder {
+  color: var(--text-muted);
+}
+
+.input:hover,
+.select:hover {
+  border-color: var(--text-muted);
+}
+
+.input:focus,
+.select:focus {
+  border-color: var(--accent-main);
+  box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.15);
+}
+
+.inputError,
+.selectError {
+  border-color: #E53E3E;
+}
+
+.select {
+  appearance: none;
+  padding-right: 2.5rem;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239A9AB0' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 1rem center;
+}
+
+[dir="rtl"] .select {
+  background-position: left 1rem center;
+  padding-right: 1rem;
+  padding-left: 2.5rem;
+}
+
+/* ─── Birth Date Grid ─────────────────────────────────────────────────────── */
+
+.birthDateGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+}
+
+/* ─── Nickname Preview ────────────────────────────────────────────────────── */
+
+.nicknamePreview {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg-surface-alt);
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  color: var(--accent-main);
+  font-weight: 600;
+  animation: slideInFromRight 0.3s ease;
+}
+
+/* ─── Avatar Grid ─────────────────────────────────────────────────────────── */
+
+.avatarGrid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 0.5rem;
+}
+
+.avatarButton {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  border: 2px solid var(--border-subtle);
+  background: var(--bg-surface);
+  font-size: 1.25rem;
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.avatarButton:hover {
+  border-color: var(--accent-main);
+  transform: scale(1.08);
+}
+
+.avatarButton:focus-visible {
+  outline: 2px solid var(--accent-main);
+  outline-offset: 2px;
+}
+
+.avatarSelected {
+  border-color: var(--accent-main);
+  background: rgba(255, 107, 53, 0.1);
+  box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.2);
+}
+
+/* ─── Divider ─────────────────────────────────────────────────────────────── */
+
+.divider {
+  border: none;
+  border-top: 1px dashed var(--border-subtle);
+  margin: 0.75rem 0;
+}
+
+/* ─── Slider Group ────────────────────────────────────────────────────────── */
+
+.sliderGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.sliderLabel {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.sliderWrapper {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.sliderWrapper input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: linear-gradient(
+    to right,
+    var(--accent-main) 0%,
+    var(--accent-main) var(--slider-fill, 50%),
+    var(--border-subtle) var(--slider-fill, 50%),
+    var(--border-subtle) 100%
+  );
+  cursor: pointer;
+}
+
+.sliderWrapper input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent-main);
+  border: 3px solid #FFFFFF;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.sliderWrapper input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+
+.sliderWrapper input[type="range"]::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent-main);
+  border: 3px solid #FFFFFF;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+}
+
+.sliderValue {
+  font-weight: 700;
+  font-size: 1.125rem;
+  color: var(--accent-main);
+  min-width: 60px;
+  text-align: right;
+}
+
+/* ─── Preset Buttons ──────────────────────────────────────────────────────── */
+
+.presetButtons {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.presetButton {
+  padding: 0.375rem 0.875rem;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.presetButton:hover {
+  border-color: var(--accent-main);
+  color: var(--accent-main);
+}
+
+.presetButton:focus-visible {
+  outline: 2px solid var(--accent-main);
+  outline-offset: 2px;
+}
+
+.presetButtonActive {
+  background: var(--accent-main);
+  color: #FFFFFF;
+  border-color: var(--accent-main);
+}
+
+/* ─── Weekday Grid ────────────────────────────────────────────────────────── */
+
+.weekdayGrid {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.weekdayButton {
+  min-width: 44px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  border: 2px solid var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.weekdayButton:hover {
+  border-color: var(--accent-main);
+}
+
+.weekdayButton:focus-visible {
+  outline: 2px solid var(--accent-main);
+  outline-offset: 2px;
+}
+
+.weekdayButtonActive {
+  background: var(--accent-main);
+  color: #FFFFFF;
+  border-color: var(--accent-main);
+}
+
+/* ─── Subject Grid ────────────────────────────────────────────────────────── */
+
+.subjectGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.subjectGrid {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.subjectChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.875rem;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.subjectChip:hover {
+  border-color: var(--accent-learn);
+}
+
+.subjectChip:focus-visible {
+  outline: 2px solid var(--accent-learn);
+  outline-offset: 2px;
+}
+
+.subjectChipActive {
+  background: var(--accent-learn);
+  color: #FFFFFF;
+  border-color: var(--accent-learn);
+}
+
+/* ─── Toggle Switch ───────────────────────────────────────────────────────── */
+
+.toggleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.toggleInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.toggleLabel {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.toggleHint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.toggleSwitch {
+  position: relative;
+  width: 48px;
+  height: 26px;
+  border-radius: var(--radius-full);
+  background: var(--text-muted);
+  border: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.2s ease;
+}
+
+.toggleSwitchOn {
+  background: var(--accent-main);
+}
+
+.toggleSwitch:focus-visible {
+  outline: 2px solid var(--accent-main);
+  outline-offset: 2px;
+}
+
+.toggleThumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.toggleSwitchOn .toggleThumb {
+  transform: translateX(22px);
+}
+
+[dir="rtl"] .toggleThumb {
+  left: auto;
+  right: 3px;
+}
+
+[dir="rtl"] .toggleSwitchOn .toggleThumb {
+  transform: translateX(-22px);
+}
+
+/* ─── Buttons ─────────────────────────────────────────────────────────────── */
+
+.primaryButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: 52px;
+  padding: 0.875rem 1.5rem;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  color: #FFFFFF;
+  background: var(--accent-main);
+  border: none;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.1s ease, box-shadow 0.2s ease;
+  box-shadow: 0 4px 16px rgba(255, 107, 53, 0.3);
+}
+
+.primaryButton:hover:not(:disabled) {
+  background: var(--accent-main-hover);
+  box-shadow: 0 6px 20px rgba(255, 107, 53, 0.4);
+  transform: translateY(-1px);
+}
+
+.primaryButton:active:not(:disabled) {
+  transform: scale(0.98) translateY(0);
+}
+
+.primaryButton:focus-visible {
+  outline: 3px solid var(--accent-main);
+  outline-offset: 2px;
+}
+
+.primaryButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.secondaryButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 52px;
+  padding: 0.875rem 1.25rem;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  border: 2px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.secondaryButton:hover {
+  border-color: var(--text-muted);
+  color: var(--text-primary);
+}
+
+.secondaryButton:focus-visible {
+  outline: 2px solid var(--accent-main);
+  outline-offset: 2px;
+}
+
+.buttonRow {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.buttonRow .primaryButton,
+.buttonRow .secondaryButton {
+  flex: 1;
+}
+
+/* ─── Spinner ─────────────────────────────────────────────────────────────── */
+
+.spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #FFFFFF;
+  border-radius: 50%;
+  animation: spinRing 0.8s linear infinite;
+}
+
+/* ─── Error Banner ────────────────────────────────────────────────────────── */
+
+.errorBanner {
+  padding: 0.75rem 1rem;
+  background: #FEF2F2;
+  border: 1px solid #FECACA;
+  border-radius: var(--radius-md);
+  color: #991B1B;
+  font-size: 0.875rem;
+}
+
+/* ─── Success Step ────────────────────────────────────────────────────────── */
+
+.successContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 2rem 1rem;
+}
+
+.successCheck {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent-main), var(--accent-fun));
+  display: grid;
+  place-items: center;
+  margin-bottom: 1.5rem;
+  animation: popIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.sparkleIcon {
+  color: #FFFFFF;
+}
+
+.successTitle {
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+}
+
+.successMessage {
+  font-size: 1rem;
+  color: var(--text-secondary);
+  margin-bottom: 1.5rem;
+}
+
+.successCard {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  background: var(--bg-surface-alt);
+  border-radius: var(--radius-lg);
+  margin-bottom: 1.5rem;
+  width: 100%;
+  max-width: 280px;
+}
+
+.successAvatar {
+  font-size: 2rem;
+}
+
+.successInfo {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+}
+
+.successName {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.successDetails {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+/* ─── Confetti ────────────────────────────────────────────────────────────── */
+
+.confettiContainer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 120px;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.confettiPiece {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  top: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  animation: confettiFall 1.2s ease-out forwards;
+  animation-delay: var(--delay, 0s);
+}
+
+@keyframes confettiFall {
+  0% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) rotate(0deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(calc(-50% + var(--tx, 0))) translateY(var(--ty, 100px)) rotate(var(--rot, 180deg));
+  }
+}
+
+/* ─── Animations ──────────────────────────────────────────────────────────── */
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInFromRight {
+  from {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideInFromLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes popIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes spinRing {
+  to { transform: rotate(360deg); }
+}
+
+/* ─── Reduced Motion ──────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .overlay,
+  .modal,
+  .stepContainer,
+  .slideInForward,
+  .slideInBackward,
+  .nicknamePreview,
+  .avatarButton,
+  .presetButton,
+  .weekdayButton,
+  .subjectChip,
+  .toggleSwitch,
+  .toggleThumb,
+  .primaryButton,
+  .secondaryButton,
+  .successCheck,
+  .confettiPiece,
+  .spinner {
+    animation: none;
+    transition: none;
+  }
+
+  .confettiContainer {
+    display: none;
+  }
+}
+
+/* ─── Responsive ──────────────────────────────────────────────────────────── */
+
+@media (max-width: 480px) {
+  .modal {
+    max-width: 100%;
+    max-height: 100vh;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  }
+
+  .content {
+    padding: 1.25rem 1.25rem 1.5rem;
+  }
+
+  .birthDateGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .avatarGrid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  .avatarButton {
+    width: 100%;
+    aspect-ratio: 1;
+  }
+
+  .weekdayGrid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+  }
+
+  .weekdayButton {
+    min-width: auto;
+    width: 100%;
+  }
+
+  .buttonRow {
+    flex-direction: column-reverse;
+  }
+}

@@ -57,20 +57,32 @@ class SafetyAndRulesChildSettings(BaseModel):
 
 
 class SafetyAndRulesPatchRequest(BaseModel):
-    """Combined request payload for onboarding safety rules and parent PIN."""
+    """Request payload for updating child safety settings and/or parent PIN.
+
+    At least one of ``childSettings`` or ``parentPin`` must be provided.
+    When ``parentPin`` is present it must be exactly 4 digits.
+    """
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    child_settings: SafetyAndRulesChildSettings = Field(alias="childSettings")
-    parent_pin: str = Field(alias="parentPin", min_length=4, max_length=4)
+    child_settings: SafetyAndRulesChildSettings | None = Field(alias="childSettings", default=None)
+    parent_pin: str | None = Field(alias="parentPin", default=None)
 
     @field_validator("parent_pin")
     @classmethod
-    def validate_parent_pin_digits(cls, value: str) -> str:
+    def validate_parent_pin_digits(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
         normalized = value.strip()
         if not re.fullmatch(r"\d{4}", normalized):
             raise ValueError("parent pin must be exactly 4 digits")
         return normalized
+
+    @model_validator(mode="after")
+    def validate_at_least_one_field(self) -> "SafetyAndRulesPatchRequest":
+        if self.child_settings is None and self.parent_pin is None:
+            raise ValueError("at least one of childSettings or parentPin must be provided")
+        return self
 
 
 class SafetyAndRulesVerifyPinRequest(BaseModel):

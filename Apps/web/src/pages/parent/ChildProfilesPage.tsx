@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useChildrenQuery } from '../../hooks/api/useChildrenQuery';
 import type { ChildRecord } from '../../hooks/api/useChildrenQuery';
 import { apiClient } from '../../lib/api';
 import { queryKeys } from '../../lib/queryKeys';
 import { useActiveChild } from '../../hooks/useActiveChild';
+import { AddChildModal } from '../../components/parent/AddChildModal';
 import '../../styles/parent-portal.css';
 
 const COPY = {
@@ -122,6 +122,7 @@ const ChildProfilesPage = () => {
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [safetyForm, setSafetyForm] = useState<SafetyFormState>(normalizeSafetyForm(activeChild));
   const [toastMessage, setToastMessage] = useState<string>('');
+  const [isAddChildModalOpen, setIsAddChildModalOpen] = useState<boolean>(false);
 
   const children = useMemo(() => childrenQuery.data ?? [], [childrenQuery.data]);
   const maxProfilesReached = children.length >= 5;
@@ -229,7 +230,6 @@ const ChildProfilesPage = () => {
     try {
       await apiClient.patch('/api/v1/safety-and-rules', {
         body: {
-          child_id: selectedChild.child_id,
           childSettings: {
             dailyLimitMinutes: safetyForm.dailyLimitMinutes,
             allowedSubjects: safetyForm.allowedSubjects,
@@ -388,14 +388,15 @@ const ChildProfilesPage = () => {
                   {COPY.maxReached}
                 </button>
               ) : (
-                <Link
-                  to="/parent/children/new"
-                  className="pp-button pp-button-primary pp-touch pp-focusable"
-                  aria-label={COPY.addChild}
-                >
-                  {COPY.addChild}
-                </Link>
-              )}
+          <button
+            type="button"
+            className="pp-button pp-button-primary pp-touch pp-focusable"
+            aria-label={COPY.addChild}
+            onClick={() => setIsAddChildModalOpen(true)}
+          >
+            {COPY.addChild}
+          </button>
+        )}
             </article>
           </div>
         ) : !selectedChild ? (
@@ -743,6 +744,14 @@ const ChildProfilesPage = () => {
           <div className="pp-toast-card">{toastMessage}</div>
         </div>
       )}
+
+      <AddChildModal
+        isOpen={isAddChildModalOpen}
+        onClose={() => setIsAddChildModalOpen(false)}
+        onSuccess={() => {
+          setToastMessage('Child profile created successfully');
+        }}
+      />
     </main>
   );
 };
