@@ -3,6 +3,7 @@
   --bg-surface: #FFFFFF;
   --bg-surface-alt: #F5F0FF;
   --bg-surface-hover: #FFF0E8;
+  --nav-bg: #FFF8F0;
   --accent-main: #FF6B35;
   --accent-main-hover: #E85520;
   --accent-learn: #4ECDC4;
@@ -26,6 +27,7 @@
   --bg-surface: #1A1A2E;
   --bg-surface-alt: #1E1E35;
   --bg-surface-hover: #252540;
+  --nav-bg: #0F0F1A;
   --accent-main: #FF8C5A;
   --accent-main-hover: #FF6B35;
   --accent-learn: #5EDDD4;

@@ -11,7 +11,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Sun, Moon, Menu, X, Languages, User, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { ThemeMode, LanguageCode, TranslationMap } from '../../types';
 import { LANGUAGES } from '../../utils/constants';
-import { useScrollStore } from '../../store/scroll.store';
+import { useScrollPosition } from '../../hooks/useScrollPosition';
 import { apiBaseUrl } from '../../utils/api';
 import { getCsrfHeader } from '../../utils/csrf';
 import { logoutAuthSession } from '../../lib/authSession';
@@ -25,8 +25,6 @@ interface NavBarProps {
   onLanguageChange: (code: LanguageCode) => void;
   translations: TranslationMap;
   isAuthenticated: boolean;
-  /** When true, navbar is transparent at page top and gains background on scroll. Only for home page. */
-  transparentAtTop?: boolean;
 }
 
 const PARENT_PROFILE_ROUTE = '/parent/profile';
@@ -65,10 +63,9 @@ const NavBar = ({
   onLanguageChange,
   translations,
   isAuthenticated,
-  transparentAtTop = false,
 }: NavBarProps) => {
   const navigate = useNavigate();
-  const { isAtPageTop, isHiddenByScroll } = useScrollStore();
+  const { isHiddenByScroll } = useScrollPosition();
   const [isLanguageDropdownOpen, setIsLanguageDropdownOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [activeMobileMenu, setActiveMobileMenu] = useState<MobileMenuView>('main');
@@ -425,7 +422,7 @@ const NavBar = ({
   return (
     <>
       <nav
-        className={`${styles.nav} ${transparentAtTop && isAtPageTop ? styles.navAtTop : ''} ${shouldHideNav ? styles.navHidden : ''}`}
+        className={`${styles.nav} ${shouldHideNav ? styles.navHidden : ''}`}
         aria-label={translations.nav_menu_label}
       >
         <div className={styles.navInner}>
