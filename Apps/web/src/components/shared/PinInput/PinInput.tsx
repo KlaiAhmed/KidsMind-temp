@@ -94,6 +94,11 @@ const PinInput = ({
         onComplete(newDigits.join(''));
       }
 
+      // Auto-focus confirmation input when main PIN is complete
+      if (mainComplete && showConfirmation && !isConfirmation) {
+        setTimeout(() => confirmRefs.current[0]?.focus(), 0);
+      }
+
       // Check confirmation match
       if (showConfirmation && isConfirmation) {
         const mainPin = currentDigits.join('');
@@ -239,7 +244,7 @@ const PinInput = ({
                   hasError && styles.pinInputError
                 )}
               />
-              {isFilled && !isFocused && (
+              {isFilled && (
                 <span className={styles.pinDot} aria-hidden="true" />
               )}
             </div>
@@ -293,7 +298,7 @@ const PinInput = ({
                       hasConfirmationError && styles.pinInputError
                     )}
                   />
-                  {isFilled && !isFocused && (
+                  {isFilled && (
                     <span className={styles.pinDot} aria-hidden="true" />
                   )}
                 </div>

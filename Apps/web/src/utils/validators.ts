@@ -71,8 +71,8 @@ const validatePassword = (password: string): string => {
  * - 0: empty or very short (< 4 chars)
  * - 1: weak
  * - 2: fair
- * - 3: strong
- * - 4: max strength (all criteria met)
+ * - 3: medium
+ * - 4: strong (all criteria met)
  *
  * @param password - The password string to evaluate
  * @returns A score from 0 to 4

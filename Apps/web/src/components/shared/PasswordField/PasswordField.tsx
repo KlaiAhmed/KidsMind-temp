@@ -11,40 +11,48 @@ const PasswordField = ({
   value,
   error,
   placeholder,
+  hint,
+  hintTone = 'neutral',
   showStrengthMeter,
   autoComplete,
+  describedBy,
+  required,
   onChange,
   onBlur,
   translations,
 }: PasswordFieldProps & { translations?: TranslationMap }) => {
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const errorMessageId = `${id}-error`;
+  const hintMessageId = `${id}-hint`;
   const hasValidationError = !!error;
 
   const strengthScore = getPasswordStrength(value);
 
   const getStrengthLabelText = (): string => {
     if (!translations) {
-      const labels = ['', 'Weak', 'Fair', 'Strong', 'Strong'];
+      const labels = ['', 'Weak', 'Fair', 'Medium', 'Strong'];
       return labels[strengthScore];
     }
     if (strengthScore === 1) return translations.gs_password_strength_weak;
     if (strengthScore === 2) return translations.gs_password_strength_fair;
-    if (strengthScore >= 3) return translations.gs_password_strength_strong;
+    if (strengthScore === 3) return translations.gs_password_strength_medium;
+    if (strengthScore === 4) return translations.gs_password_strength_strong;
     return '';
   };
 
   const getStrengthColorClassName = (): string => {
     if (strengthScore === 1) return styles.strengthWeak;
     if (strengthScore === 2) return styles.strengthFair;
-    if (strengthScore >= 3) return styles.strengthStrong;
+    if (strengthScore === 3) return styles.strengthMedium;
+    if (strengthScore === 4) return styles.strengthStrong;
     return '';
   };
 
   const getStrengthLabelClassName = (): string => {
     if (strengthScore === 1) return styles.strengthLabelWeak;
     if (strengthScore === 2) return styles.strengthLabelFair;
-    if (strengthScore >= 3) return styles.strengthLabelStrong;
+    if (strengthScore === 3) return styles.strengthLabelMedium;
+    if (strengthScore === 4) return styles.strengthLabelStrong;
     return '';
   };
 
@@ -52,6 +60,7 @@ const PasswordField = ({
     <div className={styles.formGroup}>
       <label htmlFor={id} className={styles.label}>
         {label}
+        {required && <span className={styles.required} aria-hidden="true">*</span>}
       </label>
       <div className={styles.inputWrapper}>
         <input
@@ -63,8 +72,13 @@ const PasswordField = ({
           onChange={(event) => onChange(event.target.value)}
           onBlur={onBlur}
           autoComplete={autoComplete}
+          required={required}
           aria-invalid={hasValidationError}
-          aria-describedby={hasValidationError ? errorMessageId : undefined}
+          aria-describedby={[
+            hint ? hintMessageId : null,
+            hasValidationError ? errorMessageId : null,
+            describedBy ?? null,
+          ].filter(Boolean).join(' ') || undefined}
         />
         <button
           type="button"
@@ -95,6 +109,12 @@ const PasswordField = ({
             </span>
           )}
         </div>
+      )}
+
+      {hint && !hasValidationError && (
+        <span id={hintMessageId} className={hintTone === 'danger' ? styles.hintDanger : styles.hint}>
+          {hint}
+        </span>
       )}
 
       {hasValidationError && (

@@ -62,8 +62,9 @@
   font-weight: 700;
   font-family: var(--font-display);
   text-align: center;
-  caret-color: var(--accent-main);
+  caret-color: transparent;
   color: transparent;
+  cursor: default;
   background: var(--bg-surface);
   border: 2px solid var(--border-subtle);
   border-radius: var(--radius-md);
@@ -94,8 +95,7 @@
 }
 
 .pinInputFilled {
-  border-color: var(--accent-grow);
-  background: rgba(149, 225, 160, 0.08);
+  border-color: var(--accent-main);
 }
 
 .pinInputError {
@@ -256,7 +256,7 @@
 }
 
 [data-theme="dark"] .pinInputFilled {
-  background: rgba(123, 216, 143, 0.1);
+  border-color: var(--accent-main);
 }
 
 [data-theme="dark"] .pinDot {

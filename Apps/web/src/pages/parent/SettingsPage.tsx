@@ -8,6 +8,7 @@ import { apiClient } from '../../lib/api';
 import { logout } from '../../lib/logout';
 import { queryKeys } from '../../lib/queryKeys';
 import { ModernInput, ModernSelect } from '../../components/shared/ModernInput';
+import PasswordField from '../../components/shared/PasswordField/PasswordField';
 import { PinInput } from '../../components/shared/PinInput';
 import '../../styles/parent-portal.css';
 
@@ -46,6 +47,13 @@ const COPY = {
   notificationsPush: 'Push notifications',
   optOutAiTraining: 'Opt out of AI model training',
   retry: 'Retry',
+  currentPasswordRequired: 'Current password is required.',
+  passwordMismatch: 'Passwords do not match',
+  passwordAtLeastEight: 'Password must be at least 8 characters long.',
+  passwordUppercase: 'Password must include an uppercase letter.',
+  passwordLowercase: 'Password must include a lowercase letter.',
+  passwordNumber: 'Password must include a number.',
+  passwordSpecial: 'Password must include a special character.',
 } as const;
 
 const FONT_SCALE_MAP = {
@@ -59,6 +67,29 @@ const LOCAL_STORAGE_KEYS = {
   highContrast: 'kidsmind_high_contrast',
   fontScale: 'kidsmind_font_scale',
 } as const;
+
+const PASSWORD_RULES = [
+  {
+    message: COPY.passwordAtLeastEight,
+    test: (value: string): boolean => value.length >= 8,
+  },
+  {
+    message: COPY.passwordUppercase,
+    test: (value: string): boolean => /[A-Z]/.test(value),
+  },
+  {
+    message: COPY.passwordLowercase,
+    test: (value: string): boolean => /[a-z]/.test(value),
+  },
+  {
+    message: COPY.passwordNumber,
+    test: (value: string): boolean => /[0-9]/.test(value),
+  },
+  {
+    message: COPY.passwordSpecial,
+    test: (value: string): boolean => /[^a-zA-Z0-9]/.test(value),
+  },
+] as const;
 
 type SettingsTab = 'security' | 'privacy' | 'accessibility';
 type FontScaleOption = keyof typeof FONT_SCALE_MAP;
@@ -103,6 +134,11 @@ const readBoolean = (key: string, fallback: boolean): boolean => {
   return rawValue === 'true';
 };
 
+const getPasswordRequirement = (password: string): string => {
+  const failedRule = PASSWORD_RULES.find((rule) => !rule.test(password));
+  return failedRule?.message ?? '';
+};
+
 const SettingsPage = () => {
   const queryClient = useQueryClient();
   const userQuery = useMeSummaryQuery();
@@ -118,6 +154,7 @@ const SettingsPage = () => {
     newPassword: '',
     confirmPassword: '',
   });
+  const [passwordValidationRequested, setPasswordValidationRequested] = useState<boolean>(false);
 
   const [securityPin, setSecurityPin] = useState<string>('');
   const [mfaCode, setMfaCode] = useState<string>('');
@@ -139,6 +176,21 @@ const SettingsPage = () => {
     notificationsPush: userQuery.user?.settings?.notifications_push ?? true,
     consentAnalytics: userQuery.user?.settings?.consent_analytics ?? true,
   }), [userQuery.user]);
+
+  const passwordRequirement = getPasswordRequirement(passwordForm.newPassword);
+  const currentPasswordError = passwordValidationRequested && !passwordForm.currentPassword.trim()
+    ? COPY.currentPasswordRequired
+    : undefined;
+  const confirmPasswordError = passwordForm.confirmPassword.length > 0 && passwordForm.newPassword !== passwordForm.confirmPassword
+    ? COPY.passwordMismatch
+    : passwordValidationRequested && passwordForm.newPassword !== passwordForm.confirmPassword
+      ? COPY.passwordMismatch
+      : undefined;
+  const canSubmitPasswordChange = Boolean(passwordForm.currentPassword.trim())
+    && Boolean(passwordForm.newPassword.trim())
+    && !passwordRequirement
+    && passwordForm.newPassword === passwordForm.confirmPassword
+    && !changePassword.isPending;
 
   const [consentDraft, setConsentDraft] = useState<ConsentState | null>(null);
   const consentForm = consentDraft ?? baseConsentState;
@@ -182,6 +234,20 @@ const SettingsPage = () => {
   }, [accessibility]);
 
   const submitPasswordChange = async (): Promise<void> => {
+    setPasswordValidationRequested(true);
+
+    if (!passwordForm.currentPassword.trim()) {
+      return;
+    }
+
+    if (passwordRequirement) {
+      return;
+    }
+
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      return;
+    }
+
     try {
       await changePassword.mutateAsync({
         current_password: passwordForm.currentPassword,
@@ -194,6 +260,7 @@ const SettingsPage = () => {
         newPassword: '',
         confirmPassword: '',
       });
+      setPasswordValidationRequested(false);
 
       setToastMessage(COPY.saved);
     } catch {
@@ -313,154 +380,164 @@ const SettingsPage = () => {
       </main>
     );
   }
-
   return (
     <main className="pp-content" aria-labelledby="settings-page-title">
       <article className="pp-card">
-        <h1 id="settings-page-title" className="pp-title">{COPY.title}</h1>
+      <h1 id="settings-page-title" className="pp-title">{COPY.title}</h1>
 
-        <div className="pp-tabs" style={{ marginTop: '1rem' }}>
-          <button
-            type="button"
-            className={`pp-tab pp-touch pp-focusable ${activeTab === 'security' ? 'pp-tab-active' : ''}`}
-            aria-label={COPY.tabSecurity}
-            onClick={() => setActiveTab('security')}
-          >
-            {COPY.tabSecurity}
-          </button>
-          <button
-            type="button"
-            className={`pp-tab pp-touch pp-focusable ${activeTab === 'privacy' ? 'pp-tab-active' : ''}`}
-            aria-label={COPY.tabPrivacy}
-            onClick={() => setActiveTab('privacy')}
-          >
-            {COPY.tabPrivacy}
-          </button>
-          <button
-            type="button"
-            className={`pp-tab pp-touch pp-focusable ${activeTab === 'accessibility' ? 'pp-tab-active' : ''}`}
-            aria-label={COPY.tabAccessibility}
-            onClick={() => setActiveTab('accessibility')}
-          >
-            {COPY.tabAccessibility}
-          </button>
-        </div>
+      <div className="pp-tabs" style={{ marginTop: '1rem' }}>
+        <button
+          type="button"
+          className={`pp-tab pp-touch pp-focusable ${activeTab === 'security' ? 'pp-tab-active' : ''}`}
+          aria-label={COPY.tabSecurity}
+          onClick={() => setActiveTab('security')}
+        >
+          {COPY.tabSecurity}
+        </button>
+        <button
+          type="button"
+          className={`pp-tab pp-touch pp-focusable ${activeTab === 'privacy' ? 'pp-tab-active' : ''}`}
+          aria-label={COPY.tabPrivacy}
+          onClick={() => setActiveTab('privacy')}
+        >
+          {COPY.tabPrivacy}
+        </button>
+        <button
+          type="button"
+          className={`pp-tab pp-touch pp-focusable ${activeTab === 'accessibility' ? 'pp-tab-active' : ''}`}
+          aria-label={COPY.tabAccessibility}
+          onClick={() => setActiveTab('accessibility')}
+        >
+          {COPY.tabAccessibility}
+        </button>
+      </div>
 
-        {activeTab === 'security' && (
-          <section style={{ marginTop: '1.25rem', display: 'grid', gap: '1rem' }}>
-            <article className="pp-card">
-              <h2 className="pp-title">{COPY.changePassword}</h2>
-              <form
-                className="pp-form-grid"
-                style={{ marginTop: '0.75rem' }}
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void submitPasswordChange();
+      {activeTab === 'security' && (
+        <section style={{ marginTop: '1.25rem', display: 'grid', gap: '1rem' }}>
+          <article className="pp-card">
+            <h2 className="pp-title">{COPY.changePassword}</h2>
+            <form
+              className="pp-form-grid"
+              style={{ marginTop: '0.75rem' }}
+              noValidate
+              onSubmit={(event) => {
+                event.preventDefault();
+                void submitPasswordChange();
+              }}
+            >
+              <PasswordField
+                id="current-password"
+                label="Current password"
+                placeholder="Enter current password"
+                value={passwordForm.currentPassword}
+                required
+                autoComplete="current-password"
+                error={currentPasswordError}
+                onChange={(value) => {
+                  setPasswordForm((current) => ({ ...current, currentPassword: value }));
+                }}
+                onBlur={() => setPasswordValidationRequested(true)}
+              />
+              <PasswordField
+                id="new-password"
+                label="New password"
+                placeholder="Enter new password"
+                value={passwordForm.newPassword}
+                hint={passwordRequirement || undefined}
+                hintTone="danger"
+                required
+                showStrengthMeter
+                autoComplete="new-password"
+                onChange={(value) => {
+                  setPasswordForm((current) => ({ ...current, newPassword: value }));
+                }}
+                onBlur={() => setPasswordValidationRequested(true)}
+              />
+              <PasswordField
+                id="confirm-password"
+                label="Confirm password"
+                placeholder="Confirm new password"
+                value={passwordForm.confirmPassword}
+                required
+                autoComplete="new-password"
+                error={confirmPasswordError}
+                onChange={(value) => {
+                  setPasswordForm((current) => ({ ...current, confirmPassword: value }));
+                }}
+                onBlur={() => setPasswordValidationRequested(true)}
+              />
+              <button
+                type="submit"
+                className="pp-button pp-button-primary pp-touch pp-focusable"
+                aria-label={COPY.changePassword}
+                disabled={!canSubmitPasswordChange}
+              >
+                {COPY.changePassword}
+              </button>
+            </form>
+          </article>
+
+          <article className="pp-card">
+            <h2 className="pp-title">2FA</h2>
+            {userQuery.user.mfa_enabled ? (
+              <p className="pill-green pp-pill">Enabled</p>
+            ) : (
+              <button
+                type="button"
+                className="pp-button pp-button-primary pp-touch pp-focusable"
+                aria-label={COPY.enableMfa}
+                onClick={() => {
+                  void submitMfaEnable();
                 }}
               >
-                <ModernInput
-                  id="current-password"
-                  type="password"
-                  label="Current password"
-                  placeholder="Enter current password"
-                  value={passwordForm.currentPassword}
-                  onChange={(event) => {
-                    setPasswordForm((current) => ({ ...current, currentPassword: event.currentTarget.value }));
-                  }}
-                />
-                <ModernInput
-                  id="new-password"
-                  type="password"
-                  label="New password"
-                  placeholder="Enter new password"
-                  hint="Minimum 8 characters"
-                  value={passwordForm.newPassword}
-                  onChange={(event) => {
-                    setPasswordForm((current) => ({ ...current, newPassword: event.currentTarget.value }));
-                  }}
-                />
-                <ModernInput
-                  id="confirm-password"
-                  type="password"
-                  label="Confirm password"
-                  placeholder="Confirm new password"
-                  value={passwordForm.confirmPassword}
-                  onChange={(event) => {
-                    setPasswordForm((current) => ({ ...current, confirmPassword: event.currentTarget.value }));
-                  }}
-                  error={
-                    passwordForm.confirmPassword && passwordForm.newPassword !== passwordForm.confirmPassword
-                      ? 'Passwords do not match'
-                      : undefined
-                  }
-                />
-                <button type="submit" className="pp-button pp-button-primary pp-touch pp-focusable" aria-label={COPY.changePassword}>
-                  {COPY.changePassword}
-                </button>
-              </form>
-            </article>
+                {enableMfa.isPending ? `${COPY.enableMfa}...` : COPY.enableMfa}
+              </button>
+            )}
+          </article>
 
-            <article className="pp-card">
-              <h2 className="pp-title">2FA</h2>
-              {userQuery.user.mfa_enabled ? (
-                <p className="pill-green pp-pill">Enabled</p>
-              ) : (
-                <button
-                  type="button"
-                  className="pp-button pp-button-primary pp-touch pp-focusable"
-                  aria-label={COPY.enableMfa}
-                  onClick={() => {
-                    void submitMfaEnable();
-                  }}
-                >
-                  {enableMfa.isPending ? `${COPY.enableMfa}...` : COPY.enableMfa}
-                </button>
-              )}
-            </article>
+          <article className="pp-card">
+            <h2 className="pp-title">{COPY.parentPin}</h2>
+            <form
+              className="pp-form-grid"
+              style={{ marginTop: '0.75rem' }}
+              onSubmit={(event) => {
+                event.preventDefault();
+                void submitPinChange();
+              }}
+            >
+              <PinInput
+                label="Enter new PIN"
+                hint="4-digit numeric code"
+                value={securityPin}
+                onChange={setSecurityPin}
+                showConfirmation
+                confirmationLabel="Confirm PIN"
+              />
+              <button type="submit" className="pp-button pp-button-primary pp-touch pp-focusable" aria-label={COPY.updatePin}>
+                {COPY.updatePin}
+              </button>
+            </form>
+          </article>
 
-            <article className="pp-card">
-              <h2 className="pp-title">{COPY.parentPin}</h2>
-              <form
-                className="pp-form-grid"
-                style={{ marginTop: '0.75rem' }}
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void submitPinChange();
-                }}
-              >
-                <PinInput
-                  label="Enter new PIN"
-                  hint="4-digit numeric code"
-                  value={securityPin}
-                  onChange={setSecurityPin}
-                  showConfirmation
-                  confirmationLabel="Confirm PIN"
-                />
-                <button type="submit" className="pp-button pp-button-primary pp-touch pp-focusable" aria-label={COPY.updatePin}>
-                  {COPY.updatePin}
-                </button>
-              </form>
-            </article>
-
-            <article className="pp-card">
-              <h2 className="pp-title">{COPY.loginHistory}</h2>
-              {auditLog.isLoading ? (
-                <div className="pp-skeleton" style={{ height: 120, marginTop: '0.75rem' }} aria-label={COPY.loading} />
-              ) : auditLog.error ? (
-                <p className="pp-error">{auditLog.error.message}</p>
-              ) : (
-                <ul style={{ marginTop: '0.75rem', display: 'grid', gap: '0.5rem' }}>
-                  {loginHistory.map((entry) => (
-                    <li key={entry.id} className="pp-card" style={{ padding: '0.75rem' }}>
-                      <p style={{ fontWeight: 600 }}>{nowDateTime(entry.created_at)}</p>
-                      <p style={{ color: 'var(--text-secondary)' }}>{entry.ip_address ?? 'Unknown IP'}</p>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </article>
-          </section>
-        )}
+          <article className="pp-card">
+            <h2 className="pp-title">{COPY.loginHistory}</h2>
+            {auditLog.isLoading ? (
+              <div className="pp-skeleton" style={{ height: 120, marginTop: '0.75rem' }} aria-label={COPY.loading} />
+            ) : auditLog.error ? (
+              <p className="pp-error">{auditLog.error.message}</p>
+            ) : (
+              <ul style={{ marginTop: '0.75rem', display: 'grid', gap: '0.5rem' }}>
+                {loginHistory.map((entry) => (
+                  <li key={entry.id} className="pp-card" style={{ padding: '0.75rem' }}>
+                    <p style={{ fontWeight: 600 }}>{nowDateTime(entry.created_at)}</p>
+                    <p style={{ color: 'var(--text-secondary)' }}>{entry.ip_address ?? 'Unknown IP'}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </article>
+        </section>
+      )}
 
         {activeTab === 'privacy' && (
           <section style={{ marginTop: '1.25rem', display: 'grid', gap: '1rem' }}>
@@ -587,9 +664,10 @@ const SettingsPage = () => {
                   label={COPY.fontSize}
                   value={accessibility.fontScale}
                   onChange={(event) => {
+                    const fontScale = event.currentTarget.value as FontScaleOption;
                     setAccessibility((current) => ({
                       ...current,
-                      fontScale: event.currentTarget.value as FontScaleOption,
+                      fontScale,
                     }));
                   }}
                   options={[

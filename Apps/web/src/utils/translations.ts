@@ -123,6 +123,7 @@ footer_tagline: 'Nurturing curious minds with the power of safe AI.',
     gs_terms_required_error: 'You must agree to continue',
     gs_password_strength_weak: 'Weak',
     gs_password_strength_fair: 'Fair',
+    gs_password_strength_medium: 'Medium',
     gs_password_strength_strong: 'Strong',
 
     // ─── Step 2: Child Profile ──────────────────────────────────────────
@@ -413,6 +414,7 @@ footer_tagline: 'Nourrir les esprits curieux avec la puissance d\'une IA sûre.'
     gs_terms_required_error: 'Vous devez accepter pour continuer',
     gs_password_strength_weak: 'Faible',
     gs_password_strength_fair: 'Moyen',
+    gs_password_strength_medium: 'Modéré',
     gs_password_strength_strong: 'Fort',
 
     // ─── Step 2: Child Profile ──────────────────────────────────────────
@@ -703,6 +705,7 @@ footer_tagline: 'Nutriendo mentes curiosas con el poder de una IA segura.',
     gs_terms_required_error: 'Debes aceptar para continuar',
     gs_password_strength_weak: 'Débil',
     gs_password_strength_fair: 'Regular',
+    gs_password_strength_medium: 'Moderado',
     gs_password_strength_strong: 'Fuerte',
 
     // ─── Step 2: Child Profile ──────────────────────────────────────────
@@ -993,6 +996,7 @@ footer_tagline: 'Nutrire menti curiose con il potere di un\'IA sicura.',
     gs_terms_required_error: 'Devi accettare per continuare',
     gs_password_strength_weak: 'Debole',
     gs_password_strength_fair: 'Discreto',
+    gs_password_strength_medium: 'Medio',
     gs_password_strength_strong: 'Forte',
 
     // ─── Step 2: Child Profile ──────────────────────────────────────────
@@ -1283,6 +1287,7 @@ footer_tagline: 'رعاية العقول الفضولية بقوة الذكاء 
     gs_terms_required_error: 'يجب الموافقة للمتابعة',
     gs_password_strength_weak: 'ضعيفة',
     gs_password_strength_fair: 'متوسطة',
+    gs_password_strength_medium: 'متوسط',
     gs_password_strength_strong: 'قوية',
 
     // ─── Step 2: Child Profile ──────────────────────────────────────────
@@ -1573,6 +1578,7 @@ footer_tagline: '以安全AI的力量，培育好奇的心灵。',
     gs_terms_required_error: '必须同意才能继续',
     gs_password_strength_weak: '弱',
     gs_password_strength_fair: '中等',
+    gs_password_strength_medium: '适中',
     gs_password_strength_strong: '强',
 
     // ─── Step 2: Child Profile ──────────────────────────────────────────

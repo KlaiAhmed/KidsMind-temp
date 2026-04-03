@@ -131,6 +131,7 @@ export interface TranslationMap {
   gs_terms_required_error: string;
   gs_password_strength_weak: string;
   gs_password_strength_fair: string;
+  gs_password_strength_medium: string;
   gs_password_strength_strong: string;
 
   // ─── Step 2: Child Profile ────────────────────────────────────────────────────
@@ -504,8 +505,12 @@ export interface PasswordFieldProps {
   value: string;
   error?: string;
   placeholder?: string;
+  hint?: string;
+  hintTone?: 'neutral' | 'danger';
   showStrengthMeter?: boolean;
   autoComplete?: 'current-password' | 'new-password';
+  describedBy?: string;
+  required?: boolean;
   onChange: (value: string) => void;
   onBlur?: () => void;
 }
