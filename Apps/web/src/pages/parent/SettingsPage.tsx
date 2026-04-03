@@ -7,6 +7,8 @@ import { useEnableMfa } from '../../hooks/api/useEnableMfa';
 import { apiClient } from '../../lib/api';
 import { logout } from '../../lib/logout';
 import { queryKeys } from '../../lib/queryKeys';
+import { ModernInput, ModernSelect } from '../../components/shared/ModernInput';
+import { PinInput } from '../../components/shared/PinInput';
 import '../../styles/parent-portal.css';
 
 const COPY = {
@@ -356,32 +358,41 @@ const SettingsPage = () => {
                   void submitPasswordChange();
                 }}
               >
-                <input
+                <ModernInput
+                  id="current-password"
                   type="password"
-                  aria-label="Current password"
-                  placeholder="Current password"
+                  label="Current password"
+                  placeholder="Enter current password"
                   value={passwordForm.currentPassword}
                   onChange={(event) => {
                     setPasswordForm((current) => ({ ...current, currentPassword: event.currentTarget.value }));
                   }}
                 />
-                <input
+                <ModernInput
+                  id="new-password"
                   type="password"
-                  aria-label="New password"
-                  placeholder="New password"
+                  label="New password"
+                  placeholder="Enter new password"
+                  hint="Minimum 8 characters"
                   value={passwordForm.newPassword}
                   onChange={(event) => {
                     setPasswordForm((current) => ({ ...current, newPassword: event.currentTarget.value }));
                   }}
                 />
-                <input
+                <ModernInput
+                  id="confirm-password"
                   type="password"
-                  aria-label="Confirm new password"
-                  placeholder="Confirm password"
+                  label="Confirm password"
+                  placeholder="Confirm new password"
                   value={passwordForm.confirmPassword}
                   onChange={(event) => {
                     setPasswordForm((current) => ({ ...current, confirmPassword: event.currentTarget.value }));
                   }}
+                  error={
+                    passwordForm.confirmPassword && passwordForm.newPassword !== passwordForm.confirmPassword
+                      ? 'Passwords do not match'
+                      : undefined
+                  }
                 />
                 <button type="submit" className="pp-button pp-button-primary pp-touch pp-focusable" aria-label={COPY.changePassword}>
                   {COPY.changePassword}
@@ -417,17 +428,13 @@ const SettingsPage = () => {
                   void submitPinChange();
                 }}
               >
-                <input
-                  type="password"
-                  inputMode="numeric"
-                  maxLength={4}
-                  pattern="[0-9]*"
-                  aria-label={COPY.parentPin}
-                  placeholder="1234"
+                <PinInput
+                  label="Enter new PIN"
+                  hint="4-digit numeric code"
                   value={securityPin}
-                  onChange={(event) => {
-                    setSecurityPin(event.currentTarget.value.replace(/\D/g, '').slice(0, 4));
-                  }}
+                  onChange={setSecurityPin}
+                  showConfirmation
+                  confirmationLabel="Confirm PIN"
                 />
                 <button type="submit" className="pp-button pp-button-primary pp-touch pp-focusable" aria-label={COPY.updatePin}>
                   {COPY.updatePin}
@@ -574,11 +581,10 @@ const SettingsPage = () => {
                 />
               </div>
 
-              <div className="pp-form-row" style={{ marginTop: '0.75rem' }}>
-                <label htmlFor="font-scale">{COPY.fontSize}</label>
-                <select
+              <div style={{ marginTop: '0.75rem' }}>
+                <ModernSelect
                   id="font-scale"
-                  aria-label={COPY.fontSize}
+                  label={COPY.fontSize}
                   value={accessibility.fontScale}
                   onChange={(event) => {
                     setAccessibility((current) => ({
@@ -586,11 +592,12 @@ const SettingsPage = () => {
                       fontScale: event.currentTarget.value as FontScaleOption,
                     }));
                   }}
-                >
-                  <option value="small">{COPY.small}</option>
-                  <option value="medium">{COPY.medium}</option>
-                  <option value="large">{COPY.large}</option>
-                </select>
+                  options={[
+                    { value: 'small', label: COPY.small },
+                    { value: 'medium', label: COPY.medium },
+                    { value: 'large', label: COPY.large },
+                  ]}
+                />
               </div>
             </article>
           </section>
@@ -616,8 +623,9 @@ const SettingsPage = () => {
                 ))}
               </ul>
             </div>
-            <input
-              aria-label="MFA verification code"
+            <ModernInput
+              id="mfa-code"
+              label="Verification code"
               placeholder="Enter code"
               value={mfaCode}
               onChange={(event) => setMfaCode(event.currentTarget.value)}
@@ -683,8 +691,8 @@ const SettingsPage = () => {
           <div className="pp-dialog">
             <h2 className="pp-title">{COPY.deleteConfirmTitle}</h2>
             <p>{COPY.deleteConfirmDesc}</p>
-            <input
-              aria-label="Type DELETE to confirm"
+            <ModernInput
+              id="delete-confirm"
               placeholder="DELETE"
               value={deleteConfirmText}
               onChange={(event) => setDeleteConfirmText(event.currentTarget.value)}

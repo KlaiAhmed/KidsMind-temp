@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMeSummaryQuery } from '../../hooks/api/useMeSummaryQuery';
 import { usePatchSettings } from '../../hooks/api/usePatchSettings';
 import { getCountryOptions } from '../../utils/countries';
+import { ModernInput, ModernSelect } from '../../components/shared/ModernInput';
 import '../../styles/parent-portal.css';
 
 const COPY = {
@@ -19,6 +20,15 @@ const COPY = {
   defaultLanguage: 'Default language',
   retry: 'Retry',
 } as const;
+
+const LANGUAGE_OPTIONS = [
+  { value: 'en', label: 'English' },
+  { value: 'fr', label: 'French' },
+  { value: 'es', label: 'Spanish' },
+  { value: 'it', label: 'Italian' },
+  { value: 'ar', label: 'Arabic' },
+  { value: 'ch', label: 'Chinese' },
+];
 
 interface ProfileFormState {
   username: string;
@@ -227,91 +237,97 @@ const ProfilePage = () => {
             void saveProfile();
           }}
         >
-          <div className="pp-form-row">
-            <label htmlFor="settings-username">Username</label>
-            <input
-              id="settings-username"
-              aria-label="Username"
-              value={profileForm.username}
-              onChange={(event) => updateProfileForm((current) => ({ ...current, username: event.currentTarget.value }))}
-            />
-          </div>
+          <ModernInput
+            id="settings-username"
+            label="Username"
+            placeholder="Enter username"
+            value={profileForm.username}
+            onChange={(event) => updateProfileForm((current) => ({ ...current, username: event.currentTarget.value }))}
+            success={profileForm.username.length > 0}
+          />
 
-          <div className="pp-form-row">
-            <label htmlFor="settings-email">Email</label>
-            <input id="settings-email" aria-label="Email" value={profileForm.email} readOnly />
-            <button type="button" className="pp-button pp-touch pp-focusable" aria-label={COPY.changeEmail}>
-              {COPY.changeEmail}
-            </button>
-          </div>
+          <ModernInput
+            id="settings-email"
+            type="email"
+            label="Email"
+            hint="Contact support to change email"
+            value={profileForm.email}
+            disabled
+          />
 
-          <div className="pp-grid-two">
-            {/* Country Selector - Dropdown style */}
-            <div className="pp-form-row">
-              <label htmlFor="settings-country">{COPY.countryLabel}</label>
-              <div className="pp-country-group" ref={countrySelectorRef}>
-                <div className="pp-country-input-wrapper">
-                  <input
-                    id="settings-country"
-                    type="text"
-                    className="pp-country-input"
-                    value={countryInputValue}
-                    placeholder={COPY.countrySearchPlaceholder}
-                    autoComplete="off"
-                    onChange={(event) => handleCountrySearchChange(event.target.value)}
-                    onFocus={handleCountryInputFocus}
-                    onBlur={handleCountryInputBlur}
-                    aria-label={COPY.countryLabel}
-                    aria-expanded={isCountryListOpen}
-                    aria-haspopup="listbox"
-                  />
-                  {isCountryListOpen && (
-                    <div className="pp-country-dropdown" role="listbox" aria-label={COPY.countryLabel}>
-                      {filteredCountryOptions.length === 0 ? (
-                        <p className="pp-country-hint" style={{ padding: '0.75rem' }}>No matching countries</p>
-                      ) : (
-                        filteredCountryOptions.map((country) => {
-                          const isSelected = country.value === profileForm.country;
-                          return (
-                            <button
-                              key={country.value}
-                              type="button"
-                              className={`pp-country-option ${isSelected ? 'pp-country-option-selected' : ''}`}
-                              onMouseDown={(event) => {
-                                event.preventDefault();
-                                handleCountryOptionSelect(country.value);
-                              }}
-                              role="option"
-                              aria-selected={isSelected}
-                            >
-                              {country.label}
-                            </button>
-                          );
-                        })
-                      )}
-                    </div>
+          <div className="pp-grid-two" style={{ marginTop: '0.5rem' }}>
+            {/* Country Selector */}
+            <div ref={countrySelectorRef} style={{ position: 'relative' }}>
+              <ModernInput
+                id="settings-country"
+                label={COPY.countryLabel}
+                placeholder={COPY.countrySearchPlaceholder}
+                hint={COPY.countrySearchHint}
+                value={countryInputValue}
+                onChange={(event) => handleCountrySearchChange(event.currentTarget.value)}
+                onFocus={handleCountryInputFocus}
+                onBlur={handleCountryInputBlur}
+              />
+              {isCountryListOpen && (
+                <div
+                  className="pp-country-dropdown"
+                  role="listbox"
+                  aria-label={COPY.countryLabel}
+                  style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: 0,
+                    right: 0,
+                    zIndex: 20,
+                    maxHeight: '200px',
+                    overflowY: 'auto',
+                  }}
+                >
+                  {filteredCountryOptions.length === 0 ? (
+                    <p style={{ padding: '0.75rem', color: 'var(--text-muted)', fontSize: '0.875rem' }}>
+                      No matching countries
+                    </p>
+                  ) : (
+                    filteredCountryOptions.map((country) => {
+                      const isSelected = country.value === profileForm.country;
+                      return (
+                        <button
+                          key={country.value}
+                          type="button"
+                          className={`pp-country-option ${isSelected ? 'pp-country-option-selected' : ''}`}
+                          onMouseDown={(event) => {
+                            event.preventDefault();
+                            handleCountryOptionSelect(country.value);
+                          }}
+                          role="option"
+                          aria-selected={isSelected}
+                          style={{
+                            width: '100%',
+                            textAlign: 'left',
+                            padding: '0.625rem 0.875rem',
+                            fontSize: '0.875rem',
+                            background: isSelected ? 'rgba(255, 107, 53, 0.08)' : 'transparent',
+                            border: 'none',
+                            borderBottom: '1px solid var(--border-subtle)',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {country.label}
+                        </button>
+                      );
+                    })
                   )}
                 </div>
-                <span className="pp-country-hint">{COPY.countrySearchHint}</span>
-              </div>
+              )}
             </div>
 
-            <div className="pp-form-row">
-              <label htmlFor="settings-default-language">{COPY.defaultLanguage}</label>
-              <select
-                id="settings-default-language"
-                aria-label={COPY.defaultLanguage}
-                value={profileForm.defaultLanguage}
-                onChange={(event) => updateProfileForm((current) => ({ ...current, defaultLanguage: event.currentTarget.value }))}
-              >
-                <option value="en">English</option>
-                <option value="fr">French</option>
-                <option value="es">Spanish</option>
-                <option value="it">Italian</option>
-                <option value="ar">Arabic</option>
-                <option value="ch">Chinese</option>
-              </select>
-            </div>
+            <ModernSelect
+              id="settings-default-language"
+              label={COPY.defaultLanguage}
+              value={profileForm.defaultLanguage}
+              onChange={(event) => updateProfileForm((current) => ({ ...current, defaultLanguage: event.currentTarget.value }))}
+              options={LANGUAGE_OPTIONS}
+            />
           </div>
 
           {isProfileDirty && <p className="pill-amber pp-pill">{COPY.profileUnsaved}</p>}

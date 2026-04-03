@@ -1,0 +1,300 @@
+/**
+ * PinInput — Premium OTP-style PIN input
+ *
+ * Design Philosophy: Warm Minimalist
+ * - Soft cream backgrounds with warm coral accents
+ * - Floating label animation on focus
+ * - Subtle depth through shadows, not borders
+ * - Playful yet secure aesthetic
+ */
+
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  position: relative;
+}
+
+/* ─── Label & Hint ──────────────────────────────────────────────────────── */
+
+.label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  font-family: var(--font-body);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0.015em;
+}
+
+.hint {
+  font-weight: 400;
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  margin-top: 0.125rem;
+}
+
+/* ─── PIN Row ───────────────────────────────────────────────────────────── */
+
+.pinRow {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.pinRowConfirm {
+  margin-top: var(--spacing-sm);
+}
+
+.pinSlot {
+  position: relative;
+  flex: 1;
+  max-width: 4rem;
+}
+
+.pinInput {
+  width: 100%;
+  aspect-ratio: 1;
+  min-height: 56px;
+  max-height: 72px;
+  font-size: 1.75rem;
+  font-weight: 700;
+  font-family: var(--font-display);
+  text-align: center;
+  caret-color: var(--accent-main);
+  color: transparent;
+  background: var(--bg-surface);
+  border: 2px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  transition:
+    border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    background 0.2s ease,
+    transform 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pinInput::selection {
+  background: transparent;
+}
+
+.pinInput:hover:not(:disabled):not(:focus) {
+  border-color: var(--text-muted);
+  background: var(--bg-surface-hover);
+}
+
+.pinInputFocused {
+  border-color: var(--accent-main);
+  background: var(--bg-surface);
+  box-shadow:
+    0 0 0 4px rgba(255, 107, 53, 0.12),
+    0 4px 12px rgba(0, 0, 0, 0.06);
+  transform: scale(1.02);
+}
+
+.pinInputFilled {
+  border-color: var(--accent-grow);
+  background: rgba(149, 225, 160, 0.08);
+}
+
+.pinInputError {
+  border-color: #ef4444 !important;
+  animation: shakeError 0.4s ease;
+}
+
+.pinInput:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: var(--bg-surface-alt);
+}
+
+/* ─── PIN Dot (filled indicator) ────────────────────────────────────────── */
+
+.pinDot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent-main);
+  pointer-events: none;
+  animation: dotAppear 0.2s ease;
+}
+
+@keyframes dotAppear {
+  from {
+    transform: translate(-50%, -50%) scale(0);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+}
+
+/* ─── Row Error State ───────────────────────────────────────────────────── */
+
+.pinRowError {
+  animation: shakeRow 0.35s ease 0s 2;
+}
+
+.shake {
+  animation: shakeRow 0.35s ease 0s 2;
+}
+
+@keyframes shakeRow {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-6px); }
+  75% { transform: translateX(6px); }
+}
+
+/* ─── Error Message ─────────────────────────────────────────────────────── */
+
+.error {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: #ef4444;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  animation: errorSlide 0.25s ease;
+}
+
+@keyframes errorSlide {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ─── Confirmation Section ──────────────────────────────────────────────── */
+
+.confirmationSection {
+  margin-top: var(--spacing-md);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* ─── Loading Overlay ───────────────────────────────────────────────────── */
+
+.loadingOverlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(2px);
+  border-radius: var(--radius-md);
+  animation: fadeIn 0.2s ease;
+}
+
+[data-theme="dark"] .loadingOverlay {
+  background: rgba(15, 15, 26, 0.8);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.loadingDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-main);
+  animation: loadingBounce 1s ease-in-out infinite;
+}
+
+.loadingDot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.loadingDot:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes loadingBounce {
+  0%, 80%, 100% {
+    transform: scale(0.6);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* ─── Focus Ring Accessibility ──────────────────────────────────────────── */
+
+.pinInput:focus-visible {
+  outline: none;
+  border-color: var(--accent-main);
+  box-shadow: 0 0 0 4px rgba(255, 107, 53, 0.15);
+}
+
+/* ─── Dark Mode Adjustments ─────────────────────────────────────────────── */
+
+[data-theme="dark"] .pinInput {
+  background: var(--bg-surface-alt);
+}
+
+[data-theme="dark"] .pinInputFocused {
+  background: var(--bg-surface);
+  box-shadow:
+    0 0 0 4px rgba(255, 140, 90, 0.15),
+    0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+[data-theme="dark"] .pinInputFilled {
+  background: rgba(123, 216, 143, 0.1);
+}
+
+[data-theme="dark"] .pinDot {
+  background: var(--accent-main);
+}
+
+/* ─── Reduced Motion ────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .pinInput,
+  .pinDot,
+  .error,
+  .loadingDot,
+  .pinRow,
+  .shake {
+    animation: none;
+    transition: none;
+  }
+}
+
+/* ─── Responsive Adjustments ────────────────────────────────────────────── */
+
+@media (max-width: 480px) {
+  .pinRow {
+    gap: 0.5rem;
+  }
+
+  .pinSlot {
+    max-width: 3.5rem;
+  }
+
+  .pinInput {
+    min-height: 52px;
+    font-size: 1.5rem;
+  }
+
+  .pinDot {
+    width: 12px;
+    height: 12px;
+  }
+}

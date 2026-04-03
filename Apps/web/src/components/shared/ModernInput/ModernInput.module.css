@@ -1,0 +1,359 @@
+/**
+ * ModernInput — Minimalist form input component
+ *
+ * Design Philosophy: Refined Minimalism
+ * - Ultra-subtle borders that illuminate on interaction
+ * - Floating focus states with gentle glow
+ * - Generous padding for touch targets
+ * - Zero visual noise, maximum clarity
+ */
+
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  position: relative;
+}
+
+.fullWidth {
+  width: 100%;
+}
+
+/* ─── Label ─────────────────────────────────────────────────────────────── */
+
+.label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-family: var(--font-body);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0.01em;
+  transition: color 0.2s ease;
+}
+
+.required {
+  color: var(--accent-main);
+  font-weight: 400;
+  margin-left: 0.125rem;
+}
+
+/* ─── Input Wrapper ─────────────────────────────────────────────────────── */
+
+.inputWrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: var(--bg-surface);
+  border: 1.5px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+    background 0.2s ease;
+  overflow: hidden;
+}
+
+.inputWrapper::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 107, 53, 0.03) 0%,
+    transparent 50%
+  );
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.inputWrapper:hover:not(.inputWrapperDisabled) {
+  border-color: color-mix(in srgb, var(--border-subtle) 70%, var(--text-muted) 30%);
+}
+
+.inputWrapper:hover:not(.inputWrapperDisabled)::before {
+  opacity: 1;
+}
+
+.inputWrapperFocused {
+  border-color: var(--accent-main);
+  box-shadow:
+    0 0 0 3px rgba(255, 107, 53, 0.1),
+    0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.inputWrapperFocused::before {
+  opacity: 1;
+}
+
+.inputWrapperError {
+  border-color: #ef4444 !important;
+  background: rgba(239, 68, 68, 0.02);
+}
+
+.inputWrapperSuccess {
+  border-color: var(--accent-grow) !important;
+  background: rgba(149, 225, 160, 0.03);
+}
+
+.inputWrapperDisabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background: var(--bg-surface-alt);
+}
+
+/* ─── Input ─────────────────────────────────────────────────────────────── */
+
+.input {
+  flex: 1;
+  width: 100%;
+  font-family: var(--font-body);
+  font-size: var(--font-size-base);
+  color: var(--text-primary);
+  background: transparent;
+  border: none;
+  outline: none;
+  caret-color: var(--accent-main);
+  min-height: 48px;
+}
+
+.input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.8;
+}
+
+.input:disabled {
+  cursor: not-allowed;
+}
+
+.inputWithLeftElement {
+  padding-left: 0;
+}
+
+.inputWithRightElement {
+  padding-right: 0;
+}
+
+/* ─── Size Variants ─────────────────────────────────────────────────────── */
+
+.sm .input {
+  min-height: 40px;
+  padding: 0.5rem 0.75rem;
+  font-size: var(--font-size-sm);
+}
+
+.md .input {
+  min-height: 48px;
+  padding: 0.75rem 1rem;
+}
+
+.lg .input {
+  min-height: 56px;
+  padding: 1rem 1.25rem;
+  font-size: var(--font-size-lg);
+}
+
+/* ─── Left Element ──────────────────────────────────────────────────────── */
+
+.leftElement {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-left: 1rem;
+  color: var(--text-muted);
+  transition: color 0.2s ease;
+}
+
+.inputWrapperFocused .leftElement {
+  color: var(--accent-main);
+}
+
+/* ─── Password Toggle ───────────────────────────────────────────────────── */
+
+.passwordToggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 100%;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.passwordToggle:hover {
+  color: var(--text-primary);
+  background: var(--bg-surface-hover);
+}
+
+.passwordToggle:active {
+  background: var(--bg-surface-alt);
+}
+
+/* ─── Status Icons ──────────────────────────────────────────────────────── */
+
+.successIcon,
+.errorIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 100%;
+  pointer-events: none;
+}
+
+.successIcon {
+  color: var(--accent-grow);
+}
+
+.errorIcon {
+  color: #ef4444;
+}
+
+/* ─── Hint Text ─────────────────────────────────────────────────────────── */
+
+.hint {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  padding-left: 0.125rem;
+}
+
+/* ─── Error Message ─────────────────────────────────────────────────────── */
+
+.error {
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  color: #ef4444;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding-left: 0.125rem;
+  animation: errorSlide 0.2s ease;
+}
+
+@keyframes errorSlide {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ─── Dark Mode ─────────────────────────────────────────────────────────── */
+
+[data-theme="dark"] .inputWrapper {
+  background: var(--bg-surface-alt);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="dark"] .inputWrapper:hover:not(.inputWrapperDisabled) {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+[data-theme="dark"] .inputWrapperFocused {
+  border-color: var(--accent-main);
+  box-shadow:
+    0 0 0 3px rgba(255, 140, 90, 0.12),
+    0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+[data-theme="dark"] .input {
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .input::placeholder {
+  color: var(--text-muted);
+}
+
+[data-theme="dark"] .passwordToggle:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* ─── Reduced Motion ────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .inputWrapper,
+  .input,
+  .error,
+  .passwordToggle,
+  .leftElement {
+    transition: none;
+  }
+
+  .error {
+    animation: none;
+  }
+}
+
+/* ─── Focus Visible (Keyboard Navigation) ───────────────────────────────── */
+
+.input:focus-visible {
+  outline: none;
+}
+
+.inputWrapper:focus-within {
+  outline: none;
+}
+
+/* ─── Select Styles ─────────────────────────────────────────────────────── */
+
+.selectWrapper {
+  position: relative;
+}
+
+.select {
+  appearance: none;
+  cursor: pointer;
+  padding-right: 2.75rem;
+  background: transparent;
+}
+
+.select::-ms-expand {
+  display: none;
+}
+
+.selectIcon {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  color: var(--text-muted);
+  transition: transform 0.2s ease, color 0.15s ease;
+}
+
+.inputWrapperFocused .selectIcon {
+  color: var(--accent-main);
+}
+
+.selectSuccessIcon {
+  right: 2.75rem;
+  width: 24px;
+}
+
+/* RTL Support */
+[dir="rtl"] .select {
+  padding-right: 0.75rem 1rem;
+  padding-left: 2.75rem;
+}
+
+[dir="rtl"] .selectIcon {
+  right: auto;
+  left: 0;
+}
+
+[data-theme="dark"] .select {
+  background-image: none;
+}
