@@ -1,6 +1,5 @@
 import { apiBaseUrl } from '../utils/api';
 import { clearCsrfToken, getCsrfHeader, setCsrfToken } from '../utils/csrf';
-import { authStore } from '../store/auth.store';
 
 interface RefreshResponse {
   csrf_token?: string;
@@ -60,24 +59,10 @@ export const logoutAuthSession = async (): Promise<void> => {
 
   logoutPromise = (async (): Promise<void> => {
     try {
-      await fetch(`${apiBaseUrl}/api/v1/auth/logout`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Client-Type': 'web',
-          ...getCsrfHeader(),
-        },
-        credentials: 'include',
-        body: JSON.stringify({}),
-      });
-    } catch {
-      // The local logout below still clears app state if the network call fails.
+      const { logout } = await import('./logout');
+      await logout();
     } finally {
-      authStore.logout({ redirectToLogin: true });
-
-      setTimeout(() => {
-        logoutPromise = null;
-      }, 100);
+      logoutPromise = null;
     }
   })();
 

@@ -3,11 +3,10 @@ import { useState, useCallback, useEffect } from 'react';
 import { useTheme } from '../../hooks/useTheme';
 import { useLanguage } from '../../hooks/useLanguage';
 import { useMultiStep } from '../../hooks/useMultiStep';
-import { useAuthStatus } from '../../hooks/useAuthStatus';
-import { apiBaseUrl } from '../../utils/api';
+import { useMeSummaryQuery } from '../../hooks/api/useMeSummaryQuery';
+import { useRegisterMutation } from '../../hooks/api/useRegisterMutation';
+import { apiClient } from '../../lib/api';
 import { getPrimaryTimezoneByCountryCode } from '../../utils/countries';
-import { getCsrfHeader, setCsrfToken } from '../../utils/csrf';
-import { dispatchAuthStateChanged } from '../../utils/authEvents';
 import type {
   OnboardingStep,
   ParentAccountFormData,
@@ -27,22 +26,6 @@ import styles from './GetStartedPage.module.css';
 
 /** Total number of steps in the onboarding flow */
 const TOTAL_STEPS = 4;
-
-interface ApiErrorResponse {
-  message?: string;
-  error?: string;
-  error_code?: string;
-  errors?: Array<{ field?: string; message?: string; type?: string }>;
-  detail?: string | Array<{ msg?: string; message?: string }>;
-}
-
-interface RegisterSuccessResponse {
-  csrf_token?: string;
-}
-
-interface LoginSuccessResponse {
-  csrf_token?: string;
-}
 
 interface ChildCreateSuccessResponse {
   id?: number | string;
@@ -125,57 +108,6 @@ const translateApiMessage = (message: string, translations: TranslationMap): str
   return normalizedMessage;
 };
 
-const extractApiErrorMessage = async (
-  response: Response,
-  fallbackTranslationKey: keyof TranslationMap
-): Promise<string> => {
-  try {
-    const errorBody = (await response.json()) as ApiErrorResponse;
-
-    if (Array.isArray(errorBody.errors)) {
-      const firstError = errorBody.errors.find((item) => item?.message);
-      if (firstError?.message) {
-        return firstError.message;
-      }
-    }
-
-    if (typeof errorBody.detail === 'string') {
-      return errorBody.detail;
-    }
-
-    if (Array.isArray(errorBody.detail)) {
-      const firstValidationError = errorBody.detail.find((item) => item?.msg || item?.message);
-      if (firstValidationError?.msg) {
-        return firstValidationError.msg;
-      }
-
-      if (firstValidationError?.message) {
-        return firstValidationError.message;
-      }
-    }
-
-    if (typeof errorBody.message === 'string') {
-      return errorBody.message;
-    }
-
-    if (typeof errorBody.error === 'string') {
-      return errorBody.error;
-    }
-
-    if (response.status === 401 || response.status === 403) {
-      return 'login_error_session';
-    }
-
-    return fallbackTranslationKey;
-  } catch {
-    if (response.status === 401 || response.status === 403) {
-      return 'login_error_session';
-    }
-
-    return fallbackTranslationKey;
-  }
-};
-
 /**
  * Builds the step configuration array with current completion state.
  */
@@ -203,7 +135,8 @@ const buildStepConfig = (currentIndex: number): OnboardingStep[] => {
 const GetStartedPage = () => {
   const { theme, toggleTheme } = useTheme();
   const { language, setLanguage, translations } = useLanguage();
-  const { isAuthenticated, isLoading: isAuthLoading } = useAuthStatus();
+  const { isAuthenticated, isLoading: isAuthLoading } = useMeSummaryQuery();
+  const registerMutation = useRegisterMutation();
   const {
     currentStepIndex,
     goToNextStep,
@@ -233,63 +166,14 @@ const GetStartedPage = () => {
       try {
         const timezone = getPrimaryTimezoneByCountryCode(data.country);
 
-        const registerPayload = {
+        await registerMutation.mutateAsync({
           email: data.email,
           password: data.password,
           password_confirmation: data.confirmPassword,
           country: data.country,
           timezone,
           agreed_to_terms: data.agreedToTerms,
-        };
-
-        const registerResponse = await fetch(`${apiBaseUrl}/api/v1/auth/register`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Client-Type': 'web',
-          },
-          credentials: 'include',
-          body: JSON.stringify(registerPayload),
         });
-
-        if (!registerResponse.ok) {
-          const errorMessage = await extractApiErrorMessage(registerResponse, 'status_error_description');
-          throw new Error(translateApiMessage(errorMessage, translations));
-        }
-
-        try {
-          const registerBody = (await registerResponse.json()) as RegisterSuccessResponse;
-          setCsrfToken(registerBody.csrf_token ?? null);
-        } catch {
-          setCsrfToken(null);
-        }
-
-        const loginResponse = await fetch(`${apiBaseUrl}/api/v1/auth/login`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Client-Type': 'web',
-          },
-          credentials: 'include',
-          body: JSON.stringify({
-            email: data.email,
-            password: data.password,
-          }),
-        });
-
-        if (!loginResponse.ok) {
-          const errorMessage = await extractApiErrorMessage(loginResponse, 'login_error_invalid');
-          throw new Error(translateApiMessage(errorMessage, translations));
-        }
-
-        try {
-          const loginBody = (await loginResponse.json()) as LoginSuccessResponse;
-          setCsrfToken(loginBody.csrf_token ?? null);
-        } catch {
-          setCsrfToken(null);
-        }
-
-        dispatchAuthStateChanged();
 
         setParentData(data);
         setChildData({});
@@ -300,12 +184,12 @@ const GetStartedPage = () => {
       } catch (error) {
         setSubmitError(
           error instanceof Error
-            ? error.message
+            ? translateApiMessage(error.message, translations)
             : translations.status_error_description
         );
       }
     },
-    [goToNextStep, translations]
+    [goToNextStep, registerMutation, translations]
   );
 
   const handleChildComplete = useCallback(
@@ -321,23 +205,11 @@ const GetStartedPage = () => {
           avatar: data.avatarEmoji,
         };
 
-        const childResponse = await fetch(`${apiBaseUrl}/api/v1/children`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Client-Type': 'web',
-            ...getCsrfHeader(),
-          },
-          credentials: 'include',
-          body: JSON.stringify(childPayload),
+        const childResponse = await apiClient.post<ChildCreateSuccessResponse>('/api/v1/children', {
+          body: childPayload,
         });
 
-        if (!childResponse.ok) {
-          const errorMessage = await extractApiErrorMessage(childResponse, 'status_error_description');
-          throw new Error(translateApiMessage(errorMessage, translations));
-        }
-
-        const childBody = (await childResponse.json()) as ChildCreateSuccessResponse;
+        const childBody = childResponse.data;
         const rawChildId = childBody.child_id ?? childBody.id;
         const numericChildId = Number(rawChildId);
 
@@ -352,7 +224,7 @@ const GetStartedPage = () => {
       } catch (error) {
         setSubmitError(
           error instanceof Error
-            ? error.message
+            ? translateApiMessage(error.message, translations)
             : translations.status_error_description
         );
       }
@@ -372,21 +244,9 @@ const GetStartedPage = () => {
       try {
         const patchPayload = buildSafetyAndRulesPatchPayload(data);
 
-        const patchResponse = await fetch(`${apiBaseUrl}/api/v1/safety-and-rules`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Client-Type': 'web',
-            ...getCsrfHeader(),
-          },
-          credentials: 'include',
-          body: JSON.stringify(patchPayload),
+        await apiClient.patch('/api/v1/safety-and-rules', {
+          body: patchPayload,
         });
-
-        if (!patchResponse.ok) {
-          const errorMessage = await extractApiErrorMessage(patchResponse, 'status_error_description');
-          throw new Error(translateApiMessage(errorMessage, translations));
-        }
 
         setPreferencesData(data);
         setDirection('forward');
@@ -394,7 +254,7 @@ const GetStartedPage = () => {
       } catch (error) {
         setSubmitError(
           error instanceof Error
-            ? error.message
+            ? translateApiMessage(error.message, translations)
             : translations.status_error_description
         );
       }

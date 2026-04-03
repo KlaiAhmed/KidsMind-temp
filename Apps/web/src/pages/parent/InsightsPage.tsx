@@ -2,11 +2,11 @@ import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { WeeklyBarChartContainer } from '../../components/parent/dashboard/WeeklyBarChart';
 import { useChildProgress } from '../../hooks/api/useChildProgress';
-import { useChildSessions } from '../../hooks/api/useChildSessions';
+import { useChildSessions, useClearChildSessionMutation } from '../../hooks/api/useChildSessions';
 import { useChildBadges, type BadgeCategory } from '../../hooks/api/useChildBadges';
-import { useCurrentUser } from '../../hooks/api/useCurrentUser';
+import { useMeSummaryQuery } from '../../hooks/api/useMeSummaryQuery';
 import { apiClient } from '../../lib/api';
-import { useChildStore } from '../../store/child.store';
+import { useActiveChild } from '../../hooks/useActiveChild';
 import '../../styles/parent-portal.css';
 
 const COPY = {
@@ -77,8 +77,8 @@ const formatDate = (value: string | null): string => {
 };
 
 const InsightsPage = () => {
-  const { activeChild } = useChildStore();
-  const userQuery = useCurrentUser();
+  const { activeChild } = useActiveChild();
+  const userQuery = useMeSummaryQuery();
 
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = tabFromParam(searchParams.get('tab'));
@@ -99,6 +99,7 @@ const InsightsPage = () => {
 
   const progressQuery = useChildProgress(childId);
   const sessionsQuery = useChildSessions(childId, sessionsPage, 20);
+  const clearSessionMutation = useClearChildSessionMutation();
   const badgesQuery = useChildBadges(childId);
 
   const progressSubjects = progressQuery.data?.subjects ?? [];
@@ -116,7 +117,7 @@ const InsightsPage = () => {
   }, [badgeCategoryFilter, badgesQuery.data?.badges]);
 
   const openSession = async (sessionId: string): Promise<void> => {
-    if (!childId || !userQuery.data?.id) {
+    if (!childId || !userQuery.user?.id) {
       return;
     }
 
@@ -136,7 +137,7 @@ const InsightsPage = () => {
 
     try {
       const response = await apiClient.get<ChatHistoryPayload>(
-        `/api/v1/chat/history/${userQuery.data.id}/${childId}/${sessionId}`
+        `/api/v1/chat/history/${userQuery.user.id}/${childId}/${sessionId}`
       );
 
       const rawMessages = Array.isArray(response.data.messages)
@@ -163,20 +164,25 @@ const InsightsPage = () => {
   };
 
   const clearSessionHistory = async (sessionId: string): Promise<void> => {
-    if (!childId || !userQuery.data?.id) {
+    if (!childId || !userQuery.user?.id) {
       return;
     }
 
     setMessageError('');
 
     try {
-      await apiClient.delete(`/api/v1/chat/history/${userQuery.data.id}/${childId}/${sessionId}`);
+      await clearSessionMutation.mutateAsync({
+        userId: userQuery.user.id,
+        childId,
+        sessionId,
+        page: sessionsPage,
+        pageSize: 20,
+      });
       setMessageMap((current) => {
         const next = { ...current };
         delete next[sessionId];
         return next;
       });
-      await sessionsQuery.refetch();
     } catch {
       setMessageError(COPY.clearFailed);
     }

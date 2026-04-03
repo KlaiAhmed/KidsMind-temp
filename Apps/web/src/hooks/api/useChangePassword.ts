@@ -1,5 +1,6 @@
+import { useMutation } from '@tanstack/react-query';
 import { apiClient } from '../../lib/api';
-import { useApiMutation, type UseApiMutationResult } from './core';
+import { toUiError, type UiError } from './error';
 
 export interface ChangePasswordPayload {
   current_password: string;
@@ -12,14 +13,34 @@ export interface ChangePasswordResponse {
   message?: string;
 }
 
-export type UseChangePasswordResult = UseApiMutationResult<ChangePasswordResponse, ChangePasswordPayload>;
+export interface UseChangePasswordResult {
+  data: ChangePasswordResponse | null;
+  error: UiError | null;
+  isPending: boolean;
+  mutateAsync: (payload: ChangePasswordPayload) => Promise<ChangePasswordResponse>;
+  reset: () => void;
+}
 
 export const useChangePassword = (): UseChangePasswordResult => {
-  return useApiMutation<ChangePasswordResponse, ChangePasswordPayload>(async (payload) => {
-    const response = await apiClient.post<ChangePasswordResponse>('/api/v1/users/me/change-password', {
-      body: payload,
-    });
+  const mutation = useMutation<ChangePasswordResponse, UiError, ChangePasswordPayload>({
+    mutationFn: async (payload) => {
+      try {
+        const response = await apiClient.post<ChangePasswordResponse>('/api/v1/users/me/change-password', {
+          body: payload,
+        });
 
-    return response.data;
+        return response.data;
+      } catch (error) {
+        throw toUiError(error);
+      }
+    },
   });
+
+  return {
+    data: mutation.data ?? null,
+    error: mutation.error ?? null,
+    isPending: mutation.isPending,
+    mutateAsync: mutation.mutateAsync,
+    reset: mutation.reset,
+  };
 };

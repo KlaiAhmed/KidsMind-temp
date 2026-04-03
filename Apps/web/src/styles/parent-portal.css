@@ -148,13 +148,47 @@
   padding: 0.75rem 0.5rem;
 }
 
+/* Nav link: fixed height prevents Y-shift during collapse */
+.pp-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: var(--radius-md);
+  padding: 0.75rem;
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-weight: 500;
+  transition: background 0.15s ease, color 0.15s ease;
+  height: 44px; /* Fixed height prevents Y-shift */
+  box-sizing: border-box;
+}
+
+/* Icon wrapper: fixed width prevents X-shift */
+.pp-nav-link > svg {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+}
+
+/* Nav link text: smooth fade-out on collapse */
+.pp-nav-link-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: clip;
+  transition: opacity 0.2s ease;
+  opacity: 1;
+}
+
+.pp-sidebar-collapsed .pp-nav-link-text {
+  opacity: 0;
+  width: 0;
+  flex-shrink: 0;
+}
+
+/* Center icons in collapsed state while maintaining fixed height */
 .pp-sidebar-collapsed .pp-nav-link {
   justify-content: center;
   padding: 0.75rem;
-}
-
-.pp-sidebar-collapsed .pp-nav-title {
-  display: none;
 }
 
 .pp-sidebar-toggle {
@@ -181,11 +215,37 @@
 .pp-sidebar-header {
   padding-right: 2.5rem;
   margin-bottom: 0.5rem;
+  min-height: 60px; /* Fixed height prevents nav from shifting up */
+}
+
+.pp-sidebar-header-title,
+.pp-sidebar-header-subtitle {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: clip;
+  transition: opacity 0.2s ease;
+  opacity: 1;
+  margin: 0;
+}
+
+.pp-sidebar-header-title {
+  font-size: 1.125rem;
+  line-height: 1.3;
+}
+
+.pp-sidebar-header-subtitle {
+  font-size: 0.75rem;
+  margin-top: 0.25rem;
 }
 
 .pp-sidebar-collapsed .pp-sidebar-header {
   padding-right: 0;
   text-align: center;
+}
+
+.pp-sidebar-collapsed .pp-sidebar-header-title,
+.pp-sidebar-collapsed .pp-sidebar-header-subtitle {
+  opacity: 0;
 }
 
 .pp-logo-icon {
@@ -420,18 +480,6 @@
 }
 
 /* ─── Navigation ────────────────────────────────────────────────────────── */
-
-.pp-nav-link {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  border-radius: var(--radius-md);
-  padding: 0.75rem;
-  color: var(--text-secondary);
-  text-decoration: none;
-  font-weight: 500;
-  transition: background 0.15s ease, color 0.15s ease;
-}
 
 .pp-nav-link:hover {
   background: var(--bg-surface-hover);

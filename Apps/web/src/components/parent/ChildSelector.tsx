@@ -1,12 +1,12 @@
 import { Link } from 'react-router-dom';
 import { useLanguage } from '../../hooks/useLanguage';
-import { useChildren } from '../../hooks/api/useChildren';
-import { childStore, useChildStore } from '../../store/child.store';
+import { useChildrenQuery } from '../../hooks/api/useChildrenQuery';
+import { useActiveChild } from '../../hooks/useActiveChild';
 
 const ChildSelector = () => {
   const { translations } = useLanguage();
-  const { activeChild } = useChildStore();
-  const { data, isLoading, isFetching, error, refetch } = useChildren();
+  const { activeChild, setActiveChildId } = useActiveChild();
+  const { data, isLoading, isFetching, error, refetch } = useChildrenQuery();
 
   const headingLabel = translations.dashboard_settings_profile;
 
@@ -77,7 +77,7 @@ const ChildSelector = () => {
               aria-label={`${translations.learn_more}: ${child.nickname}`}
               aria-selected={isActive}
               onClick={() => {
-                childStore.setActiveChild(child);
+                setActiveChildId(child.child_id);
               }}
             >
               <span aria-hidden="true">{child.avatar ?? '🧒'}</span>

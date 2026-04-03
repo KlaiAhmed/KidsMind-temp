@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useChildren } from '../../hooks/api/useChildren';
-import { invalidateQuery } from '../../hooks/api/core';
+import { useQueryClient } from '@tanstack/react-query';
+import { useChildrenQuery } from '../../hooks/api/useChildrenQuery';
+import type { ChildRecord } from '../../hooks/api/useChildrenQuery';
 import { apiClient } from '../../lib/api';
-import { childStore, type ChildRecord, useChildStore } from '../../store/child.store';
+import { queryKeys } from '../../lib/queryKeys';
+import { useActiveChild } from '../../hooks/useActiveChild';
 import '../../styles/parent-portal.css';
 
 const COPY = {
@@ -110,8 +112,9 @@ const normalizeSafetyForm = (child: ChildRecord | null): SafetyFormState => {
 };
 
 const ChildProfilesPage = () => {
-  const childrenQuery = useChildren();
-  const { activeChild } = useChildStore();
+  const queryClient = useQueryClient();
+  const childrenQuery = useChildrenQuery();
+  const { activeChild, setActiveChildId } = useActiveChild();
 
   const [activeTab, setActiveTab] = useState<ChildProfilesTab>('all');
   const [editForm, setEditForm] = useState<EditChildFormState | null>(null);
@@ -186,8 +189,7 @@ const ChildProfilesPage = () => {
         body: payload,
       });
 
-      invalidateQuery('children:list');
-      await childrenQuery.refetch();
+      await queryClient.invalidateQueries({ queryKey: queryKeys.children() });
       setEditForm(null);
       setToastMessage(COPY.saveSuccess);
     } catch {
@@ -206,8 +208,7 @@ const ChildProfilesPage = () => {
 
     try {
       await apiClient.delete(`/api/v1/children/${removeCandidate.child_id}`);
-      invalidateQuery('children:list');
-      await childrenQuery.refetch();
+      await queryClient.invalidateQueries({ queryKey: queryKeys.children() });
       setRemoveCandidate(null);
       setToastMessage(COPY.saveSuccess);
     } catch {
@@ -240,8 +241,7 @@ const ChildProfilesPage = () => {
         },
       });
 
-      invalidateQuery('children:list');
-      await childrenQuery.refetch();
+      await queryClient.invalidateQueries({ queryKey: queryKeys.children() });
       setToastMessage(COPY.saveSuccess);
     } catch {
       setToastMessage(COPY.saveFailed);
@@ -351,7 +351,7 @@ const ChildProfilesPage = () => {
                         className="pp-button pp-touch pp-focusable"
                         aria-label={`${COPY.setLimits} ${child.nickname}`}
                         onClick={() => {
-                          childStore.setActiveChild(child);
+                          setActiveChildId(child.child_id);
                           setActiveTab('safety');
                         }}
                       >

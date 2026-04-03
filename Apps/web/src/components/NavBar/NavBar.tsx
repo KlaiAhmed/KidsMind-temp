@@ -12,9 +12,9 @@ import { Sun, Moon, Menu, X, Languages, User, ChevronLeft, ChevronRight } from '
 import type { ThemeMode, LanguageCode, TranslationMap } from '../../types';
 import { LANGUAGES } from '../../utils/constants';
 import { useScrollPosition } from '../../hooks/useScrollPosition';
-import { apiBaseUrl } from '../../utils/api';
-import { getCsrfHeader } from '../../utils/csrf';
-import { logoutAuthSession } from '../../lib/authSession';
+import { useVerifyParentPinMutation } from '../../hooks/api/useVerifyParentPinMutation';
+import type { UiError } from '../../hooks/api/error';
+import { logout } from '../../lib/logout';
 import { grantParentProfileAccess, hasParentProfileAccess } from '../../utils/parentProfileAccess';
 import styles from './NavBar.module.css';
 
@@ -70,10 +70,11 @@ const NavBar = ({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [activeMobileMenu, setActiveMobileMenu] = useState<MobileMenuView>('main');
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const verifyParentPinMutation = useVerifyParentPinMutation();
+  const isVerifyingPin = verifyParentPinMutation.isPending;
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
   const [pinDigits, setPinDigits] = useState<string[]>(Array(PIN_LENGTH).fill(''));
   const [pinError, setPinError] = useState('');
-  const [isVerifyingPin, setIsVerifyingPin] = useState(false);
   const [isPinErrorShaking, setIsPinErrorShaking] = useState(false);
   const languageDropdownRef = useRef<HTMLDivElement>(null);
   const pinInputRefs = useRef<Array<HTMLInputElement | null>>([]);
@@ -168,43 +169,35 @@ const NavBar = ({
       return;
     }
 
-    setIsVerifyingPin(true);
     setPinError('');
 
     try {
-      const verifyResponse = await fetch(`${apiBaseUrl}/api/v1/safety-and-rules/verify-parent-pin`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Client-Type': 'web',
-          ...getCsrfHeader(),
-        },
-        credentials: 'include',
-        body: JSON.stringify({ parentPin: normalizedPin }),
+      await verifyParentPinMutation.mutateAsync({
+        parentPin: normalizedPin,
       });
 
-      if (!verifyResponse.ok) {
-        if (verifyResponse.status === 404) {
-          triggerPinError(translations.nav_pin_not_set);
-          return;
-        }
+      grantParentProfileAccess();
+      setIsPinModalOpen(false);
+      setPinDigits(Array(PIN_LENGTH).fill(''));
+      setPinError('');
+      setIsPinErrorShaking(false);
+      navigate(PARENT_PROFILE_ROUTE);
+    } catch (error) {
+      const typedError = error as UiError;
 
+      if (typedError.status === 404) {
+        triggerPinError(translations.nav_pin_not_set);
+        return;
+      }
+
+      if (typedError.status) {
         triggerPinError(translations.nav_pin_invalid);
         return;
       }
 
-      grantParentProfileAccess();
-      setIsPinModalOpen(false);
-  setPinDigits(Array(PIN_LENGTH).fill(''));
-      setPinError('');
-      setIsPinErrorShaking(false);
-      navigate(PARENT_PROFILE_ROUTE);
-    } catch {
       triggerPinError(translations.status_error_description);
-    } finally {
-      setIsVerifyingPin(false);
     }
-  }, [isVerifyingPin, navigate, translations, triggerPinError]);
+  }, [isVerifyingPin, navigate, translations, triggerPinError, verifyParentPinMutation]);
 
   const handlePinDigitChange = useCallback(
     (index: number, rawValue: string) => {
@@ -361,7 +354,7 @@ const NavBar = ({
     setIsMobileMenuOpen(false);
 
     try {
-      await logoutAuthSession();
+      await logout();
     } catch {
       // Logout should still clear local auth state if the network call fails.
     }

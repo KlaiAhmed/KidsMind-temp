@@ -1,5 +1,7 @@
+import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../../lib/api';
-import { useApiQuery, type UseApiQueryResult } from './core';
+import { queryKeys } from '../../lib/queryKeys';
+import { toUiError, type UiError } from './error';
 
 export type InsightSeverity = 'warning' | 'positive' | 'info';
 
@@ -18,10 +20,22 @@ export interface ChildInsightsResponse {
   cacheHeader: string | null;
 }
 
-export type UseChildInsightsResult = UseApiQueryResult<ChildInsightsResponse>;
+export interface UseChildInsightsResult {
+  data: ChildInsightsResponse | null;
+  isLoading: boolean;
+  isError: boolean;
+  error: UiError | null;
+  isFetching: boolean;
+  refetch: () => Promise<void>;
+}
 
 interface RawInsightsPayload {
   insights?: Array<Record<string, unknown>>;
+}
+
+interface RawInsightsQueryResult {
+  payload: RawInsightsPayload | Array<Record<string, unknown>>;
+  cacheHeader: string | null;
 }
 
 const normalizeSeverity = (value: unknown): InsightSeverity => {
@@ -51,22 +65,40 @@ const normalizeInsights = (payload: RawInsightsPayload | Array<Record<string, un
 };
 
 export const useChildInsights = (childId: number | null): UseChildInsightsResult => {
-  return useApiQuery<ChildInsightsResponse>({
-    queryKey: `child-insights:${childId ?? 'none'}`,
+  const resolvedChildId = childId !== null ? String(childId) : '';
+
+  const query = useQuery<RawInsightsQueryResult, UiError, ChildInsightsResponse>({
+    queryKey: queryKeys.childInsights(resolvedChildId),
     enabled: childId !== null,
     staleTime: 30 * 60 * 1000,
-    queryFn: async (signal) => {
-      const response = await apiClient.get<RawInsightsPayload | Array<Record<string, unknown>>>(`/api/v1/children/${childId}/insights`, {
-        signal,
-      });
+    queryFn: async () => {
+      try {
+        const response = await apiClient.get<RawInsightsPayload | Array<Record<string, unknown>>>(`/api/v1/children/${childId}/insights`);
 
-      return {
-        ...response,
-        data: {
-          insights: normalizeInsights(response.data),
+        return {
+          payload: response.data,
           cacheHeader: response.headers.get('x-cache'),
-        },
-      };
+        };
+      } catch (error) {
+        throw toUiError(error);
+      }
     },
+    select: (result) => ({
+      insights: normalizeInsights(result.payload),
+      cacheHeader: result.cacheHeader,
+    }),
   });
+
+  const refetch = async (): Promise<void> => {
+    await query.refetch();
+  };
+
+  return {
+    data: query.data ?? null,
+    isLoading: query.isLoading,
+    isError: query.isError,
+    error: query.error ?? null,
+    isFetching: query.isFetching,
+    refetch,
+  };
 };

@@ -1,5 +1,7 @@
+import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../../lib/api';
-import { useApiQuery, type UseApiQueryResult } from './core';
+import { queryKeys } from '../../lib/queryKeys';
+import { toUiError, type UiError } from './error';
 
 export type AnalyticsRange = '7d' | '30d' | 'all';
 
@@ -26,7 +28,14 @@ export interface ChildAnalyticsResponse {
   summary?: ChildAnalyticsSummary;
 }
 
-export type UseChildAnalyticsResult = UseApiQueryResult<ChildAnalyticsResponse>;
+export interface UseChildAnalyticsResult {
+  data: ChildAnalyticsResponse | null;
+  isLoading: boolean;
+  isError: boolean;
+  error: UiError | null;
+  isFetching: boolean;
+  refetch: () => Promise<void>;
+}
 
 interface RawAnalyticsPayload {
   child_id?: number;
@@ -74,20 +83,35 @@ const normalizeAnalytics = (childId: number, range: AnalyticsRange, payload: Raw
 };
 
 export const useChildAnalytics = (childId: number | null, range: AnalyticsRange): UseChildAnalyticsResult => {
-  return useApiQuery<ChildAnalyticsResponse>({
-    queryKey: `child-analytics:${childId ?? 'none'}:${range}`,
+  const resolvedChildId = childId !== null ? String(childId) : '';
+
+  const query = useQuery<RawAnalyticsPayload, UiError, ChildAnalyticsResponse>({
+    queryKey: queryKeys.childAnalytics(resolvedChildId, range),
     enabled: childId !== null,
     staleTime: 5 * 60 * 1000,
-    queryFn: async (signal) => {
-      const response = await apiClient.get<RawAnalyticsPayload>(`/api/v1/children/${childId}/analytics`, {
-        signal,
-        query: { range },
-      });
-
-      return {
-        ...response,
-        data: normalizeAnalytics(childId ?? 0, range, response.data),
-      };
+    queryFn: async () => {
+      try {
+        const response = await apiClient.get<RawAnalyticsPayload>(`/api/v1/children/${childId}/analytics`, {
+          query: { range },
+        });
+        return response.data;
+      } catch (error) {
+        throw toUiError(error);
+      }
     },
+    select: (payload) => normalizeAnalytics(childId ?? 0, range, payload),
   });
+
+  const refetch = async (): Promise<void> => {
+    await query.refetch();
+  };
+
+  return {
+    data: query.data ?? null,
+    isLoading: query.isLoading,
+    isError: query.isError,
+    error: query.error ?? null,
+    isFetching: query.isFetching,
+    refetch,
+  };
 };

@@ -1,5 +1,7 @@
+import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../../lib/api';
-import { useApiQuery, type UseApiQueryResult } from './core';
+import { queryKeys } from '../../lib/queryKeys';
+import { toUiError, type UiError } from './error';
 
 export interface AuditLogEntry {
   id: string;
@@ -15,7 +17,14 @@ export interface AuditLogResponse {
   entries: AuditLogEntry[];
 }
 
-export type UseAuditLogResult = UseApiQueryResult<AuditLogResponse>;
+export interface UseAuditLogResult {
+  data: AuditLogResponse | null;
+  isLoading: boolean;
+  isError: boolean;
+  error: UiError | null;
+  isFetching: boolean;
+  refetch: () => Promise<void>;
+}
 
 interface RawAuditLogPayload {
   page?: number;
@@ -49,18 +58,32 @@ const normalizeAuditLog = (page: number, payload: RawAuditLogPayload): AuditLogR
 };
 
 export const useAuditLog = (page: number): UseAuditLogResult => {
-  return useApiQuery<AuditLogResponse>({
-    queryKey: `audit-log:${page}`,
-    queryFn: async (signal) => {
-      const response = await apiClient.get<RawAuditLogPayload>('/api/v1/users/me/audit-log', {
-        signal,
-        query: { page },
-      });
+  const query = useQuery<RawAuditLogPayload, UiError, AuditLogResponse>({
+    queryKey: queryKeys.auditLog(page),
+    queryFn: async () => {
+      try {
+        const response = await apiClient.get<RawAuditLogPayload>('/api/v1/users/me/audit-log', {
+          query: { page },
+        });
 
-      return {
-        ...response,
-        data: normalizeAuditLog(page, response.data),
-      };
+        return response.data;
+      } catch (error) {
+        throw toUiError(error);
+      }
     },
+    select: (payload) => normalizeAuditLog(page, payload),
   });
+
+  const refetch = async (): Promise<void> => {
+    await query.refetch();
+  };
+
+  return {
+    data: query.data ?? null,
+    isLoading: query.isLoading,
+    isError: query.isError,
+    error: query.error ?? null,
+    isFetching: query.isFetching,
+    refetch,
+  };
 };

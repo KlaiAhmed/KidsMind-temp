@@ -1,5 +1,6 @@
+import { useMutation } from '@tanstack/react-query';
 import { apiClient } from '../../lib/api';
-import { useApiMutation, type UseApiMutationResult } from './core';
+import { toUiError, type UiError } from './error';
 
 const COPY = {
   noChild: 'Please select a child profile first.',
@@ -25,7 +26,13 @@ export interface ExportPdfResult {
   download_url: string;
 }
 
-export type UseExportPdfResult = UseApiMutationResult<ExportPdfResult, void>;
+export interface UseExportPdfResult {
+  data: ExportPdfResult | null;
+  error: UiError | null;
+  isPending: boolean;
+  mutateAsync: (payload: void) => Promise<ExportPdfResult>;
+  reset: () => void;
+}
 
 const wait = (durationMs: number): Promise<void> => {
   return new Promise((resolve) => {
@@ -68,15 +75,29 @@ const pollJobUntilReady = async (jobId: string): Promise<ExportPdfResult> => {
 };
 
 export const useExportPdf = (childId: number | null): UseExportPdfResult => {
-  return useApiMutation<ExportPdfResult, void>(async () => {
-    if (childId === null) {
-      throw new Error(COPY.noChild);
-    }
+  const mutation = useMutation<ExportPdfResult, UiError, void>({
+    mutationFn: async () => {
+      if (childId === null) {
+        throw toUiError(new Error(COPY.noChild));
+      }
 
-    const startResponse = await apiClient.post<ExportPdfJobResponse>(`/api/v1/children/${childId}/export/pdf`, {
-      body: {},
-    });
+      try {
+        const startResponse = await apiClient.post<ExportPdfJobResponse>(`/api/v1/children/${childId}/export/pdf`, {
+          body: {},
+        });
 
-    return pollJobUntilReady(startResponse.data.job_id);
+        return await pollJobUntilReady(startResponse.data.job_id);
+      } catch (error) {
+        throw toUiError(error);
+      }
+    },
   });
+
+  return {
+    data: mutation.data ?? null,
+    error: mutation.error ?? null,
+    isPending: mutation.isPending,
+    mutateAsync: mutation.mutateAsync,
+    reset: mutation.reset,
+  };
 };

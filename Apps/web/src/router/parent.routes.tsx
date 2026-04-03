@@ -1,6 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { Navigate, Outlet, Route } from 'react-router-dom';
-import { useAuthStatus } from '../hooks/useAuthStatus';
+import { useMeSummaryQuery } from '../hooks/api/useMeSummaryQuery';
 import { useLanguage } from '../hooks/useLanguage';
 import '../styles/parent-portal.css';
 
@@ -22,7 +22,7 @@ const LoadingFallback = () => {
 };
 
 const ParentRoute = () => {
-  const { isAuthenticated, isLoading } = useAuthStatus();
+  const { isAuthenticated, isLoading } = useMeSummaryQuery();
 
   if (isLoading) {
     return <LoadingFallback />;

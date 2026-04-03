@@ -1,5 +1,6 @@
+import { useMutation } from '@tanstack/react-query';
 import { apiClient } from '../../lib/api';
-import { useApiMutation, type UseApiMutationResult } from './core';
+import { toUiError, type UiError } from './error';
 
 export interface EnableMfaResponse {
   mfa_enabled: boolean;
@@ -7,14 +8,34 @@ export interface EnableMfaResponse {
   backup_codes: string[];
 }
 
-export type UseEnableMfaResult = UseApiMutationResult<EnableMfaResponse, void>;
+export interface UseEnableMfaResult {
+  data: EnableMfaResponse | null;
+  error: UiError | null;
+  isPending: boolean;
+  mutateAsync: (payload: void) => Promise<EnableMfaResponse>;
+  reset: () => void;
+}
 
 export const useEnableMfa = (): UseEnableMfaResult => {
-  return useApiMutation<EnableMfaResponse, void>(async () => {
-    const response = await apiClient.post<EnableMfaResponse>('/api/v1/users/me/mfa/enable', {
-      body: {},
-    });
+  const mutation = useMutation<EnableMfaResponse, UiError, void>({
+    mutationFn: async () => {
+      try {
+        const response = await apiClient.post<EnableMfaResponse>('/api/v1/users/me/mfa/enable', {
+          body: {},
+        });
 
-    return response.data;
+        return response.data;
+      } catch (error) {
+        throw toUiError(error);
+      }
+    },
   });
+
+  return {
+    data: mutation.data ?? null,
+    error: mutation.error ?? null,
+    isPending: mutation.isPending,
+    mutateAsync: mutation.mutateAsync,
+    reset: mutation.reset,
+  };
 };

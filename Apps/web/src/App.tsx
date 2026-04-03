@@ -1,7 +1,7 @@
 import React, { Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import HomePage from './pages/HomePage/HomePage';
-import { useAuthStatus } from './hooks/useAuthStatus';
+import { useMeSummaryQuery } from './hooks/api/useMeSummaryQuery';
 import AppErrorBoundary from './components/shared/AppErrorBoundary/AppErrorBoundary';
 import ErrorPage from './pages/ErrorPage/ErrorPage';
 import { ParentRoutes } from './router/parent.routes';
@@ -12,7 +12,7 @@ const ParentProfilePage = React.lazy(() => import('./pages/ParentProfilePage/Par
 const NotFoundPage = React.lazy(() => import('./pages/NotFoundPage/NotFoundPage'));
 
 const App = () => {
-  const { isAuthenticated, isLoading } = useAuthStatus();
+  const { isAuthenticated, isLoading } = useMeSummaryQuery();
 
   return (
     <BrowserRouter>

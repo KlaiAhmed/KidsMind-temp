@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuditLog } from '../../hooks/api/useAuditLog';
 import { useChangePassword } from '../../hooks/api/useChangePassword';
-import { useCurrentUser } from '../../hooks/api/useCurrentUser';
+import { useMeSummaryQuery } from '../../hooks/api/useMeSummaryQuery';
 import { useEnableMfa } from '../../hooks/api/useEnableMfa';
 import { apiClient } from '../../lib/api';
-import { authStore } from '../../store/auth.store';
+import { logout } from '../../lib/logout';
+import { queryKeys } from '../../lib/queryKeys';
 import '../../styles/parent-portal.css';
 
 const COPY = {
@@ -100,7 +102,8 @@ const readBoolean = (key: string, fallback: boolean): boolean => {
 };
 
 const SettingsPage = () => {
-  const userQuery = useCurrentUser();
+  const queryClient = useQueryClient();
+  const userQuery = useMeSummaryQuery();
   const changePassword = useChangePassword();
   const enableMfa = useEnableMfa();
   const auditLog = useAuditLog(1);
@@ -130,10 +133,10 @@ const SettingsPage = () => {
   });
 
   const baseConsentState = useMemo<ConsentState>(() => ({
-    notificationsEmail: userQuery.data?.settings?.notifications_email ?? true,
-    notificationsPush: userQuery.data?.settings?.notifications_push ?? true,
-    consentAnalytics: userQuery.data?.settings?.consent_analytics ?? true,
-  }), [userQuery.data]);
+    notificationsEmail: userQuery.user?.settings?.notifications_email ?? true,
+    notificationsPush: userQuery.user?.settings?.notifications_push ?? true,
+    consentAnalytics: userQuery.user?.settings?.consent_analytics ?? true,
+  }), [userQuery.user]);
 
   const [consentDraft, setConsentDraft] = useState<ConsentState | null>(null);
   const consentForm = consentDraft ?? baseConsentState;
@@ -230,7 +233,7 @@ const SettingsPage = () => {
       setIsMfaModalOpen(false);
       setMfaCode('');
       setToastMessage(COPY.saved);
-      await userQuery.refetch();
+      await queryClient.invalidateQueries({ queryKey: queryKeys.me() });
     } catch {
       setToastMessage(COPY.saveFailed);
     }
@@ -244,7 +247,7 @@ const SettingsPage = () => {
     try {
       await apiClient.delete('/api/v1/users/me');
       setToastMessage(COPY.deleted);
-      authStore.logout({ redirectToLogin: true });
+      await logout();
     } catch {
       setToastMessage(COPY.deleteFailed);
     }
@@ -259,7 +262,7 @@ const SettingsPage = () => {
           consent_analytics: consentForm.consentAnalytics,
         },
       });
-      await userQuery.refetch();
+      await queryClient.invalidateQueries({ queryKey: queryKeys.me() });
       setConsentDraft(null);
       setToastMessage(COPY.saved);
     } catch {
@@ -279,7 +282,7 @@ const SettingsPage = () => {
     );
   }
 
-  if (userQuery.error || !userQuery.data) {
+  if (userQuery.error || !userQuery.user) {
     const isAuthError = Boolean(userQuery.error?.isAuthError);
 
     return (
@@ -388,7 +391,7 @@ const SettingsPage = () => {
 
             <article className="pp-card">
               <h2 className="pp-title">2FA</h2>
-              {userQuery.data.mfa_enabled ? (
+              {userQuery.user.mfa_enabled ? (
                 <p className="pill-green pp-pill">Enabled</p>
               ) : (
                 <button

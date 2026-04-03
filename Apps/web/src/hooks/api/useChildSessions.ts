@@ -1,5 +1,7 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../lib/api';
-import { useApiQuery, type UseApiQueryResult } from './core';
+import { queryKeys } from '../../lib/queryKeys';
+import { toUiError, type UiError } from './error';
 
 export interface ChildSessionSummary {
   session_id: string;
@@ -17,7 +19,22 @@ export interface ChildSessionsResponse {
   sessions: ChildSessionSummary[];
 }
 
-export type UseChildSessionsResult = UseApiQueryResult<ChildSessionsResponse>;
+export interface UseChildSessionsResult {
+  data: ChildSessionsResponse | null;
+  isLoading: boolean;
+  isError: boolean;
+  error: UiError | null;
+  isFetching: boolean;
+  refetch: () => Promise<void>;
+}
+
+export interface ClearChildSessionVariables {
+  userId: number;
+  childId: number;
+  sessionId: string;
+  page: number;
+  pageSize: number;
+}
 
 interface RawSessionsPayload {
   page?: number;
@@ -72,22 +89,57 @@ export const useChildSessions = (
   page: number,
   pageSize = 20
 ): UseChildSessionsResult => {
-  return useApiQuery<ChildSessionsResponse>({
-    queryKey: `child-sessions:${childId ?? 'none'}:${page}:${pageSize}`,
-    enabled: childId !== null,
-    queryFn: async (signal) => {
-      const response = await apiClient.get<RawSessionsPayload>(`/api/v1/children/${childId}/sessions`, {
-        signal,
-        query: {
-          page,
-          page_size: pageSize,
-        },
-      });
+  const resolvedChildId = childId !== null ? String(childId) : '';
 
-      return {
-        ...response,
-        data: normalizeSessions(page, pageSize, response.data),
-      };
+  const query = useQuery<RawSessionsPayload, UiError, ChildSessionsResponse>({
+    queryKey: queryKeys.childSessions(resolvedChildId, page, pageSize),
+    enabled: childId !== null,
+    queryFn: async () => {
+      try {
+        const response = await apiClient.get<RawSessionsPayload>(`/api/v1/children/${childId}/sessions`, {
+          query: {
+            page,
+            page_size: pageSize,
+          },
+        });
+
+        return response.data;
+      } catch (error) {
+        throw toUiError(error);
+      }
+    },
+    select: (payload) => normalizeSessions(page, pageSize, payload),
+  });
+
+  const refetch = async (): Promise<void> => {
+    await query.refetch();
+  };
+
+  return {
+    data: query.data ?? null,
+    isLoading: query.isLoading,
+    isError: query.isError,
+    error: query.error ?? null,
+    isFetching: query.isFetching,
+    refetch,
+  };
+};
+
+export const useClearChildSessionMutation = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation<void, UiError, ClearChildSessionVariables>({
+    mutationFn: async ({ userId, childId, sessionId }) => {
+      try {
+        await apiClient.delete(`/api/v1/chat/history/${userId}/${childId}/${sessionId}`);
+      } catch (error) {
+        throw toUiError(error);
+      }
+    },
+    onSuccess: async (_result, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.childSessions(String(variables.childId), variables.page, variables.pageSize),
+      });
     },
   });
 };

@@ -19,10 +19,10 @@ import NavBar from '../components/NavBar/NavBar';
 import { useLanguage } from '../hooks/useLanguage';
 import { useTheme } from '../hooks/useTheme';
 import { useScrollPosition } from '../hooks/useScrollPosition';
-import { childStore, useChildStore } from '../store/child.store';
-import { useCurrentUser } from '../hooks/api/useCurrentUser';
-import { useChildren } from '../hooks/api/useChildren';
-import { logoutAuthSession } from '../lib/authSession';
+import { useMeSummaryQuery } from '../hooks/api/useMeSummaryQuery';
+import { useChildrenQuery } from '../hooks/api/useChildrenQuery';
+import { useActiveChild } from '../hooks/useActiveChild';
+import { logout } from '../lib/logout';
 import '../styles/parent-portal.css';
 
 interface NavItem {
@@ -37,9 +37,9 @@ const ParentLayout = () => {
   const { language, setLanguage } = useLanguage();
   const navigate = useNavigate();
   const location = useLocation();
-  const { activeChild } = useChildStore();
-  const userQuery = useCurrentUser();
-  const childrenQuery = useChildren();
+  const { activeChild, setActiveChildId } = useActiveChild();
+  const userQuery = useMeSummaryQuery();
+  const childrenQuery = useChildrenQuery();
   const { isHiddenByScroll: isNavbarHidden } = useScrollPosition();
 
   // Sidebar state: 'expanded' | 'collapsed'
@@ -96,7 +96,6 @@ const ParentLayout = () => {
     return () => document.removeEventListener('keydown', handleEscape);
   }, []);
 
-
   const handleToggleSidebar = useCallback(() => {
     setSidebarState((current) => (current === 'expanded' ? 'collapsed' : 'expanded'));
   }, []);
@@ -109,7 +108,7 @@ const ParentLayout = () => {
     if (isLoggingOut) return;
     setIsLoggingOut(true);
     try {
-      await logoutAuthSession();
+      await logout();
     } catch {
       // Logout should still clear local auth state if the network call fails.
     }
@@ -128,7 +127,7 @@ const ParentLayout = () => {
         onClick={() => setIsMobileSidebarOpen(false)}
       >
         {item.icon}
-        {isSidebarExpanded && <span>{item.label}</span>}
+        <span className="pp-nav-link-text">{item.label}</span>
       </NavLink>
     ));
 
@@ -216,7 +215,7 @@ const ParentLayout = () => {
                 key={child.child_id}
                 type="button"
                 className={`pp-child-avatar-btn pp-touch pp-focusable ${isActive ? 'pp-child-avatar-active' : ''}`}
-                onClick={() => childStore.setActiveChild(child)}
+                onClick={() => setActiveChildId(child.child_id)}
                 aria-label={child.nickname}
                 title={child.nickname}
               >
@@ -271,7 +270,7 @@ const ParentLayout = () => {
                   role="option"
                   aria-selected={isActive}
                   onClick={() => {
-                    childStore.setActiveChild(child);
+                    setActiveChildId(child.child_id);
                     setIsChildDropUpOpen(false);
                   }}
                 >
@@ -309,7 +308,7 @@ const ParentLayout = () => {
         language={language}
         onLanguageChange={setLanguage}
         translations={translations}
-        isAuthenticated={!!userQuery.data}
+        isAuthenticated={userQuery.isAuthenticated}
       />
 
       <div className={layoutClassName}>
@@ -328,14 +327,10 @@ const ParentLayout = () => {
             {isSidebarExpanded ? <ChevronLeft size={18} /> : <ChevronRight size={18} />}
           </button>
 
-          {/* Dynamic Title */}
+          {/* Dynamic Title - always rendered, CSS controls visibility */}
           <div className="pp-sidebar-header">
-            {isSidebarExpanded && (
-              <>
-                <h1 className="pp-title">{pageTitle}</h1>
-                <p className="pp-muted">{translations.nav_parent_profile}</p>
-              </>
-            )}
+            <h1 className="pp-title pp-sidebar-header-title">{pageTitle}</h1>
+            <p className="pp-muted pp-sidebar-header-subtitle">{translations.nav_parent_profile}</p>
           </div>
 
           {/* Navigation */}
@@ -350,7 +345,7 @@ const ParentLayout = () => {
               title={translations.nav_logout}
             >
               <LogOut size={20} strokeWidth={2} />
-              {isSidebarExpanded && <span>{translations.nav_logout}</span>}
+              <span className="pp-nav-link-text">{translations.nav_logout}</span>
             </button>
           </nav>
 
@@ -395,7 +390,7 @@ const ParentLayout = () => {
               title={translations.nav_logout}
             >
               <LogOut size={20} strokeWidth={2} />
-              <span>{translations.nav_logout}</span>
+              <span className="pp-nav-link-text">{translations.nav_logout}</span>
             </button>
           </nav>
 

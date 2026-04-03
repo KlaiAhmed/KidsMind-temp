@@ -1,5 +1,7 @@
+import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../../lib/api';
-import { useApiQuery, type UseApiQueryResult } from './core';
+import { queryKeys } from '../../lib/queryKeys';
+import { toUiError, type UiError } from './error';
 
 const SUBJECT_EMOJI_MAP: Record<string, string> = {
   math: '🧮',
@@ -24,7 +26,14 @@ export interface ChildProgressResponse {
   subjects: SubjectProgress[];
 }
 
-export type UseChildProgressResult = UseApiQueryResult<ChildProgressResponse>;
+export interface UseChildProgressResult {
+  data: ChildProgressResponse | null;
+  isLoading: boolean;
+  isError: boolean;
+  error: UiError | null;
+  isFetching: boolean;
+  refetch: () => Promise<void>;
+}
 
 interface RawProgressPayload {
   subjects?: Array<Record<string, unknown>> | Record<string, Record<string, unknown>>;
@@ -91,18 +100,32 @@ const normalizeProgress = (payload: RawProgressPayload): ChildProgressResponse =
 };
 
 export const useChildProgress = (childId: number | null): UseChildProgressResult => {
-  return useApiQuery<ChildProgressResponse>({
-    queryKey: `child-progress:${childId ?? 'none'}`,
-    enabled: childId !== null,
-    queryFn: async (signal) => {
-      const response = await apiClient.get<RawProgressPayload>(`/api/v1/children/${childId}/progress`, {
-        signal,
-      });
+  const resolvedChildId = childId !== null ? String(childId) : '';
 
-      return {
-        ...response,
-        data: normalizeProgress(response.data),
-      };
+  const query = useQuery<RawProgressPayload, UiError, ChildProgressResponse>({
+    queryKey: queryKeys.childProgress(resolvedChildId),
+    enabled: childId !== null,
+    queryFn: async () => {
+      try {
+        const response = await apiClient.get<RawProgressPayload>(`/api/v1/children/${childId}/progress`);
+        return response.data;
+      } catch (error) {
+        throw toUiError(error);
+      }
     },
+    select: (payload) => normalizeProgress(payload),
   });
+
+  const refetch = async (): Promise<void> => {
+    await query.refetch();
+  };
+
+  return {
+    data: query.data ?? null,
+    isLoading: query.isLoading,
+    isError: query.isError,
+    error: query.error ?? null,
+    isFetching: query.isFetching,
+    refetch,
+  };
 };

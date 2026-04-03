@@ -1,5 +1,7 @@
+import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../../lib/api';
-import { useApiQuery, type UseApiQueryResult } from './core';
+import { queryKeys } from '../../lib/queryKeys';
+import { toUiError, type UiError } from './error';
 
 export type BadgeCategory = 'streak' | 'mastery' | 'exploration' | 'other';
 
@@ -16,7 +18,14 @@ export interface ChildBadgesResponse {
   badges: ChildBadge[];
 }
 
-export type UseChildBadgesResult = UseApiQueryResult<ChildBadgesResponse>;
+export interface UseChildBadgesResult {
+  data: ChildBadgesResponse | null;
+  isLoading: boolean;
+  isError: boolean;
+  error: UiError | null;
+  isFetching: boolean;
+  refetch: () => Promise<void>;
+}
 
 interface RawBadgesPayload {
   badges?: Array<Record<string, unknown>>;
@@ -48,20 +57,34 @@ const normalizeBadges = (payload: RawBadgesPayload | Array<Record<string, unknow
 };
 
 export const useChildBadges = (childId: number | null): UseChildBadgesResult => {
-  return useApiQuery<ChildBadgesResponse>({
-    queryKey: `child-badges:${childId ?? 'none'}`,
-    enabled: childId !== null,
-    queryFn: async (signal) => {
-      const response = await apiClient.get<RawBadgesPayload | Array<Record<string, unknown>>>(`/api/v1/children/${childId}/badges`, {
-        signal,
-      });
+  const resolvedChildId = childId !== null ? String(childId) : '';
 
-      return {
-        ...response,
-        data: {
-          badges: normalizeBadges(response.data),
-        },
-      };
+  const query = useQuery<RawBadgesPayload | Array<Record<string, unknown>>, UiError, ChildBadgesResponse>({
+    queryKey: queryKeys.childBadges(resolvedChildId),
+    enabled: childId !== null,
+    queryFn: async () => {
+      try {
+        const response = await apiClient.get<RawBadgesPayload | Array<Record<string, unknown>>>(`/api/v1/children/${childId}/badges`);
+        return response.data;
+      } catch (error) {
+        throw toUiError(error);
+      }
     },
+    select: (payload) => ({
+      badges: normalizeBadges(payload),
+    }),
   });
+
+  const refetch = async (): Promise<void> => {
+    await query.refetch();
+  };
+
+  return {
+    data: query.data ?? null,
+    isLoading: query.isLoading,
+    isError: query.isError,
+    error: query.error ?? null,
+    isFetching: query.isFetching,
+    refetch,
+  };
 };

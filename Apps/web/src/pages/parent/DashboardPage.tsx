@@ -7,15 +7,15 @@ import TimeArcCard from '../../components/parent/dashboard/TimeArcCard';
 import WeeklyBarChart from '../../components/parent/dashboard/WeeklyBarChart';
 import SubjectsGrid from '../../components/parent/dashboard/SubjectsGrid';
 import QuickActions from '../../components/parent/dashboard/QuickActions';
-import { useChildren } from '../../hooks/api/useChildren';
-import { useChildStore } from '../../store/child.store';
+import { useChildrenQuery } from '../../hooks/api/useChildrenQuery';
+import { useActiveChild } from '../../hooks/useActiveChild';
 import { useLanguage } from '../../hooks/useLanguage';
 import '../../styles/parent-portal.css';
 
 const DashboardPage = () => {
   const { translations } = useLanguage();
-  const { activeChild } = useChildStore();
-  const childrenQuery = useChildren();
+  const { activeChild } = useActiveChild();
+  const childrenQuery = useChildrenQuery();
   const analyticsQuery = useChildAnalytics(activeChild?.child_id ?? null, '7d');
 
   if (childrenQuery.isLoading && !activeChild) {

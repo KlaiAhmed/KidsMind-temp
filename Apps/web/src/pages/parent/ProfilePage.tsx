@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useCurrentUser } from '../../hooks/api/useCurrentUser';
+import { useMeSummaryQuery } from '../../hooks/api/useMeSummaryQuery';
 import { usePatchSettings } from '../../hooks/api/usePatchSettings';
 import { getCountryOptions } from '../../utils/countries';
 import '../../styles/parent-portal.css';
@@ -28,7 +28,7 @@ interface ProfileFormState {
 }
 
 const ProfilePage = () => {
-  const userQuery = useCurrentUser();
+  const userQuery = useMeSummaryQuery();
   const patchSettings = usePatchSettings();
 
   const [toastMessage, setToastMessage] = useState<string>('');
@@ -43,12 +43,12 @@ const ProfilePage = () => {
 
   const baseProfileForm = useMemo<ProfileFormState>(() => {
     return {
-      username: userQuery.data?.username ?? '',
-      email: userQuery.data?.email ?? '',
-      country: userQuery.data?.settings?.country ?? '',
-      defaultLanguage: userQuery.data?.settings?.default_language ?? userQuery.data?.settings?.defaultLanguage ?? 'en',
+      username: userQuery.user?.username ?? '',
+      email: userQuery.user?.email ?? '',
+      country: userQuery.user?.settings?.country ?? '',
+      defaultLanguage: userQuery.user?.settings?.default_language ?? userQuery.user?.settings?.defaultLanguage ?? 'en',
     };
-  }, [userQuery.data]);
+  }, [userQuery.user]);
 
   const profileForm = profileDraft ?? baseProfileForm;
   const initialProfileSnapshot = useMemo(() => JSON.stringify(baseProfileForm), [baseProfileForm]);
@@ -130,7 +130,6 @@ const ProfilePage = () => {
         default_language: profileForm.defaultLanguage,
       });
 
-      await userQuery.refetch();
       setProfileDraft(null);
       setToastMessage(COPY.saved);
     } catch {
@@ -185,7 +184,7 @@ const ProfilePage = () => {
     );
   }
 
-  if (userQuery.error || !userQuery.data) {
+  if (userQuery.error || !userQuery.user) {
     const isAuthError = Boolean(userQuery.error?.isAuthError);
 
     return (

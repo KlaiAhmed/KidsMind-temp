@@ -3,10 +3,9 @@ import { useState } from 'react';
 import { AlertCircle } from 'lucide-react';
 import type { TranslationMap } from '../../types';
 import { useForm } from '../../hooks/useForm';
-import { apiBaseUrl } from '../../utils/api';
+import { useLoginMutation } from '../../hooks/api/useLoginMutation';
+import type { UiError } from '../../hooks/api/error';
 import { validateLoginForm } from '../../utils/validators';
-import { setCsrfToken } from '../../utils/csrf';
-import { dispatchAuthStateChanged } from '../../utils/authEvents';
 import FormField from '../shared/FormField/FormField';
 import PasswordField from '../shared/PasswordField/PasswordField';
 import styles from './LoginForm.module.css';
@@ -21,32 +20,9 @@ interface LoginFormProps {
   onSuccess: () => void;
 }
 
-interface ApiErrorResponse {
-  status?: number;
-  message?: string;
-  error_code?: string;
-  errors?: Array<{ field?: string; message?: string; type?: string }>;
-  detail?: string | Array<{ msg?: string }>;
-}
-
-interface LoginSuccessResponse {
-  csrf_token?: string;
-}
-
 const LoginForm = ({ translations, onSuccess }: LoginFormProps) => {
   const [serverError, setServerError] = useState<string>('');
-
-  const hasActiveSession = async (): Promise<boolean> => {
-    const response = await fetch(`${apiBaseUrl}/api/v1/users/me/summary`, {
-      method: 'GET',
-      headers: {
-        'X-Client-Type': 'web',
-      },
-      credentials: 'include',
-    });
-
-    return response.ok;
-  };
+  const loginMutation = useLoginMutation();
 
   const {
     values,
@@ -65,30 +41,9 @@ const LoginForm = ({ translations, onSuccess }: LoginFormProps) => {
     return translations[errorKey as keyof TranslationMap] || errorKey;
   };
 
-  const resolveRawApiMessage = (errorBody: ApiErrorResponse | null): string => {
-    if (!errorBody) {
-      return '';
-    }
-
-    const firstUnifiedValidationMessage = errorBody.errors?.find((item) => item?.message)?.message;
-    if (firstUnifiedValidationMessage) {
-      return firstUnifiedValidationMessage;
-    }
-
-    if (typeof errorBody.message === 'string') {
-      return errorBody.message;
-    }
-
-    if (typeof errorBody.detail === 'string') {
-      return errorBody.detail;
-    }
-
-    const firstLegacyValidationMessage = errorBody.detail?.find((item) => item?.msg)?.msg;
-    return firstLegacyValidationMessage ?? '';
-  };
-
-  const getApiErrorMessage = (errorBody: ApiErrorResponse | null, status: number): string => {
-    const rawMessage = resolveRawApiMessage(errorBody).toLowerCase();
+  const getApiErrorMessage = (error: UiError): string => {
+    const rawMessage = error.message.toLowerCase();
+    const status = error.status;
 
     if (status === 403) {
       if (rawMessage.includes('locked')) {
@@ -101,86 +56,37 @@ const LoginForm = ({ translations, onSuccess }: LoginFormProps) => {
     }
 
     if (!rawMessage) {
-      return translations.login_error_invalid;
+      return status ? translations.login_error_invalid : translations.login_error_network;
     }
 
     if (rawMessage.includes('csrf')) {
       return translations.login_error_session;
     }
 
-    if (rawMessage === 'invalid credentials') {
+    if (rawMessage.includes('network') || rawMessage.includes('contacting the server')) {
+      return translations.login_error_network;
+    }
+
+    if (rawMessage === 'invalid credentials' || rawMessage.includes('invalid credential')) {
       return translations.login_error_invalid;
     }
 
-    return resolveRawApiMessage(errorBody);
+    return error.message;
   };
 
   const onSubmit = async (formValues: LoginFormValues): Promise<void> => {
     setServerError('');
 
     try {
-      const response = await fetch(`${apiBaseUrl}/api/v1/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Client-Type': 'web',
-        },
-        credentials: 'include',
-        body: JSON.stringify({
-          email: formValues.email,
-          password: formValues.password,
-        }),
+      await loginMutation.mutateAsync({
+        email: formValues.email,
+        password: formValues.password,
       });
 
-      if (!response.ok) {
-        try {
-          const sessionIsActive = await hasActiveSession();
-          if (sessionIsActive) {
-            dispatchAuthStateChanged();
-            onSuccess();
-            return;
-          }
-        } catch {
-          // fall through to regular error handling
-        }
-
-        let errorMessage = translations.login_error_invalid;
-        try {
-          const errorBody = (await response.json()) as ApiErrorResponse;
-          errorMessage = getApiErrorMessage(errorBody, response.status);
-        } catch {
-          errorMessage = response.status === 403
-            ? translations.login_error_session
-            : translations.login_error_invalid;
-        }
-
-        setServerError(errorMessage);
-        return;
-      }
-
-      try {
-        const successBody = (await response.json()) as LoginSuccessResponse;
-        setCsrfToken(successBody.csrf_token ?? null);
-      } catch {
-        setCsrfToken(null);
-      }
-
-      dispatchAuthStateChanged();
-
       onSuccess();
-    } catch {
-      try {
-        const sessionIsActive = await hasActiveSession();
-        if (sessionIsActive) {
-          dispatchAuthStateChanged();
-          onSuccess();
-          return;
-        }
-      } catch {
-        // ignore and use fallback error message below
-      }
-
-      setServerError(translations.login_error_network);
+    } catch (error) {
+      const normalizedError = error as UiError;
+      setServerError(getApiErrorMessage(normalizedError));
     }
   };
 
