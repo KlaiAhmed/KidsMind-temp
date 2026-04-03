@@ -29,7 +29,7 @@ const QuickActions = ({ childId }: QuickActionsProps) => {
   }, [toastMessage]);
 
   return (
-    <section className="pp-card pp-col-span-3" aria-labelledby="quick-actions-title">
+    <section className="pp-card pp-col-span-2" aria-labelledby="quick-actions-title">
       <div className="pp-section-heading">
         <span className="pp-section-heading-icon" aria-hidden="true">
           <Sparkles size={16} strokeWidth={2.25} />

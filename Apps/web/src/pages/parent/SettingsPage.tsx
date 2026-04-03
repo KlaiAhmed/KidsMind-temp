@@ -3,14 +3,12 @@ import { useAuditLog } from '../../hooks/api/useAuditLog';
 import { useChangePassword } from '../../hooks/api/useChangePassword';
 import { useCurrentUser } from '../../hooks/api/useCurrentUser';
 import { useEnableMfa } from '../../hooks/api/useEnableMfa';
-import { usePatchSettings } from '../../hooks/api/usePatchSettings';
 import { apiClient } from '../../lib/api';
 import { authStore } from '../../store/auth.store';
 import '../../styles/parent-portal.css';
 
 const COPY = {
   title: 'App settings',
-  tabProfile: 'Profile',
   tabSecurity: 'Security',
   tabPrivacy: 'Privacy',
   tabAccessibility: 'Accessibility',
@@ -19,8 +17,6 @@ const COPY = {
   loading: 'Loading settings...',
   saved: 'Settings updated',
   saveFailed: 'Could not update settings.',
-  changeEmail: 'Change email',
-  profileUnsaved: 'You have unsaved profile changes.',
   changePassword: 'Change password',
   enableMfa: 'Enable 2FA',
   verifyMfa: 'Verify 2FA',
@@ -42,6 +38,9 @@ const COPY = {
   small: 'Small',
   medium: 'Medium',
   large: 'Large',
+  notificationsEmail: 'Email notifications',
+  notificationsPush: 'Push notifications',
+  optOutAiTraining: 'Opt out of AI model training',
 } as const;
 
 const FONT_SCALE_MAP = {
@@ -56,30 +55,8 @@ const LOCAL_STORAGE_KEYS = {
   fontScale: 'kidsmind_font_scale',
 } as const;
 
-const FALLBACK_TIMEZONES = [
-  'UTC',
-  'Europe/Paris',
-  'Europe/London',
-  'Africa/Tunis',
-  'America/New_York',
-  'America/Los_Angeles',
-  'Asia/Dubai',
-  'Asia/Tokyo',
-];
-
-type SettingsTab = 'profile' | 'security' | 'privacy' | 'accessibility';
+type SettingsTab = 'security' | 'privacy' | 'accessibility';
 type FontScaleOption = keyof typeof FONT_SCALE_MAP;
-
-interface ProfileFormState {
-  username: string;
-  email: string;
-  country: string;
-  timezone: string;
-  defaultLanguage: string;
-  notificationsEmail: boolean;
-  notificationsPush: boolean;
-  consentAnalytics: boolean;
-}
 
 interface PasswordFormState {
   currentPassword: string;
@@ -93,6 +70,12 @@ interface AccessibilityState {
   fontScale: FontScaleOption;
 }
 
+interface ConsentState {
+  notificationsEmail: boolean;
+  notificationsPush: boolean;
+  consentAnalytics: boolean;
+}
+
 const nowDateTime = (value: string): string => {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) {
@@ -100,18 +83,6 @@ const nowDateTime = (value: string): string => {
   }
 
   return parsed.toLocaleString();
-};
-
-const getAllTimezones = (): string[] => {
-  const supportedValuesOf = Intl as Intl.DateTimeFormatOptions & {
-    supportedValuesOf?: (option: string) => string[];
-  };
-
-  if (typeof supportedValuesOf.supportedValuesOf === 'function') {
-    return supportedValuesOf.supportedValuesOf('timeZone').slice();
-  }
-
-  return FALLBACK_TIMEZONES;
 };
 
 const readBoolean = (key: string, fallback: boolean): boolean => {
@@ -129,15 +100,12 @@ const readBoolean = (key: string, fallback: boolean): boolean => {
 
 const SettingsPage = () => {
   const userQuery = useCurrentUser();
-  const patchSettings = usePatchSettings();
   const changePassword = useChangePassword();
   const enableMfa = useEnableMfa();
   const auditLog = useAuditLog(1);
 
-  const [activeTab, setActiveTab] = useState<SettingsTab>('profile');
-  const [timezoneSearch, setTimezoneSearch] = useState<string>('');
+  const [activeTab, setActiveTab] = useState<SettingsTab>('security');
   const [toastMessage, setToastMessage] = useState<string>('');
-  const [profileDraft, setProfileDraft] = useState<ProfileFormState | null>(null);
 
   const [passwordForm, setPasswordForm] = useState<PasswordFormState>({
     currentPassword: '',
@@ -160,39 +128,26 @@ const SettingsPage = () => {
     fontScale: (typeof window !== 'undefined' && (window.localStorage.getItem(LOCAL_STORAGE_KEYS.fontScale) as FontScaleOption | null)) || 'medium',
   });
 
-  const baseProfileForm = useMemo<ProfileFormState>(() => {
-    return {
-      username: userQuery.data?.username ?? '',
-      email: userQuery.data?.email ?? '',
-      country: userQuery.data?.settings?.country ?? '',
-      timezone: userQuery.data?.settings?.timezone ?? 'UTC',
-      defaultLanguage: userQuery.data?.settings?.default_language ?? userQuery.data?.settings?.defaultLanguage ?? 'en',
-      notificationsEmail: userQuery.data?.settings?.notifications_email ?? true,
-      notificationsPush: userQuery.data?.settings?.notifications_push ?? true,
-      consentAnalytics: userQuery.data?.settings?.consent_analytics ?? true,
-    };
-  }, [userQuery.data]);
+  const baseConsentState = useMemo<ConsentState>(() => ({
+    notificationsEmail: userQuery.data?.settings?.notifications_email ?? true,
+    notificationsPush: userQuery.data?.settings?.notifications_push ?? true,
+    consentAnalytics: userQuery.data?.settings?.consent_analytics ?? true,
+  }), [userQuery.data]);
 
-  const profileForm = profileDraft ?? baseProfileForm;
-  const initialProfileSnapshot = useMemo(() => JSON.stringify(baseProfileForm), [baseProfileForm]);
+  const [consentDraft, setConsentDraft] = useState<ConsentState | null>(null);
+  const consentForm = consentDraft ?? baseConsentState;
+  const initialConsentSnapshot = useMemo(() => JSON.stringify(baseConsentState), [baseConsentState]);
 
-  const updateProfileForm = (updater: (current: ProfileFormState) => ProfileFormState): void => {
-    setProfileDraft((current) => {
-      const source = current ?? baseProfileForm;
+  const isConsentDirty = useMemo(() => {
+    return initialConsentSnapshot !== '' && JSON.stringify(consentForm) !== initialConsentSnapshot;
+  }, [initialConsentSnapshot, consentForm]);
+
+  const updateConsentForm = (updater: (current: ConsentState) => ConsentState): void => {
+    setConsentDraft((current) => {
+      const source = current ?? baseConsentState;
       return updater(source);
     });
   };
-
-  const allTimezones = useMemo(() => getAllTimezones(), []);
-
-  const visibleTimezones = useMemo(() => {
-    if (!timezoneSearch.trim()) {
-      return allTimezones;
-    }
-
-    const lower = timezoneSearch.toLowerCase();
-    return allTimezones.filter((timezone) => timezone.toLowerCase().includes(lower));
-  }, [allTimezones, timezoneSearch]);
 
   useEffect(() => {
     if (!toastMessage) {
@@ -208,27 +163,6 @@ const SettingsPage = () => {
     };
   }, [toastMessage]);
 
-  const isProfileDirty = useMemo(() => {
-    return initialProfileSnapshot !== '' && JSON.stringify(profileForm) !== initialProfileSnapshot;
-  }, [initialProfileSnapshot, profileForm]);
-
-  useEffect(() => {
-    const handleBeforeUnload = (event: BeforeUnloadEvent): void => {
-      if (!isProfileDirty) {
-        return;
-      }
-
-      event.preventDefault();
-      event.returnValue = COPY.profileUnsaved;
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-    };
-  }, [isProfileDirty]);
-
   useEffect(() => {
     const root = document.documentElement;
 
@@ -240,26 +174,6 @@ const SettingsPage = () => {
     window.localStorage.setItem(LOCAL_STORAGE_KEYS.highContrast, String(accessibility.highContrast));
     window.localStorage.setItem(LOCAL_STORAGE_KEYS.fontScale, accessibility.fontScale);
   }, [accessibility]);
-
-  const saveProfile = async (): Promise<void> => {
-    try {
-      await patchSettings.mutateAsync({
-        username: profileForm.username,
-        country: profileForm.country,
-        timezone: profileForm.timezone,
-        default_language: profileForm.defaultLanguage,
-        notifications_email: profileForm.notificationsEmail,
-        notifications_push: profileForm.notificationsPush,
-        consent_analytics: profileForm.consentAnalytics,
-      });
-
-      await userQuery.refetch();
-      setProfileDraft(null);
-      setToastMessage(COPY.saved);
-    } catch {
-      setToastMessage(patchSettings.error?.message ?? COPY.saveFailed);
-    }
-  };
 
   const submitPasswordChange = async (): Promise<void> => {
     try {
@@ -335,6 +249,23 @@ const SettingsPage = () => {
     }
   };
 
+  const saveConsentSettings = async (): Promise<void> => {
+    try {
+      await apiClient.patch('/api/v1/users/me/settings', {
+        body: {
+          notifications_email: consentForm.notificationsEmail,
+          notifications_push: consentForm.notificationsPush,
+          consent_analytics: consentForm.consentAnalytics,
+        },
+      });
+      await userQuery.refetch();
+      setConsentDraft(null);
+      setToastMessage(COPY.saved);
+    } catch {
+      setToastMessage(COPY.saveFailed);
+    }
+  };
+
   const loginHistory = (auditLog.data?.entries ?? [])
     .filter((entry) => entry.action.toLowerCase() === 'login')
     .slice(0, 5);
@@ -363,15 +294,7 @@ const SettingsPage = () => {
       <article className="pp-card">
         <h1 id="settings-page-title" className="pp-title">{COPY.title}</h1>
 
-        <div className="pp-tabs" style={{ marginTop: '0.75rem' }}>
-          <button
-            type="button"
-            className={`pp-tab pp-touch pp-focusable ${activeTab === 'profile' ? 'pp-tab-active' : ''}`}
-            aria-label={COPY.tabProfile}
-            onClick={() => setActiveTab('profile')}
-          >
-            {COPY.tabProfile}
-          </button>
+        <div className="pp-tabs" style={{ marginTop: '1rem' }}>
           <button
             type="button"
             className={`pp-tab pp-touch pp-focusable ${activeTab === 'security' ? 'pp-tab-active' : ''}`}
@@ -398,101 +321,13 @@ const SettingsPage = () => {
           </button>
         </div>
 
-        {activeTab === 'profile' && (
-          <form
-            className="pp-form-grid"
-            style={{ marginTop: '0.8rem' }}
-            onSubmit={(event) => {
-              event.preventDefault();
-              void saveProfile();
-            }}
-          >
-            <div className="pp-form-row">
-              <label htmlFor="settings-username">Username</label>
-              <input
-                id="settings-username"
-                aria-label="Username"
-                value={profileForm.username}
-                  onChange={(event) => updateProfileForm((current) => ({ ...current, username: event.currentTarget.value }))}
-              />
-            </div>
-
-            <div className="pp-form-row">
-              <label htmlFor="settings-email">Email</label>
-              <input id="settings-email" aria-label="Email" value={profileForm.email} readOnly />
-              <button type="button" className="pp-button pp-touch pp-focusable" aria-label={COPY.changeEmail}>
-                {COPY.changeEmail}
-              </button>
-            </div>
-
-            <div className="pp-grid-two">
-              <div className="pp-form-row">
-                <label htmlFor="settings-country">Country</label>
-                <input
-                  id="settings-country"
-                  aria-label="Country"
-                  value={profileForm.country}
-                  onChange={(event) => updateProfileForm((current) => ({ ...current, country: event.currentTarget.value }))}
-                />
-              </div>
-              <div className="pp-form-row">
-                <label htmlFor="settings-default-language">Default language</label>
-                <select
-                  id="settings-default-language"
-                  aria-label="Default language"
-                  value={profileForm.defaultLanguage}
-                  onChange={(event) => updateProfileForm((current) => ({ ...current, defaultLanguage: event.currentTarget.value }))}
-                >
-                  <option value="en">English</option>
-                  <option value="fr">French</option>
-                  <option value="es">Spanish</option>
-                  <option value="it">Italian</option>
-                  <option value="ar">Arabic</option>
-                  <option value="ch">Chinese</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="pp-form-row">
-              <label htmlFor="settings-timezone-search">Timezone</label>
-              <input
-                id="settings-timezone-search"
-                aria-label="Search timezone"
-                placeholder="Search timezone"
-                value={timezoneSearch}
-                onChange={(event) => setTimezoneSearch(event.currentTarget.value)}
-              />
-              <select
-                aria-label="Timezone"
-                value={profileForm.timezone}
-                onChange={(event) => updateProfileForm((current) => ({ ...current, timezone: event.currentTarget.value }))}
-              >
-                {visibleTimezones.map((timezone) => (
-                  <option key={timezone} value={timezone}>{timezone}</option>
-                ))}
-              </select>
-            </div>
-
-            {isProfileDirty && <p className="pill-amber pp-pill">{COPY.profileUnsaved}</p>}
-
-            <button
-              type="submit"
-              className="pp-button pp-button-primary pp-touch pp-focusable"
-              aria-label={COPY.save}
-              disabled={patchSettings.isPending}
-            >
-              {patchSettings.isPending ? `${COPY.save}...` : COPY.save}
-            </button>
-          </form>
-        )}
-
         {activeTab === 'security' && (
-          <section style={{ marginTop: '0.8rem', display: 'grid', gap: '0.8rem' }}>
+          <section style={{ marginTop: '1.25rem', display: 'grid', gap: '1rem' }}>
             <article className="pp-card">
               <h2 className="pp-title">{COPY.changePassword}</h2>
               <form
                 className="pp-form-grid"
-                style={{ marginTop: '0.6rem' }}
+                style={{ marginTop: '0.75rem' }}
                 onSubmit={(event) => {
                   event.preventDefault();
                   void submitPasswordChange();
@@ -553,7 +388,7 @@ const SettingsPage = () => {
               <h2 className="pp-title">{COPY.parentPin}</h2>
               <form
                 className="pp-form-grid"
-                style={{ marginTop: '0.6rem' }}
+                style={{ marginTop: '0.75rem' }}
                 onSubmit={(event) => {
                   event.preventDefault();
                   void submitPinChange();
@@ -580,15 +415,15 @@ const SettingsPage = () => {
             <article className="pp-card">
               <h2 className="pp-title">{COPY.loginHistory}</h2>
               {auditLog.isLoading ? (
-                <div className="pp-skeleton" style={{ height: 120, marginTop: '0.6rem' }} aria-label={COPY.loading} />
+                <div className="pp-skeleton" style={{ height: 120, marginTop: '0.75rem' }} aria-label={COPY.loading} />
               ) : auditLog.error ? (
                 <p className="pp-error">{auditLog.error.message}</p>
               ) : (
-                <ul style={{ marginTop: '0.6rem', display: 'grid', gap: '0.45rem' }}>
+                <ul style={{ marginTop: '0.75rem', display: 'grid', gap: '0.5rem' }}>
                   {loginHistory.map((entry) => (
-                    <li key={entry.id} className="pp-card">
-                      <p style={{ fontWeight: 700 }}>{nowDateTime(entry.created_at)}</p>
-                      <p style={{ color: 'var(--pp-muted)' }}>{entry.ip_address ?? 'Unknown IP'}</p>
+                    <li key={entry.id} className="pp-card" style={{ padding: '0.75rem' }}>
+                      <p style={{ fontWeight: 600 }}>{nowDateTime(entry.created_at)}</p>
+                      <p style={{ color: 'var(--text-secondary)' }}>{entry.ip_address ?? 'Unknown IP'}</p>
                     </li>
                   ))}
                 </ul>
@@ -598,61 +433,63 @@ const SettingsPage = () => {
         )}
 
         {activeTab === 'privacy' && (
-          <section style={{ marginTop: '0.8rem', display: 'grid', gap: '0.8rem' }}>
+          <section style={{ marginTop: '1.25rem', display: 'grid', gap: '1rem' }}>
             <article className="pp-card">
               <h2 className="pp-title">Consent</h2>
 
-              <div className="pp-toggle-row" style={{ marginTop: '0.6rem' }}>
-                <span>Email notifications</span>
+              <div className="pp-toggle-row" style={{ marginTop: '0.75rem' }}>
+                <span>{COPY.notificationsEmail}</span>
                 <button
                   type="button"
-                  className={`pp-switch pp-touch pp-focusable ${profileForm.notificationsEmail ? 'pp-switch-on' : ''}`}
-                  aria-label="Toggle email notifications"
+                  className={`pp-switch pp-touch pp-focusable ${consentForm.notificationsEmail ? 'pp-switch-on' : ''}`}
+                  aria-label={COPY.notificationsEmail}
                   onClick={() => {
-                    updateProfileForm((current) => ({ ...current, notificationsEmail: !current.notificationsEmail }));
+                    updateConsentForm((current) => ({ ...current, notificationsEmail: !current.notificationsEmail }));
                   }}
                 />
               </div>
 
-              <div className="pp-toggle-row" style={{ marginTop: '0.6rem' }}>
-                <span>Push notifications</span>
+              <div className="pp-toggle-row" style={{ marginTop: '0.5rem' }}>
+                <span>{COPY.notificationsPush}</span>
                 <button
                   type="button"
-                  className={`pp-switch pp-touch pp-focusable ${profileForm.notificationsPush ? 'pp-switch-on' : ''}`}
-                  aria-label="Toggle push notifications"
+                  className={`pp-switch pp-touch pp-focusable ${consentForm.notificationsPush ? 'pp-switch-on' : ''}`}
+                  aria-label={COPY.notificationsPush}
                   onClick={() => {
-                    updateProfileForm((current) => ({ ...current, notificationsPush: !current.notificationsPush }));
+                    updateConsentForm((current) => ({ ...current, notificationsPush: !current.notificationsPush }));
                   }}
                 />
               </div>
 
-              <div className="pp-toggle-row" style={{ marginTop: '0.6rem' }}>
-                <span>Opt out of AI model training</span>
+              <div className="pp-toggle-row" style={{ marginTop: '0.5rem' }}>
+                <span>{COPY.optOutAiTraining}</span>
                 <button
                   type="button"
-                  className={`pp-switch pp-touch pp-focusable ${!profileForm.consentAnalytics ? 'pp-switch-on' : ''}`}
-                  aria-label="Toggle AI model training consent"
+                  className={`pp-switch pp-touch pp-focusable ${!consentForm.consentAnalytics ? 'pp-switch-on' : ''}`}
+                  aria-label={COPY.optOutAiTraining}
                   onClick={() => {
-                    if (profileForm.consentAnalytics) {
+                    if (consentForm.consentAnalytics) {
                       setIsAnalyticsDialogOpen(true);
                     } else {
-                      updateProfileForm((current) => ({ ...current, consentAnalytics: true }));
+                      updateConsentForm((current) => ({ ...current, consentAnalytics: true }));
                     }
                   }}
                 />
               </div>
 
-              <button
-                type="button"
-                className="pp-button pp-button-primary pp-touch pp-focusable"
-                aria-label={COPY.save}
-                style={{ marginTop: '0.8rem' }}
-                onClick={() => {
-                  void saveProfile();
-                }}
-              >
-                {COPY.save}
-              </button>
+              {isConsentDirty && (
+                <button
+                  type="button"
+                  className="pp-button pp-button-primary pp-touch pp-focusable"
+                  aria-label={COPY.save}
+                  style={{ marginTop: '1rem' }}
+                  onClick={() => {
+                    void saveConsentSettings();
+                  }}
+                >
+                  {COPY.save}
+                </button>
+              )}
             </article>
 
             <article className="pp-card">
@@ -682,7 +519,7 @@ const SettingsPage = () => {
         )}
 
         {activeTab === 'accessibility' && (
-          <section style={{ marginTop: '0.8rem', display: 'grid', gap: '0.8rem' }}>
+          <section style={{ marginTop: '1.25rem', display: 'grid', gap: '1rem' }}>
             <article className="pp-card">
               <div className="pp-toggle-row">
                 <span>{COPY.reduceMotion}</span>
@@ -699,7 +536,7 @@ const SettingsPage = () => {
                 />
               </div>
 
-              <div className="pp-toggle-row" style={{ marginTop: '0.6rem' }}>
+              <div className="pp-toggle-row" style={{ marginTop: '0.5rem' }}>
                 <span>{COPY.highContrast}</span>
                 <button
                   type="button"
@@ -714,7 +551,7 @@ const SettingsPage = () => {
                 />
               </div>
 
-              <div className="pp-form-row" style={{ marginTop: '0.7rem' }}>
+              <div className="pp-form-row" style={{ marginTop: '0.75rem' }}>
                 <label htmlFor="font-scale">{COPY.fontSize}</label>
                 <select
                   id="font-scale"
@@ -745,11 +582,11 @@ const SettingsPage = () => {
               <img
                 src={enableMfa.data.qr_code_url}
                 alt="MFA QR code"
-                style={{ width: 220, maxWidth: '100%', borderRadius: 10, border: '1px solid var(--pp-border)' }}
+                style={{ width: 200, maxWidth: '100%', borderRadius: 8, border: '1px solid var(--border-subtle)' }}
               />
             )}
             <div>
-              <p style={{ fontWeight: 700, marginBottom: '0.3rem' }}>Backup codes</p>
+              <p style={{ fontWeight: 600, marginBottom: '0.25rem' }}>Backup codes</p>
               <ul style={{ display: 'grid', gap: '0.25rem' }}>
                 {(enableMfa.data?.backup_codes ?? []).map((code) => (
                   <li key={code} className="pp-pill pill-gray">{code}</li>
@@ -807,10 +644,7 @@ const SettingsPage = () => {
                 className="pp-button pp-button-primary pp-touch pp-focusable"
                 aria-label="Confirm opt out"
                 onClick={() => {
-                  updateProfileForm((current) => ({
-                    ...current,
-                    consentAnalytics: false,
-                  }));
+                  updateConsentForm((current) => ({ ...current, consentAnalytics: false }));
                   setIsAnalyticsDialogOpen(false);
                 }}
               >

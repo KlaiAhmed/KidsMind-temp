@@ -27,7 +27,7 @@ interface NavBarProps {
   isAuthenticated: boolean;
 }
 
-const PARENT_PROFILE_ROUTE = '/parent/dashboard';
+const PARENT_PROFILE_ROUTE = '/parent/profile';
 const PIN_LENGTH = 4;
 type MobileMenuView = 'main' | 'language' | 'theme';
 
@@ -467,8 +467,9 @@ const NavBar = ({
               {theme === 'light' ? <Moon size={20} strokeWidth={2} /> : <Sun size={20} strokeWidth={2} />}
             </button>
 
-            {isAuthenticated ? (
-              {/* User icon now directly links to Dashboard */}<button
+            {/* User icon now directly links to Dashboard */}
+                    {isAuthenticated ? (
+                      <button
                   type="button"
                   className={styles.userButton}
                   aria-label={translations.nav_parent_profile}

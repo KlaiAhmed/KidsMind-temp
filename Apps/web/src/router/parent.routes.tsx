@@ -1,6 +1,5 @@
 import { lazy, Suspense } from 'react';
 import { Navigate, Outlet, Route } from 'react-router-dom';
-import PinGate from '../components/PinGate';
 import { useAuthStatus } from '../hooks/useAuthStatus';
 import { useLanguage } from '../hooks/useLanguage';
 import '../styles/parent-portal.css';
@@ -33,11 +32,7 @@ const ParentRoute = () => {
     return <Navigate to="/login" replace />;
   }
 
-  return (
-    <PinGate>
-      <Outlet />
-    </PinGate>
-  );
+  return <Outlet />;
 };
 
 const ParentSubscriptionPage = () => {

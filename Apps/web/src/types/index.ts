@@ -16,6 +16,7 @@ export interface TranslationMap {
   nav_login: string;
   nav_start: string;
   nav_parent_profile: string;
+  nav_profile: string;
   nav_logout: string;
   nav_menu_label: string;
   nav_menu_open: string;
@@ -196,6 +197,7 @@ export interface TranslationMap {
   status_go_back: string;
 
   // ─── Parent Dashboard ────────────────────────────────────────────────────────
+  parent_space_title: string;
   dashboard_page_title: string;
   dashboard_loading: string;
   dashboard_no_child_title: string;
