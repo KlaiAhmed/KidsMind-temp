@@ -53,6 +53,7 @@ const HomePage = ({ isAuthenticated }: HomePageProps) => {
         onLanguageChange={setLanguage}
         translations={translations}
         isAuthenticated={isAuthenticated}
+      transparentAtTop
       />
       <main id="main-content">
         <HeroSection translations={translations} language={language} />

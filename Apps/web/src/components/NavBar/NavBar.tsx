@@ -25,6 +25,8 @@ interface NavBarProps {
   onLanguageChange: (code: LanguageCode) => void;
   translations: TranslationMap;
   isAuthenticated: boolean;
+  /** When true, navbar is transparent at page top and gains background on scroll. Only for home page. */
+  transparentAtTop?: boolean;
 }
 
 const PARENT_PROFILE_ROUTE = '/parent/profile';
@@ -63,6 +65,7 @@ const NavBar = ({
   onLanguageChange,
   translations,
   isAuthenticated,
+  transparentAtTop = false,
 }: NavBarProps) => {
   const navigate = useNavigate();
   const { isAtPageTop, isHiddenByScroll } = useScrollStore();
@@ -422,7 +425,7 @@ const NavBar = ({
   return (
     <>
       <nav
-        className={`${styles.nav} ${isAtPageTop ? styles.navAtTop : ''} ${shouldHideNav ? styles.navHidden : ''}`}
+        className={`${styles.nav} ${transparentAtTop && isAtPageTop ? styles.navAtTop : ''} ${shouldHideNav ? styles.navHidden : ''}`}
         aria-label={translations.nav_menu_label}
       >
         <div className={styles.navInner}>
