@@ -299,296 +299,295 @@ const ChildProfilesPage = () => {
       <article className="pp-card">
         <h1 id="child-profiles-title" className="pp-title">{COPY.title}</h1>
 
-        <div className="pp-tabs" style={{ marginTop: '0.75rem' }}>
-          <button
-            type="button"
-            className={`pp-tab pp-touch pp-focusable ${activeTab === 'all' ? 'pp-tab-active' : ''}`}
-            aria-label={COPY.tabAll}
-            onClick={() => {
-              setActiveTab('all');
-            }}
-          >
-            {COPY.tabAll}
-          </button>
-          <button
-            type="button"
-            className={`pp-tab pp-touch pp-focusable ${activeTab === 'safety' ? 'pp-tab-active' : ''}`}
-            aria-label={COPY.tabSafety}
-            onClick={() => {
-              setActiveTab('safety');
-            }}
-          >
-            {COPY.tabSafety}
-          </button>
-        </div>
+      <div className="pp-tabs" style={{ marginTop: '0.75rem' }}>
+        <button
+          type="button"
+          className={`pp-tab pp-touch pp-focusable ${activeTab === 'all' ? 'pp-tab-active' : ''}`}
+          aria-label={COPY.tabAll}
+          onClick={() => {
+            setActiveTab('all');
+          }}
+        >
+          {COPY.tabAll}
+        </button>
+        <button
+          type="button"
+          className={`pp-tab pp-touch pp-focusable ${activeTab === 'safety' ? 'pp-tab-active' : ''}`}
+          aria-label={COPY.tabSafety}
+          onClick={() => {
+            setActiveTab('safety');
+          }}
+        >
+          {COPY.tabSafety}
+        </button>
+      </div>
 
-        {childrenQuery.isLoading ? (
-          <div className="pp-skeleton" style={{ marginTop: '0.8rem', height: 220 }} aria-label={COPY.loading} />
-        ) : childrenQuery.error ? (
-          <div role="alert" style={{ marginTop: '0.8rem' }}>
-            <p className="pp-error">
-              {childrenQuery.error.isAuthError && childrenQuery.error.status === 403
-                ? 'Access denied.'
-                : childrenQuery.error.message}
+      {childrenQuery.isLoading ? (
+        <div className="pp-skeleton" style={{ marginTop: '0.8rem', height: 220 }} aria-label={COPY.loading} />
+      ) : childrenQuery.error ? (
+        <div role="alert" style={{ marginTop: '0.8rem' }}>
+          <p className="pp-error">
+            {childrenQuery.error.isAuthError && childrenQuery.error.status === 403
+              ? 'Access denied.'
+              : childrenQuery.error.message}
+          </p>
+          {!childrenQuery.error.isAuthError && (
+            <button
+              type="button"
+              className="pp-button pp-touch pp-focusable"
+              aria-label={COPY.retry}
+              disabled={childrenQuery.isFetching}
+              onClick={() => {
+                void childrenQuery.refetch();
+              }}
+            >
+              {childrenQuery.isFetching ? `${COPY.retry}...` : COPY.retry}
+            </button>
+          )}
+        </div>
+      ) : activeTab === 'all' ? (
+        <div className="pp-grid-two" style={{ marginTop: '0.8rem' }}>
+          {children.length === 0 ? (
+            <article className="pp-empty">{COPY.noChildren}</article>
+          ) : (
+            children.map((child) => {
+              const childAge = child.age ?? toAge(child.birth_date);
+              const dailyLimit = child.settings_json?.daily_limit_minutes ?? child.settings_json?.dailyLimitMinutes ?? 60;
+              const voiceEnabled = child.settings_json?.enable_voice ?? child.settings_json?.enableVoice ?? false;
+              const subjectCount = (child.settings_json?.allowed_subjects ?? child.settings_json?.allowedSubjects ?? []).length;
+
+              return (
+                <div key={child.child_id} className="pp-card pp-profile-card">
+                  <header className="pp-profile-header">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                      <span className="pp-avatar-lg" aria-hidden="true">{child.avatar ?? '🧒'}</span>
+                      <div>
+                        <p style={{ fontWeight: 700 }}>{child.nickname}</p>
+                        <p style={{ color: 'var(--pp-muted)' }}>
+                          {childAge ?? '—'} yrs • {child.education_stage ?? 'Unknown stage'}
+                        </p>
+                      </div>
+                    </div>
+                    <span className={`pp-pill ${child.is_active ? 'pill-green' : 'pill-gray'}`}>
+                      {child.is_active ? 'Active' : 'Inactive'}
+                    </span>
+                  </header>
+
+                  <div className="pp-limit-pills">
+                    <span className="pp-pill pill-gray">{dailyLimit} min/day</span>
+                    <span className="pp-pill pill-gray">Voice {voiceEnabled ? 'On' : 'Off'}</span>
+                    <span className="pp-pill pill-gray">{subjectCount} subjects</span>
+                  </div>
+
+                  <div className="pp-profile-actions">
+                    <button
+                      type="button"
+                      className="pp-button pp-touch pp-focusable"
+                      aria-label={`${COPY.edit} ${child.nickname}`}
+                      onClick={() => {
+                        handleEditOpen(child);
+                      }}
+                    >
+                      {COPY.edit}
+                    </button>
+                    <button
+                      type="button"
+                      className="pp-button pp-touch pp-focusable"
+                      aria-label={`${COPY.setLimits} ${child.nickname}`}
+                      onClick={() => {
+                        setActiveChildId(child.child_id);
+                        setActiveTab('safety');
+                      }}
+                    >
+                      {COPY.setLimits}
+                    </button>
+                    <button
+                      type="button"
+                      className="pp-button pp-touch pp-focusable"
+                      aria-label={`${COPY.remove} ${child.nickname}`}
+                      onClick={() => {
+                        setRemoveCandidate(child);
+                      }}
+                    >
+                      {COPY.remove}
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+
+          <div className="pp-card pp-profile-card" title={maxProfilesReached ? COPY.maxReached : COPY.addChild}>
+            <h2 className="pp-title">{COPY.addChild}</h2>
+            <p style={{ color: 'var(--pp-muted)' }}>
+              {maxProfilesReached ? COPY.maxReached : COPY.addFirstChild}
             </p>
-            {!childrenQuery.error.isAuthError && (
+            {maxProfilesReached ? (
               <button
                 type="button"
-                className="pp-button pp-touch pp-focusable"
-                aria-label={COPY.retry}
-                disabled={childrenQuery.isFetching}
-                onClick={() => {
-                  void childrenQuery.refetch();
-                }}
+                className="pp-button pp-touch"
+                disabled
+                aria-label={COPY.maxReached}
               >
-                {childrenQuery.isFetching ? `${COPY.retry}...` : COPY.retry}
+                {COPY.maxReached}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="pp-button pp-button-primary pp-touch pp-focusable"
+                aria-label={COPY.addChild}
+                onClick={() => setIsAddChildModalOpen(true)}
+              >
+                {COPY.addChild}
               </button>
             )}
           </div>
-        ) : activeTab === 'all' ? (
-          <div className="pp-grid-two" style={{ marginTop: '0.8rem' }}>
-            {children.length === 0 ? (
-              <article className="pp-empty">{COPY.noChildren}</article>
-            ) : (
-              children.map((child) => {
-                const childAge = child.age ?? toAge(child.birth_date);
-                const dailyLimit = child.settings_json?.daily_limit_minutes ?? child.settings_json?.dailyLimitMinutes ?? 60;
-                const voiceEnabled = child.settings_json?.enable_voice ?? child.settings_json?.enableVoice ?? false;
-                const subjectCount = (child.settings_json?.allowed_subjects ?? child.settings_json?.allowedSubjects ?? []).length;
-
-                return (
-                  <article key={child.child_id} className="pp-card pp-profile-card">
-                    <header className="pp-profile-header">
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                        <span className="pp-avatar-lg" aria-hidden="true">{child.avatar ?? '🧒'}</span>
-                        <div>
-                          <p style={{ fontWeight: 700 }}>{child.nickname}</p>
-                          <p style={{ color: 'var(--pp-muted)' }}>
-                            {childAge ?? '—'} yrs • {child.education_stage ?? 'Unknown stage'}
-                          </p>
-                        </div>
-                      </div>
-                      <span className={`pp-pill ${child.is_active ? 'pill-green' : 'pill-gray'}`}>
-                        {child.is_active ? 'Active' : 'Inactive'}
-                      </span>
-                    </header>
-
-                    <div className="pp-limit-pills">
-                      <span className="pp-pill pill-gray">{dailyLimit} min/day</span>
-                      <span className="pp-pill pill-gray">Voice {voiceEnabled ? 'On' : 'Off'}</span>
-                      <span className="pp-pill pill-gray">{subjectCount} subjects</span>
-                    </div>
-
-                    <div className="pp-profile-actions">
-                      <button
-                        type="button"
-                        className="pp-button pp-touch pp-focusable"
-                        aria-label={`${COPY.edit} ${child.nickname}`}
-                        onClick={() => {
-                          handleEditOpen(child);
-                        }}
-                      >
-                        {COPY.edit}
-                      </button>
-                      <button
-                        type="button"
-                        className="pp-button pp-touch pp-focusable"
-                        aria-label={`${COPY.setLimits} ${child.nickname}`}
-                        onClick={() => {
-                          setActiveChildId(child.child_id);
-                          setActiveTab('safety');
-                        }}
-                      >
-                        {COPY.setLimits}
-                      </button>
-                      <button
-                        type="button"
-                        className="pp-button pp-touch pp-focusable"
-                        aria-label={`${COPY.remove} ${child.nickname}`}
-                        onClick={() => {
-                          setRemoveCandidate(child);
-                        }}
-                      >
-                        {COPY.remove}
-                      </button>
-                    </div>
-                  </article>
-                );
-              })
-            )}
-
-            <article className="pp-card pp-profile-card" title={maxProfilesReached ? COPY.maxReached : COPY.addChild}>
-              <h2 className="pp-title">{COPY.addChild}</h2>
-              <p style={{ color: 'var(--pp-muted)' }}>
-                {maxProfilesReached ? COPY.maxReached : COPY.addFirstChild}
-              </p>
-              {maxProfilesReached ? (
+        </div>
+      ) : !selectedChild ? (
+        <p className="pp-empty" style={{ marginTop: '0.8rem' }}>{COPY.noActiveChild}</p>
+      ) : (
+        <form
+          className="pp-safety-form"
+          style={{ marginTop: '0.8rem' }}
+          onSubmit={(event) => {
+            event.preventDefault();
+            void saveSafetySettings();
+          }}
+        >
+          {/* Daily Limit Section */}
+          <div className="pp-safety-section">
+            <span className="pp-safety-section-label">{COPY.dailyLimit}</span>
+            <div className="pp-safety-slider" style={{ '--safety-slider-fill': `${((safetyForm.dailyLimitMinutes - SLIDER_MIN) / (SLIDER_MAX - SLIDER_MIN)) * 100}%` } as React.CSSProperties}>
+              <input
+                id="daily-limit-slider"
+                type="range"
+                min={SLIDER_MIN}
+                max={SLIDER_MAX}
+                step={SLIDER_STEP}
+                aria-label={COPY.dailyLimit}
+                aria-valuetext={`${safetyForm.dailyLimitMinutes} min`}
+                value={safetyForm.dailyLimitMinutes}
+                onChange={(event) => {
+                  const value = Number(event.currentTarget.value);
+                  setSafetyForm((current) => ({
+                    ...current,
+                    dailyLimitMinutes: value,
+                  }));
+                }}
+              />
+              <span className="pp-safety-slider-value">{safetyForm.dailyLimitMinutes} min</span>
+            </div>
+            <div className="pp-safety-presets">
+              {PRESET_MINUTES.map((minutes) => (
                 <button
+                  key={minutes}
                   type="button"
-                  className="pp-button pp-touch"
-                  disabled
-                  aria-label={COPY.maxReached}
+                  className={`pp-safety-preset pp-touch pp-focusable ${safetyForm.dailyLimitMinutes === minutes ? 'pp-safety-preset-active' : ''}`}
+                  aria-pressed={safetyForm.dailyLimitMinutes === minutes}
+                  onClick={() => handlePresetClick(minutes)}
                 >
-                  {COPY.maxReached}
+                  {minutes} min
                 </button>
-              ) : (
-          <button
-            type="button"
-            className="pp-button pp-button-primary pp-touch pp-focusable"
-            aria-label={COPY.addChild}
-            onClick={() => setIsAddChildModalOpen(true)}
-          >
-            {COPY.addChild}
-          </button>
-        )}
-            </article>
-          </div>
-        ) : !selectedChild ? (
-          <p className="pp-empty" style={{ marginTop: '0.8rem' }}>{COPY.noActiveChild}</p>
-        ) : (
-          <form
-            className="pp-safety-form"
-            style={{ marginTop: '0.8rem' }}
-            onSubmit={(event) => {
-              event.preventDefault();
-              void saveSafetySettings();
-            }}
-          >
-            {/* Daily Limit Section */}
-            <div className="pp-safety-section">
-              <span className="pp-safety-section-label">{COPY.dailyLimit}</span>
-              <div className="pp-safety-slider" style={{ '--safety-slider-fill': `${((safetyForm.dailyLimitMinutes - SLIDER_MIN) / (SLIDER_MAX - SLIDER_MIN)) * 100}%` } as React.CSSProperties}>
-                <input
-                  id="daily-limit-slider"
-                  type="range"
-                  min={SLIDER_MIN}
-                  max={SLIDER_MAX}
-                  step={SLIDER_STEP}
-                  aria-label={COPY.dailyLimit}
-                  aria-valuetext={`${safetyForm.dailyLimitMinutes} min`}
-                  value={safetyForm.dailyLimitMinutes}
-                  onChange={(event) => {
-                    const value = Number(event.currentTarget.value);
-                    setSafetyForm((current) => ({
-                      ...current,
-                      dailyLimitMinutes: value,
-                    }));
-                  }}
-                />
-                <span className="pp-safety-slider-value">{safetyForm.dailyLimitMinutes} min</span>
-              </div>
-              <div className="pp-safety-presets">
-                {PRESET_MINUTES.map((minutes) => (
+              ))}
+            </div>
+
+            <span className="pp-safety-section-label" style={{ marginTop: '0.75rem' }}>{COPY.allowedWeekdays}</span>
+            <div className="pp-safety-chips" role="group" aria-label={COPY.allowedWeekdays}>
+              {WEEKDAY_LABELS.map((dayLabel, index) => {
+                const weekdayKey = WEEKDAY_KEYS[index];
+                const isActive = safetyForm.allowedWeekdays.includes(weekdayKey);
+                return (
                   <button
-                    key={minutes}
+                    key={weekdayKey}
                     type="button"
-                    className={`pp-safety-preset pp-touch pp-focusable ${safetyForm.dailyLimitMinutes === minutes ? 'pp-safety-preset-active' : ''}`}
-                    aria-pressed={safetyForm.dailyLimitMinutes === minutes}
-                    onClick={() => handlePresetClick(minutes)}
+                    className={`pp-safety-chip pp-touch pp-focusable ${isActive ? 'pp-safety-chip-active' : ''}`}
+                    aria-pressed={isActive}
+                    onClick={() => handleWeekdayToggle(weekdayKey)}
                   >
-                    {minutes} min
+                    {dayLabel}
                   </button>
-                ))}
-              </div>
+                );
+              })}
+            </div>
+          </div>
 
-              <span className="pp-safety-section-label" style={{ marginTop: '0.75rem' }}>{COPY.allowedWeekdays}</span>
-              <div className="pp-safety-chips" role="group" aria-label={COPY.allowedWeekdays}>
-                {WEEKDAY_LABELS.map((dayLabel, index) => {
-                  const weekdayKey = WEEKDAY_KEYS[index];
-                  const isActive = safetyForm.allowedWeekdays.includes(weekdayKey);
-                  return (
-                    <button
-                      key={weekdayKey}
-                      type="button"
-                      className={`pp-safety-chip pp-touch pp-focusable ${isActive ? 'pp-safety-chip-active' : ''}`}
-                      aria-pressed={isActive}
-                      onClick={() => handleWeekdayToggle(weekdayKey)}
-                    >
-                      {dayLabel}
-                    </button>
-                  );
-                })}
+          <hr className="pp-safety-divider" />
+
+          {/* Subjects Section */}
+          <div className="pp-safety-section">
+            <span className="pp-safety-section-label">{COPY.allowedSubjects}</span>
+            <div className="pp-safety-chips" role="group" aria-label={COPY.allowedSubjects}>
+              {SUBJECT_OPTIONS.map((subjectId) => {
+                const meta = SUBJECT_META[subjectId];
+                const isActive = safetyForm.allowedSubjects.includes(subjectId);
+                return (
+                  <button
+                    key={subjectId}
+                    type="button"
+                    className={`pp-safety-chip pp-touch pp-focusable ${isActive ? 'pp-safety-chip-active' : ''}`}
+                    aria-pressed={isActive}
+                    onClick={() => handleSubjectToggle(subjectId)}
+                  >
+                    <span aria-hidden="true">{meta?.emoji}</span>
+                    <span>{meta?.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <hr className="pp-safety-divider" />
+
+          {/* Voice Section */}
+          <div className="pp-safety-section">
+            <div className="pp-safety-toggle">
+              <div className="pp-safety-toggle-label">
+                <span className="pp-safety-toggle-text">{COPY.voiceEnabled}</span>
               </div>
+              <ModernSwitch
+                checked={safetyForm.enableVoice}
+                onChange={() => {
+                  setSafetyForm((current) => {
+                    const next = !current.enableVoice;
+                    return { ...current, enableVoice: next, storeAudioHistory: next ? current.storeAudioHistory : false };
+                  });
+                }}
+                ariaLabel={COPY.voiceEnabled}
+              />
             </div>
 
-            <hr className="pp-safety-divider" />
-
-            {/* Subjects Section */}
-            <div className="pp-safety-section">
-              <span className="pp-safety-section-label">{COPY.allowedSubjects}</span>
-              <div className="pp-safety-chips" role="group" aria-label={COPY.allowedSubjects}>
-                {SUBJECT_OPTIONS.map((subjectId) => {
-                  const meta = SUBJECT_META[subjectId];
-                  const isActive = safetyForm.allowedSubjects.includes(subjectId);
-                  return (
-                    <button
-                      key={subjectId}
-                      type="button"
-                      className={`pp-safety-chip pp-touch pp-focusable ${isActive ? 'pp-safety-chip-active' : ''}`}
-                      aria-pressed={isActive}
-                      onClick={() => handleSubjectToggle(subjectId)}
-                    >
-                      <span aria-hidden="true">{meta?.emoji}</span>
-                      <span>{meta?.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <hr className="pp-safety-divider" />
-
-            {/* Voice Section */}
-            <div className="pp-safety-section">
+            {safetyForm.enableVoice && (
               <div className="pp-safety-toggle">
                 <div className="pp-safety-toggle-label">
-                  <span className="pp-safety-toggle-text">{COPY.voiceEnabled}</span>
+                  <span className="pp-safety-toggle-text">{COPY.storeAudio}</span>
                 </div>
                 <ModernSwitch
-                  checked={safetyForm.enableVoice}
+                  checked={safetyForm.storeAudioHistory}
                   onChange={() => {
-                    setSafetyForm((current) => {
-                      const next = !current.enableVoice;
-                      return { ...current, enableVoice: next, storeAudioHistory: next ? current.storeAudioHistory : false };
-                    });
+                    setSafetyForm((current) => ({ ...current, storeAudioHistory: !current.storeAudioHistory }));
                   }}
-                  ariaLabel={COPY.voiceEnabled}
+                  ariaLabel={COPY.storeAudio}
                 />
               </div>
-
-              {safetyForm.enableVoice && (
-                <div className="pp-safety-toggle">
-                  <div className="pp-safety-toggle-label">
-                    <span className="pp-safety-toggle-text">{COPY.storeAudio}</span>
-                  </div>
-                  <ModernSwitch
-                    checked={safetyForm.storeAudioHistory}
-                    onChange={() => {
-                      setSafetyForm((current) => ({ ...current, storeAudioHistory: !current.storeAudioHistory }));
-                    }}
-                    ariaLabel={COPY.storeAudio}
-                  />
-                </div>
-              )}
-            </div>
-
-            <hr className="pp-safety-divider" />
-
-            {submitError && (
-              <p className="pp-safety-error" role="alert">{submitError}</p>
             )}
+          </div>
 
-            <button
-              type="submit"
-              className="pp-button pp-button-primary pp-touch pp-focusable pp-safety-save"
-              aria-label={COPY.save}
-              disabled={isSaving}
-            >
-              {isSaving ? `${COPY.save}...` : COPY.save}
-            </button>
-          </form>
-        )}
-      </article>
+          <hr className="pp-safety-divider" />
+
+          {submitError && (
+            <p className="pp-safety-error" role="alert">{submitError}</p>
+          )}
+
+          <button
+            type="submit"
+            className="pp-button pp-button-primary pp-touch pp-focusable pp-safety-save"
+            aria-label={COPY.save}
+            disabled={isSaving}
+          >
+            {isSaving ? `${COPY.save}...` : COPY.save}
+          </button>
+        </form>
+      )}
 
       {editForm && (
         <div className="pp-sheet-backdrop" role="dialog" aria-modal="true" aria-label="Edit child profile">
@@ -801,6 +800,7 @@ const ChildProfilesPage = () => {
           setToastMessage('Child profile created successfully');
         }}
       />
+      </article>
     </main>
   );
 };

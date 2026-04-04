@@ -359,7 +359,7 @@ const SettingsPage = () => {
 
     return (
       <main className="pp-content">
-        <article className="pp-card">
+        <div>
           <h1 className="pp-title">{COPY.title}</h1>
           <p className="pp-error" role="alert">
             {isAuthError && userQuery.error?.status === 403
@@ -379,7 +379,7 @@ const SettingsPage = () => {
               {userQuery.isFetching ? COPY.loading : COPY.retry}
             </button>
           )}
-        </article>
+        </div>
       </main>
     );
   }
@@ -389,183 +389,175 @@ const SettingsPage = () => {
         <h1 id="settings-page-title" className="pp-title">{COPY.title}</h1>
 
         <div className="pp-tabs" style={{ marginTop: '1rem' }}>
-          <button
-            type="button"
-            className={`pp-tab pp-touch pp-focusable ${activeTab === 'security' ? 'pp-tab-active' : ''}`}
-            aria-label={COPY.tabSecurity}
-            onClick={() => setActiveTab('security')}
+        <button
+          type="button"
+          className={`pp-tab pp-touch pp-focusable ${activeTab === 'security' ? 'pp-tab-active' : ''}`}
+          aria-label={COPY.tabSecurity}
+          onClick={() => setActiveTab('security')}
+        >
+          {COPY.tabSecurity}
+        </button>
+        <button
+          type="button"
+          className={`pp-tab pp-touch pp-focusable ${activeTab === 'sessions' ? 'pp-tab-active' : ''}`}
+          aria-label={COPY.tabSessions}
+          onClick={() => setActiveTab('sessions')}
+        >
+          {COPY.tabSessions}
+        </button>
+        <button
+          type="button"
+          className={`pp-tab pp-touch pp-focusable ${activeTab === 'privacy' ? 'pp-tab-active' : ''}`}
+          aria-label={COPY.tabPrivacy}
+          onClick={() => setActiveTab('privacy')}
+        >
+          {COPY.tabPrivacy}
+        </button>
+        <button
+          type="button"
+          className={`pp-tab pp-touch pp-focusable ${activeTab === 'accessibility' ? 'pp-tab-active' : ''}`}
+          aria-label={COPY.tabAccessibility}
+          onClick={() => setActiveTab('accessibility')}
+        >
+          {COPY.tabAccessibility}
+        </button>
+      </div>
+
+      {activeTab === 'security' && (
+        <>
+          <h2 className="pp-title">{COPY.changePassword}</h2>
+          <form
+            className="pp-form-grid"
+            style={{ marginTop: '0.75rem' }}
+            noValidate
+            onSubmit={(event) => {
+              event.preventDefault();
+              void submitPasswordChange();
+            }}
           >
-            {COPY.tabSecurity}
-          </button>
-          <button
-            type="button"
-            className={`pp-tab pp-touch pp-focusable ${activeTab === 'sessions' ? 'pp-tab-active' : ''}`}
-            aria-label={COPY.tabSessions}
-            onClick={() => setActiveTab('sessions')}
+            <PasswordField
+              id="current-password"
+              label="Current password"
+              placeholder="Enter current password"
+              value={passwordForm.currentPassword}
+              required
+              autoComplete="current-password"
+              error={currentPasswordError}
+              onChange={(value) => {
+                setPasswordForm((current) => ({ ...current, currentPassword: value }));
+              }}
+              onBlur={() => setPasswordValidationRequested(true)}
+            />
+            <PasswordField
+              id="new-password"
+              label="New password"
+              placeholder="Enter new password"
+              value={passwordForm.newPassword}
+              hint={passwordRequirement || undefined}
+              hintTone="danger"
+              required
+              showStrengthMeter
+              autoComplete="new-password"
+              onChange={(value) => {
+                setPasswordForm((current) => ({ ...current, newPassword: value }));
+              }}
+              onBlur={() => setPasswordValidationRequested(true)}
+            />
+            <PasswordField
+              id="confirm-password"
+              label="Confirm password"
+              placeholder="Confirm new password"
+              value={passwordForm.confirmPassword}
+              required
+              autoComplete="new-password"
+              error={confirmPasswordError}
+              onChange={(value) => {
+                setPasswordForm((current) => ({ ...current, confirmPassword: value }));
+              }}
+              onBlur={() => setPasswordValidationRequested(true)}
+            />
+            <button
+              type="submit"
+              className="pp-button pp-button-primary pp-touch pp-focusable"
+              aria-label={COPY.changePassword}
+              disabled={!canSubmitPasswordChange}
+            >
+              {COPY.changePassword}
+            </button>
+          </form>
+
+          <h2 className="pp-title" style={{ marginTop: '1.5rem' }}>{COPY.parentPin}</h2>
+          <form
+            className="pp-form-grid"
+            style={{ marginTop: '0.75rem' }}
+            onSubmit={(event) => {
+              event.preventDefault();
+              void submitPinChange();
+            }}
           >
-            {COPY.tabSessions}
-          </button>
-          <button
-            type="button"
-            className={`pp-tab pp-touch pp-focusable ${activeTab === 'privacy' ? 'pp-tab-active' : ''}`}
-            aria-label={COPY.tabPrivacy}
-            onClick={() => setActiveTab('privacy')}
-          >
-            {COPY.tabPrivacy}
-          </button>
-          <button
-            type="button"
-            className={`pp-tab pp-touch pp-focusable ${activeTab === 'accessibility' ? 'pp-tab-active' : ''}`}
-            aria-label={COPY.tabAccessibility}
-            onClick={() => setActiveTab('accessibility')}
-          >
-            {COPY.tabAccessibility}
-          </button>
-        </div>
+            <PinInput
+              label="Enter new PIN"
+              hint="4-digit numeric code"
+              value={securityPin}
+              onChange={setSecurityPin}
+              showConfirmation
+              confirmationLabel="Confirm PIN"
+              onValidityChange={setPinValid}
+            />
+            <button
+              type="submit"
+              className="pp-button pp-button-primary pp-touch pp-focusable"
+              aria-label={COPY.updatePin}
+              disabled={!pinValid}
+            >
+              {COPY.updatePin}
+            </button>
+          </form>
 
-        {activeTab === 'security' && (
-          <section style={{ marginTop: '1.25rem', display: 'grid', gap: '1rem' }}>
-            <article className="pp-card">
-              <h2 className="pp-title">{COPY.changePassword}</h2>
-              <form
-                className="pp-form-grid"
-                style={{ marginTop: '0.75rem' }}
-                noValidate
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void submitPasswordChange();
-                }}
-              >
-                <PasswordField
-                  id="current-password"
-                  label="Current password"
-                  placeholder="Enter current password"
-                  value={passwordForm.currentPassword}
-                  required
-                  autoComplete="current-password"
-                  error={currentPasswordError}
-                  onChange={(value) => {
-                    setPasswordForm((current) => ({ ...current, currentPassword: value }));
-                  }}
-                  onBlur={() => setPasswordValidationRequested(true)}
-                />
-                <PasswordField
-                  id="new-password"
-                  label="New password"
-                  placeholder="Enter new password"
-                  value={passwordForm.newPassword}
-                  hint={passwordRequirement || undefined}
-                  hintTone="danger"
-                  required
-                  showStrengthMeter
-                  autoComplete="new-password"
-                  onChange={(value) => {
-                    setPasswordForm((current) => ({ ...current, newPassword: value }));
-                  }}
-                  onBlur={() => setPasswordValidationRequested(true)}
-                />
-                <PasswordField
-                  id="confirm-password"
-                  label="Confirm password"
-                  placeholder="Confirm new password"
-                  value={passwordForm.confirmPassword}
-                  required
-                  autoComplete="new-password"
-                  error={confirmPasswordError}
-                  onChange={(value) => {
-                    setPasswordForm((current) => ({ ...current, confirmPassword: value }));
-                  }}
-                  onBlur={() => setPasswordValidationRequested(true)}
-                />
-                <button
-                  type="submit"
-                  className="pp-button pp-button-primary pp-touch pp-focusable"
-                  aria-label={COPY.changePassword}
-                  disabled={!canSubmitPasswordChange}
-                >
-                  {COPY.changePassword}
-                </button>
-              </form>
-            </article>
+          <h2 className="pp-title" style={{ marginTop: '1.5rem' }}>2FA</h2>
+          {userQuery.user.mfa_enabled ? (
+            <p className="pill-green pp-pill" style={{ marginTop: '0.75rem' }}>Enabled</p>
+          ) : (
+            <button
+              type="button"
+              className="pp-button pp-button-primary pp-touch pp-focusable"
+              style={{ marginTop: '0.75rem' }}
+              aria-label={COPY.enableMfa}
+              onClick={() => {
+                void submitMfaEnable();
+              }}
+            >
+              {enableMfa.isPending ? `${COPY.enableMfa}...` : COPY.enableMfa}
+            </button>
+          )}
+        </>
+      )}
 
-            <article className="pp-card">
-              <h2 className="pp-title">{COPY.parentPin}</h2>
-              <form
-                className="pp-form-grid"
-                style={{ marginTop: '0.75rem' }}
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void submitPinChange();
-                }}
-              >
-                <PinInput
-                  label="Enter new PIN"
-                  hint="4-digit numeric code"
-                  value={securityPin}
-                  onChange={setSecurityPin}
-                  showConfirmation
-                  confirmationLabel="Confirm PIN"
-                  onValidityChange={setPinValid}
-                />
-                <button
-                  type="submit"
-                  className="pp-button pp-button-primary pp-touch pp-focusable"
-                  aria-label={COPY.updatePin}
-                  disabled={!pinValid}
-                >
-                  {COPY.updatePin}
-                </button>
-              </form>
-            </article>
+      {activeTab === 'sessions' && (
+        <>
+          <h2 className="pp-title">{COPY.loginHistory}</h2>
+          {auditLog.isLoading ? (
+              <div className="pp-skeleton" style={{ height: 120, marginTop: '0.75rem' }} aria-label={COPY.loading} />
+            ) : auditLog.error ? (
+              <p className="pp-error">{auditLog.error.message}</p>
+            ) : (
+              <ul style={{ marginTop: '0.75rem', display: 'grid', gap: '0.5rem' }}>
+                {loginHistory.map((entry) => (
+                  <li key={entry.id} className="pp-card" style={{ padding: '0.75rem' }}>
+                    <p style={{ fontWeight: 600 }}>{nowDateTime(entry.created_at)}</p>
+                    <p style={{ color: 'var(--text-secondary)' }}>{entry.ip_address ?? 'Unknown IP'}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
+        </>
+      )}
 
-            <article className="pp-card">
-              <h2 className="pp-title">2FA</h2>
-              {userQuery.user.mfa_enabled ? (
-                <p className="pill-green pp-pill">Enabled</p>
-              ) : (
-                <button
-                  type="button"
-                  className="pp-button pp-button-primary pp-touch pp-focusable"
-                  aria-label={COPY.enableMfa}
-                  onClick={() => {
-                    void submitMfaEnable();
-                  }}
-                >
-                  {enableMfa.isPending ? `${COPY.enableMfa}...` : COPY.enableMfa}
-                </button>
-              )}
-            </article>
-          </section>
-        )}
+      {activeTab === 'privacy' && (
+        <>
+          <h2 className="pp-title">Consent</h2>
 
-        {activeTab === 'sessions' && (
-          <section style={{ marginTop: '1.25rem', display: 'grid', gap: '1rem' }}>
-            <article className="pp-card">
-              <h2 className="pp-title">{COPY.loginHistory}</h2>
-              {auditLog.isLoading ? (
-                <div className="pp-skeleton" style={{ height: 120, marginTop: '0.75rem' }} aria-label={COPY.loading} />
-              ) : auditLog.error ? (
-                <p className="pp-error">{auditLog.error.message}</p>
-              ) : (
-                <ul style={{ marginTop: '0.75rem', display: 'grid', gap: '0.5rem' }}>
-                  {loginHistory.map((entry) => (
-                    <li key={entry.id} className="pp-card" style={{ padding: '0.75rem' }}>
-                      <p style={{ fontWeight: 600 }}>{nowDateTime(entry.created_at)}</p>
-                      <p style={{ color: 'var(--text-secondary)' }}>{entry.ip_address ?? 'Unknown IP'}</p>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </article>
-          </section>
-        )}
-
-        {activeTab === 'privacy' && (
-          <section style={{ marginTop: '1.25rem', display: 'grid', gap: '1rem' }}>
-            <article className="pp-card">
-              <h2 className="pp-title">Consent</h2>
-
-              <div className="pp-toggle-row" style={{ marginTop: '0.75rem' }}>
+          <div className="pp-toggle-row" style={{ marginTop: '0.75rem' }}>
             <span>{COPY.notificationsEmail}</span>
             <ModernSwitch
               checked={consentForm.notificationsEmail}
@@ -576,7 +568,7 @@ const SettingsPage = () => {
             />
           </div>
 
-              <div className="pp-toggle-row" style={{ marginTop: '0.5rem' }}>
+          <div className="pp-toggle-row" style={{ marginTop: '0.5rem' }}>
             <span>{COPY.notificationsPush}</span>
             <ModernSwitch
               checked={consentForm.notificationsPush}
@@ -587,7 +579,7 @@ const SettingsPage = () => {
             />
           </div>
 
-              <div className="pp-toggle-row" style={{ marginTop: '0.5rem' }}>
+          <div className="pp-toggle-row" style={{ marginTop: '0.5rem' }}>
             <span>{COPY.optOutAiTraining}</span>
             <ModernSwitch
               checked={!consentForm.consentAnalytics}
@@ -602,51 +594,47 @@ const SettingsPage = () => {
             />
           </div>
 
-              {isConsentDirty && (
-                <button
-                  type="button"
-                  className="pp-button pp-button-primary pp-touch pp-focusable"
-                  aria-label={COPY.save}
-                  style={{ marginTop: '1rem' }}
-                  onClick={() => {
-                    void saveConsentSettings();
-                  }}
-                >
-                  {COPY.save}
-                </button>
-              )}
-            </article>
+          {isConsentDirty && (
+            <button
+              type="button"
+              className="pp-button pp-button-primary pp-touch pp-focusable"
+              aria-label={COPY.save}
+              style={{ marginTop: '1rem' }}
+              onClick={() => {
+                void saveConsentSettings();
+              }}
+            >
+              {COPY.save}
+            </button>
+          )}
 
-            <article className="pp-card">
-              <button
-                type="button"
-                className="pp-button pp-touch pp-focusable"
-                aria-label={COPY.requestData}
-                onClick={requestDataExport}
-              >
-                {COPY.requestData}
-              </button>
-            </article>
+          <button
+            type="button"
+            className="pp-button pp-touch pp-focusable"
+            style={{ marginTop: '1.25rem' }}
+            aria-label={COPY.requestData}
+            onClick={requestDataExport}
+          >
+            {COPY.requestData}
+          </button>
 
-            <article className="pp-card">
-              <button
-                type="button"
-                className="pp-button pp-touch pp-focusable"
-                aria-label={COPY.deleteAccount}
-                onClick={() => {
-                  setIsDeleteDialogOpen(true);
-                }}
-              >
-                {COPY.deleteAccount}
-              </button>
-            </article>
-          </section>
-        )}
+          <button
+            type="button"
+            className="pp-button pp-touch pp-focusable"
+            style={{ marginTop: '0.75rem' }}
+            aria-label={COPY.deleteAccount}
+            onClick={() => {
+              setIsDeleteDialogOpen(true);
+            }}
+          >
+            {COPY.deleteAccount}
+          </button>
+        </>
+      )}
 
-        {activeTab === 'accessibility' && (
-          <section style={{ marginTop: '1.25rem', display: 'grid', gap: '1rem' }}>
-            <article className="pp-card">
-              <div className="pp-toggle-row">
+      {activeTab === 'accessibility' && (
+        <>
+          <div className="pp-toggle-row">
             <span>{COPY.reduceMotion}</span>
             <ModernSwitch
               checked={accessibility.reduceMotion}
@@ -660,7 +648,7 @@ const SettingsPage = () => {
             />
           </div>
 
-              <div className="pp-toggle-row" style={{ marginTop: '0.5rem' }}>
+          <div className="pp-toggle-row" style={{ marginTop: '0.5rem' }}>
             <span>{COPY.highContrast}</span>
             <ModernSwitch
               checked={accessibility.highContrast}
@@ -674,29 +662,27 @@ const SettingsPage = () => {
             />
           </div>
 
-              <div style={{ marginTop: '0.75rem' }}>
-                <ModernSelect
-                  id="font-scale"
-                  label={COPY.fontSize}
-                  value={accessibility.fontScale}
-                  onChange={(event) => {
-                    const fontScale = event.currentTarget.value as FontScaleOption;
-                    setAccessibility((current) => ({
-                      ...current,
-                      fontScale,
-                    }));
-                  }}
-                  options={[
-                    { value: 'small', label: COPY.small },
-                    { value: 'medium', label: COPY.medium },
-                    { value: 'large', label: COPY.large },
-                  ]}
-                />
-              </div>
-            </article>
-          </section>
-        )}
-      </article>
+          <div style={{ marginTop: '0.75rem' }}>
+            <ModernSelect
+              id="font-scale"
+              label={COPY.fontSize}
+              value={accessibility.fontScale}
+              onChange={(event) => {
+                const fontScale = event.currentTarget.value as FontScaleOption;
+                setAccessibility((current) => ({
+                  ...current,
+                  fontScale,
+                }));
+              }}
+              options={[
+                { value: 'small', label: COPY.small },
+                { value: 'medium', label: COPY.medium },
+                { value: 'large', label: COPY.large },
+              ]}
+            />
+          </div>
+        </>
+      )}
 
       {isMfaModalOpen && (
         <div className="pp-dialog-backdrop" role="dialog" aria-modal="true" aria-label={COPY.verifyMfa}>
@@ -824,6 +810,7 @@ const SettingsPage = () => {
           <div className="pp-toast-card">{toastMessage}</div>
         </div>
       )}
+      </article>
     </main>
   );
 };

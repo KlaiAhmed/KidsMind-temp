@@ -280,7 +280,7 @@ const InsightsPage = () => {
         </div>
 
         {activeTab === 'progress' && (
-          <section style={{ marginTop: '0.85rem', display: 'grid', gap: '0.8rem' }}>
+          <div style={{ marginTop: '0.85rem', display: 'grid', gap: '0.8rem' }}>
             <div className="pp-tabs" aria-label="Subject filters">
               <button
                 type="button"
@@ -315,40 +315,42 @@ const InsightsPage = () => {
             ) : filteredProgressSubjects.length === 0 ? (
               <p className="pp-empty">{COPY.noProgress}</p>
             ) : (
-              filteredProgressSubjects.map((subject) => {
-                const progressValue = Math.max(0, Math.min(100, subject.mastery_pct ?? 0));
+              <div style={{ display: 'grid', gap: '0.6rem' }}>
+                {filteredProgressSubjects.map((subject) => {
+                  const progressValue = Math.max(0, Math.min(100, subject.mastery_pct ?? 0));
 
-                return (
-                  <article key={subject.subject} className="pp-card">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem' }}>
-                      <p style={{ fontWeight: 700 }}>{subject.emoji} {subject.subject}</p>
-                      <span>{trendIconMap[subject.trend]}</span>
+                  return (
+                    <div key={subject.subject}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem' }}>
+                        <p style={{ fontWeight: 700 }}>{subject.emoji} {subject.subject}</p>
+                        <span>{trendIconMap[subject.trend]}</span>
+                      </div>
+                      <div style={{ marginTop: '0.5rem', borderRadius: '999px', background: '#e5ece6', height: 10 }}>
+                        <div
+                          style={{
+                            width: `${progressValue}%`,
+                            borderRadius: '999px',
+                            height: '100%',
+                            background: 'var(--color-sage)',
+                          }}
+                          aria-label={`${subject.subject} ${progressValue}% mastery`}
+                        />
+                      </div>
+                      <p style={{ marginTop: '0.4rem', color: 'var(--pp-muted)' }}>
+                        Last practiced: {formatDate(subject.last_practiced_at)}
+                      </p>
                     </div>
-                    <div style={{ marginTop: '0.5rem', borderRadius: '999px', background: '#e5ece6', height: 10 }}>
-                      <div
-                        style={{
-                          width: `${progressValue}%`,
-                          borderRadius: '999px',
-                          height: '100%',
-                          background: 'var(--color-sage)',
-                        }}
-                        aria-label={`${subject.subject} ${progressValue}% mastery`}
-                      />
-                    </div>
-                    <p style={{ marginTop: '0.4rem', color: 'var(--pp-muted)' }}>
-                      Last practiced: {formatDate(subject.last_practiced_at)}
-                    </p>
-                  </article>
-                );
-              })
+                  );
+                })}
+              </div>
             )}
 
-            <WeeklyBarChartContainer childId={childId} dailyLimitMinutes={dailyLimit} />
-          </section>
+            <WeeklyBarChartContainer childId={childId} dailyLimitMinutes={dailyLimit} wrapped />
+          </div>
         )}
 
         {activeTab === 'conversation-log' && (
-          <section style={{ marginTop: '0.85rem', display: 'grid', gap: '0.7rem' }}>
+          <div style={{ marginTop: '0.85rem', display: 'grid', gap: '0.7rem' }}>
             {sessionsQuery.isLoading ? (
               <div className="pp-skeleton" style={{ height: 220 }} aria-label={COPY.loading} />
             ) : sessionsQuery.error ? (
@@ -456,11 +458,11 @@ const InsightsPage = () => {
                 {COPY.pageNext}
               </button>
             </div>
-          </section>
+          </div>
         )}
 
         {activeTab === 'badges' && (
-          <section style={{ marginTop: '0.85rem', display: 'grid', gap: '0.7rem' }}>
+          <div style={{ marginTop: '0.85rem', display: 'grid', gap: '0.7rem' }}>
             <div className="pp-tabs" aria-label="Badge categories">
               <button
                 type="button"
@@ -526,7 +528,7 @@ const InsightsPage = () => {
                 })}
               </div>
             )}
-          </section>
+          </div>
         )}
       </article>
     </main>
