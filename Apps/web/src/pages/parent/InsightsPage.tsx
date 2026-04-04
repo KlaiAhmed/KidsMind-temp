@@ -246,7 +246,7 @@ const InsightsPage = () => {
       <article className="pp-card">
         <h1 id="insights-page-title" className="pp-title">{COPY.title}</h1>
 
-        <div className="pp-tabs" style={{ marginTop: '0.75rem' }}>
+        <div className="pp-tabs">
           <button
             type="button"
             className={`pp-tab pp-touch pp-focusable ${activeTab === 'progress' ? 'pp-tab-active' : ''}`}
@@ -280,7 +280,7 @@ const InsightsPage = () => {
         </div>
 
         {activeTab === 'progress' && (
-          <div style={{ marginTop: '0.85rem', display: 'grid', gap: '0.8rem' }}>
+          <div style={{ display: 'grid', gap: '0.8rem' }}>
             <div className="pp-tabs" aria-label="Subject filters">
               <button
                 type="button"
@@ -350,7 +350,7 @@ const InsightsPage = () => {
         )}
 
         {activeTab === 'conversation-log' && (
-          <div style={{ marginTop: '0.85rem', display: 'grid', gap: '0.7rem' }}>
+          <div style={{ display: 'grid', gap: '0.7rem' }}>
             {sessionsQuery.isLoading ? (
               <div className="pp-skeleton" style={{ height: 220 }} aria-label={COPY.loading} />
             ) : sessionsQuery.error ? (
@@ -462,7 +462,7 @@ const InsightsPage = () => {
         )}
 
         {activeTab === 'badges' && (
-          <div style={{ marginTop: '0.85rem', display: 'grid', gap: '0.7rem' }}>
+          <div style={{ display: 'grid', gap: '0.7rem' }}>
             <div className="pp-tabs" aria-label="Badge categories">
               <button
                 type="button"

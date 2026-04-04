@@ -299,7 +299,7 @@ const ChildProfilesPage = () => {
       <article className="pp-card">
         <h1 id="child-profiles-title" className="pp-title">{COPY.title}</h1>
 
-      <div className="pp-tabs" style={{ marginTop: '0.75rem' }}>
+      <div className="pp-tabs">
         <button
           type="button"
           className={`pp-tab pp-touch pp-focusable ${activeTab === 'all' ? 'pp-tab-active' : ''}`}
@@ -346,7 +346,7 @@ const ChildProfilesPage = () => {
           )}
         </div>
       ) : activeTab === 'all' ? (
-        <div className="pp-grid-two" style={{ marginTop: '0.8rem' }}>
+        <div className="pp-grid-two">
           {children.length === 0 ? (
             <article className="pp-empty">{COPY.noChildren}</article>
           ) : (
@@ -444,11 +444,10 @@ const ChildProfilesPage = () => {
           </div>
         </div>
       ) : !selectedChild ? (
-        <p className="pp-empty" style={{ marginTop: '0.8rem' }}>{COPY.noActiveChild}</p>
+        <p className="pp-empty">{COPY.noActiveChild}</p>
       ) : (
         <form
           className="pp-safety-form"
-          style={{ marginTop: '0.8rem' }}
           onSubmit={(event) => {
             event.preventDefault();
             void saveSafetySettings();

@@ -388,7 +388,7 @@ const SettingsPage = () => {
       <article className="pp-card">
         <h1 id="settings-page-title" className="pp-title">{COPY.title}</h1>
 
-        <div className="pp-tabs" style={{ marginTop: '1rem' }}>
+        <div className="pp-tabs">
         <button
           type="button"
           className={`pp-tab pp-touch pp-focusable ${activeTab === 'security' ? 'pp-tab-active' : ''}`}
@@ -428,7 +428,6 @@ const SettingsPage = () => {
           <h2 className="pp-title">{COPY.changePassword}</h2>
           <form
             className="pp-form-grid"
-            style={{ marginTop: '0.75rem' }}
             noValidate
             onSubmit={(event) => {
               event.preventDefault();
@@ -489,7 +488,6 @@ const SettingsPage = () => {
           <h2 className="pp-title" style={{ marginTop: '1.5rem' }}>{COPY.parentPin}</h2>
           <form
             className="pp-form-grid"
-            style={{ marginTop: '0.75rem' }}
             onSubmit={(event) => {
               event.preventDefault();
               void submitPinChange();
@@ -514,14 +512,13 @@ const SettingsPage = () => {
             </button>
           </form>
 
-          <h2 className="pp-title" style={{ marginTop: '1.5rem' }}>2FA</h2>
+          <h2 className="pp-title">2FA</h2>
           {userQuery.user.mfa_enabled ? (
-            <p className="pill-green pp-pill" style={{ marginTop: '0.75rem' }}>Enabled</p>
+            <p className="pill-green pp-pill">Enabled</p>
           ) : (
             <button
               type="button"
               className="pp-button pp-button-primary pp-touch pp-focusable"
-              style={{ marginTop: '0.75rem' }}
               aria-label={COPY.enableMfa}
               onClick={() => {
                 void submitMfaEnable();
@@ -541,7 +538,7 @@ const SettingsPage = () => {
             ) : auditLog.error ? (
               <p className="pp-error">{auditLog.error.message}</p>
             ) : (
-              <ul style={{ marginTop: '0.75rem', display: 'grid', gap: '0.5rem' }}>
+              <ul style={{ display: 'grid', gap: '0.5rem' }}>
                 {loginHistory.map((entry) => (
                   <li key={entry.id} className="pp-card" style={{ padding: '0.75rem' }}>
                     <p style={{ fontWeight: 600 }}>{nowDateTime(entry.created_at)}</p>
@@ -557,7 +554,7 @@ const SettingsPage = () => {
         <>
           <h2 className="pp-title">Consent</h2>
 
-          <div className="pp-toggle-row" style={{ marginTop: '0.75rem' }}>
+          <div className="pp-toggle-row">
             <span>{COPY.notificationsEmail}</span>
             <ModernSwitch
               checked={consentForm.notificationsEmail}
@@ -568,7 +565,7 @@ const SettingsPage = () => {
             />
           </div>
 
-          <div className="pp-toggle-row" style={{ marginTop: '0.5rem' }}>
+          <div className="pp-toggle-row">
             <span>{COPY.notificationsPush}</span>
             <ModernSwitch
               checked={consentForm.notificationsPush}
@@ -579,7 +576,7 @@ const SettingsPage = () => {
             />
           </div>
 
-          <div className="pp-toggle-row" style={{ marginTop: '0.5rem' }}>
+          <div className="pp-toggle-row">
             <span>{COPY.optOutAiTraining}</span>
             <ModernSwitch
               checked={!consentForm.consentAnalytics}
@@ -599,7 +596,6 @@ const SettingsPage = () => {
               type="button"
               className="pp-button pp-button-primary pp-touch pp-focusable"
               aria-label={COPY.save}
-              style={{ marginTop: '1rem' }}
               onClick={() => {
                 void saveConsentSettings();
               }}
@@ -611,7 +607,6 @@ const SettingsPage = () => {
           <button
             type="button"
             className="pp-button pp-touch pp-focusable"
-            style={{ marginTop: '1.25rem' }}
             aria-label={COPY.requestData}
             onClick={requestDataExport}
           >
@@ -621,7 +616,6 @@ const SettingsPage = () => {
           <button
             type="button"
             className="pp-button pp-touch pp-focusable"
-            style={{ marginTop: '0.75rem' }}
             aria-label={COPY.deleteAccount}
             onClick={() => {
               setIsDeleteDialogOpen(true);
@@ -648,7 +642,7 @@ const SettingsPage = () => {
             />
           </div>
 
-          <div className="pp-toggle-row" style={{ marginTop: '0.5rem' }}>
+          <div className="pp-toggle-row">
             <span>{COPY.highContrast}</span>
             <ModernSwitch
               checked={accessibility.highContrast}
@@ -662,7 +656,7 @@ const SettingsPage = () => {
             />
           </div>
 
-          <div style={{ marginTop: '0.75rem' }}>
+          <div>
             <ModernSelect
               id="font-scale"
               label={COPY.fontSize}

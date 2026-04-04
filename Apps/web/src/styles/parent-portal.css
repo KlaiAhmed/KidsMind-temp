@@ -441,6 +441,31 @@
   min-width: 0;
 }
 
+/* ─── Vertical rhythm: titles, tabs, buttons ───────────────────────────
+   Every title, tab row, and button gets breathing room above and below.
+   Grid children are excluded — their parent's `gap` handles spacing.       */
+
+/* Titles: space below so the next element isn't cramped */
+.pp-title { margin: 0 0 0.75rem; }
+/* When a title sits below a title, tabs, or button, give it top space */
+.pp-tabs + .pp-title,
+.pp-button + .pp-title,
+.pp-title + .pp-title { margin-top: 1rem; }
+
+/* Tab rows: space above and below */
+.pp-tabs { margin-top: 0.25rem; margin-bottom: 0.75rem; }
+
+/* Buttons that follow titles or tabs get extra top breathing room */
+.pp-title + .pp-button,
+.pp-tabs + .pp-button { margin-top: 0.5rem; }
+
+/* Topbar action rows */
+.pp-topbar-actions { margin-top: 0.5rem; }
+
+/* Empty / error states that follow a title or tabs */
+.pp-title + .pp-empty,
+.pp-tabs + .pp-empty { margin-top: 0.5rem; }
+
 /* Dashboard */
 .pp-dashboard { display: grid; gap: 2rem; }
 .pp-dashboard-skeleton { height: 200px; }
@@ -799,7 +824,7 @@
 @keyframes ppSlideInLeft { from { transform:translateX(100%); } to { transform:translateX(0); } }
 
 /* Form Elements */
-.pp-form-grid { display: grid; gap: 1.5rem; }
+.pp-form-grid { display: grid; gap: 0.25rem; }
 .pp-form-row { display: grid; gap: .625rem; }
 .pp-form-row input, .pp-form-row select, .pp-form-row textarea {
   border: var(--pp-card-border); border-radius: 12px;
