@@ -5,6 +5,7 @@ import { useLanguage } from '../../../hooks/useLanguage';
 
 export interface SubjectsGridProps {
   childId: number | null;
+  embedded?: boolean;
 }
 
 const getBorderClassName = (masteryPct: number | null): string => {
@@ -23,14 +24,15 @@ const getBorderClassName = (masteryPct: number | null): string => {
   return 'pp-border-red';
 };
 
-const SubjectsGrid = ({ childId }: SubjectsGridProps) => {
+const SubjectsGrid = ({ childId, embedded = false }: SubjectsGridProps) => {
   const { translations } = useLanguage();
   const navigate = useNavigate();
   const progress = useChildProgress(childId);
+  const rootClassName = `${embedded ? 'pp-dashboard-panel' : 'pp-card'} pp-col-span-1`;
 
   if (progress.isLoading) {
     return (
-      <section className="pp-card pp-col-span-1" aria-label={translations.loading}>
+      <section className={rootClassName} aria-label={translations.loading}>
         <h3 className="pp-title">{translations.dashboard_limits_subjects}</h3>
         <div className="pp-skeleton" style={{ height: 180, marginTop: '0.75rem' }} />
       </section>
@@ -39,7 +41,7 @@ const SubjectsGrid = ({ childId }: SubjectsGridProps) => {
 
   if (progress.error) {
     return (
-      <section className="pp-card pp-col-span-1" role="alert">
+      <section className={rootClassName} role="alert">
         <h3 className="pp-title">{translations.dashboard_limits_subjects}</h3>
         <p className="pp-error">{progress.error.message}</p>
         <button
@@ -60,7 +62,7 @@ const SubjectsGrid = ({ childId }: SubjectsGridProps) => {
   const subjects = progress.data?.subjects.slice(0, 6) ?? [];
   if (subjects.length === 0) {
     return (
-      <section className="pp-card pp-col-span-1">
+      <section className={rootClassName}>
         <h3 className="pp-title">{translations.dashboard_limits_subjects}</h3>
         <p className="pp-empty">{translations.no_data}</p>
       </section>
@@ -68,7 +70,7 @@ const SubjectsGrid = ({ childId }: SubjectsGridProps) => {
   }
 
   return (
-    <section className="pp-card pp-col-span-1" aria-labelledby="subjects-grid-title">
+    <section className={rootClassName} aria-labelledby="subjects-grid-title">
       <div className="pp-section-heading">
         <span className="pp-section-heading-icon" aria-hidden="true">
           <BookOpen size={16} strokeWidth={2.25} />

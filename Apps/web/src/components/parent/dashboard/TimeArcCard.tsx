@@ -9,15 +9,17 @@ const ARC_CIRCUMFERENCE = 2 * Math.PI * ARC_RADIUS;
 export interface TimeArcCardProps {
   dailyLimitMinutes: number;
   analytics: UseChildAnalyticsResult;
+  embedded?: boolean;
 }
 
 const clamp = (value: number, min: number, max: number): number => {
   return Math.min(max, Math.max(min, value));
 };
 
-const TimeArcCard = ({ dailyLimitMinutes, analytics }: TimeArcCardProps) => {
+const TimeArcCard = ({ dailyLimitMinutes, analytics, embedded = false }: TimeArcCardProps) => {
   const { translations } = useLanguage();
   const [displayRatio, setDisplayRatio] = useState(0);
+  const rootClassName = `${embedded ? 'pp-dashboard-panel' : 'pp-card'} pp-col-span-1`;
 
   const todayUsage = useMemo(() => {
     const todayIso = new Date().toISOString().slice(0, 10);
@@ -47,7 +49,7 @@ const TimeArcCard = ({ dailyLimitMinutes, analytics }: TimeArcCardProps) => {
 
   if (analytics.isLoading) {
     return (
-      <section className="pp-card pp-col-span-1" aria-label={translations.loading}>
+      <section className={rootClassName} aria-label={translations.loading}>
         <h3 className="pp-title">{translations.dashboard_limits_daily_usage}</h3>
         <div className="pp-skeleton" style={{ height: 190, marginTop: '0.75rem' }} />
       </section>
@@ -56,7 +58,7 @@ const TimeArcCard = ({ dailyLimitMinutes, analytics }: TimeArcCardProps) => {
 
   if (analytics.error) {
     return (
-      <section className="pp-card pp-col-span-1" role="alert">
+      <section className={rootClassName} role="alert">
         <h3 className="pp-title">{translations.dashboard_limits_daily_usage}</h3>
         <p className="pp-error">{analytics.error.message}</p>
         <button
@@ -76,7 +78,7 @@ const TimeArcCard = ({ dailyLimitMinutes, analytics }: TimeArcCardProps) => {
 
   if (!analytics.data) {
     return (
-      <section className="pp-card pp-col-span-1">
+      <section className={rootClassName}>
         <h3 className="pp-title">{translations.dashboard_limits_daily_usage}</h3>
         <p className="pp-empty">{translations.no_data}</p>
       </section>
@@ -90,7 +92,7 @@ const TimeArcCard = ({ dailyLimitMinutes, analytics }: TimeArcCardProps) => {
     : `${translations.warning}: ${Math.abs(remaining)}`;
 
   return (
-    <section className="pp-card pp-col-span-1" aria-labelledby="time-arc-title">
+    <section className={rootClassName} aria-labelledby="time-arc-title">
       <div className="pp-section-heading">
         <span className="pp-section-heading-icon" aria-hidden="true">
           <Clock3 size={16} strokeWidth={2.25} />

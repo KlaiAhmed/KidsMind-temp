@@ -7,6 +7,7 @@ export interface TodayStripProps {
   childName: string;
   childAvatar?: string;
   analytics: UseChildAnalyticsResult;
+  embedded?: boolean;
 }
 
 const toDisplayDate = (value: string): string => {
@@ -26,8 +27,9 @@ const toDisplayDate = (value: string): string => {
   });
 };
 
-const TodayStrip = ({ childName, childAvatar, analytics }: TodayStripProps) => {
+const TodayStrip = ({ childName, childAvatar, analytics, embedded = false }: TodayStripProps) => {
   const { translations } = useLanguage();
+  const rootClassName = `${embedded ? 'pp-dashboard-panel' : 'pp-card'} pp-col-span-3 pp-today-strip`;
 
   const todayMetrics = useMemo(() => {
     const todayIso = new Date().toISOString().slice(0, 10);
@@ -45,7 +47,7 @@ const TodayStrip = ({ childName, childAvatar, analytics }: TodayStripProps) => {
 
   if (analytics.isLoading) {
     return (
-      <section className="pp-card pp-col-span-3 pp-today-strip" aria-label={translations.today_loading}>
+      <section className={rootClassName} aria-label={translations.today_loading}>
         <h2 className="pp-title">{translations.today_title}</h2>
         <div className="pp-skeleton" style={{ height: 92, marginTop: '0.75rem' }} />
       </section>
@@ -54,7 +56,7 @@ const TodayStrip = ({ childName, childAvatar, analytics }: TodayStripProps) => {
 
   if (analytics.error) {
     return (
-      <section className="pp-card pp-col-span-3" role="alert" aria-live="assertive">
+      <section className={`${embedded ? 'pp-dashboard-panel' : 'pp-card'} pp-col-span-3`.trim()} role="alert" aria-live="assertive">
         <h2 className="pp-title">{translations.today_title}</h2>
         <p className="pp-error">{analytics.error.message}</p>
         <button
@@ -75,7 +77,7 @@ const TodayStrip = ({ childName, childAvatar, analytics }: TodayStripProps) => {
   const today = todayMetrics.todaySlice;
   if (!today) {
     return (
-      <section className="pp-card pp-col-span-3 pp-today-strip">
+      <section className={rootClassName}>
         <h2 className="pp-title">{translations.today_title}</h2>
         <p className="pp-empty">{translations.today_empty}</p>
       </section>
@@ -96,7 +98,7 @@ const TodayStrip = ({ childName, childAvatar, analytics }: TodayStripProps) => {
     : 'pill-gray';
 
   return (
-    <section className="pp-card pp-col-span-3 pp-today-strip" aria-labelledby="today-strip-title">
+    <section className={rootClassName} aria-labelledby="today-strip-title">
       <div>
         <div className="pp-section-heading">
           <span className="pp-section-heading-icon" aria-hidden="true">

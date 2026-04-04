@@ -16,6 +16,7 @@ export interface WeeklyBarChartProps {
   dailyLimitMinutes: number;
   analytics: UseChildAnalyticsResult;
   wrapped?: boolean;
+  embedded?: boolean;
 }
 
 export interface WeeklyBarChartContainerProps {
@@ -35,9 +36,10 @@ const startOfWeekMonday = (referenceDate: Date): Date => {
 
 const toIsoDate = (date: Date): string => date.toISOString().slice(0, 10);
 
-const WeeklyBarChart = ({ dailyLimitMinutes, analytics, wrapped = false }: WeeklyBarChartProps) => {
+const WeeklyBarChart = ({ dailyLimitMinutes, analytics, wrapped = false, embedded = false }: WeeklyBarChartProps) => {
   const { translations } = useLanguage();
   const [activeTooltip, setActiveTooltip] = useState<WeeklyBarDatum | null>(null);
+  const rootClassName = `${embedded || wrapped ? 'pp-dashboard-panel' : 'pp-card'} pp-col-span-2`;
 
   const weekdayLabels = useMemo(() => {
     return [
@@ -87,7 +89,7 @@ const WeeklyBarChart = ({ dailyLimitMinutes, analytics, wrapped = false }: Weekl
 
   if (analytics.isLoading) {
     return (
-      <section className={`pp-col-span-2 ${wrapped ? '' : 'pp-card'}`.trim()} aria-label={translations.loading}>
+      <section className={rootClassName} aria-label={translations.loading}>
         <h3 className="pp-title">{translations.dashboard_child_this_week}</h3>
         <div className="pp-skeleton" style={{ height: 220, marginTop: '0.75rem' }} />
       </section>
@@ -96,7 +98,7 @@ const WeeklyBarChart = ({ dailyLimitMinutes, analytics, wrapped = false }: Weekl
 
   if (analytics.error) {
     return (
-      <section className={`pp-col-span-2 ${wrapped ? '' : 'pp-card'}`.trim()} role="alert">
+      <section className={rootClassName} role="alert">
         <h3 className="pp-title">{translations.dashboard_child_this_week}</h3>
         <p className="pp-error">{analytics.error.message}</p>
         <button
@@ -123,7 +125,7 @@ const WeeklyBarChart = ({ dailyLimitMinutes, analytics, wrapped = false }: Weekl
   const hasAnyData = weekData.some((day) => day.minutes > 0 || day.sessions > 0);
 
   return (
-    <section className={`pp-col-span-2 ${wrapped ? '' : 'pp-card'}`.trim()} aria-labelledby="weekly-chart-title">
+    <section className={rootClassName} aria-labelledby="weekly-chart-title">
       <div className="pp-section-heading">
         <span className="pp-section-heading-icon" aria-hidden="true">
           <CalendarDays size={16} strokeWidth={2.25} />

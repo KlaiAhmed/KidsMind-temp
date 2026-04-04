@@ -6,13 +6,15 @@ import { useLanguage } from '../../../hooks/useLanguage';
 
 export interface QuickActionsProps {
   childId: number | null;
+  embedded?: boolean;
 }
 
-const QuickActions = ({ childId }: QuickActionsProps) => {
+const QuickActions = ({ childId, embedded = false }: QuickActionsProps) => {
   const { translations } = useLanguage();
   const navigate = useNavigate();
   const exportPdf = useExportPdf(childId);
   const [toastMessage, setToastMessage] = useState<string>('');
+  const rootClassName = `${embedded ? 'pp-dashboard-panel' : 'pp-card'} pp-col-span-2`;
 
   useEffect(() => {
     if (!toastMessage) {
@@ -29,7 +31,7 @@ const QuickActions = ({ childId }: QuickActionsProps) => {
   }, [toastMessage]);
 
   return (
-    <section className="pp-card pp-col-span-2" aria-labelledby="quick-actions-title">
+    <section className={rootClassName} aria-labelledby="quick-actions-title">
       <div className="pp-section-heading">
         <span className="pp-section-heading-icon" aria-hidden="true">
           <Sparkles size={16} strokeWidth={2.25} />

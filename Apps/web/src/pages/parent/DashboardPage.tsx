@@ -89,46 +89,52 @@ const DashboardPage = () => {
 
   return (
     <main className="pp-content pp-dashboard" aria-labelledby="dashboard-page-title">
-      <h1 id="dashboard-page-title" className="srOnly">{translations.dashboard_page_title}</h1>
+      <article className="pp-card pp-dashboard-shell" aria-labelledby="dashboard-page-title">
+        <header className="pp-dashboard-shell-head">
+          <div className="pp-dashboard-welcome-head">
+            <span className="pp-dashboard-welcome-icon" aria-hidden="true">
+              <Sparkles size={18} strokeWidth={2.2} />
+            </span>
+            <h1 id="dashboard-page-title" className="pp-title">{translations.dashboard_page_title}</h1>
+          </div>
+          <p className="pp-dashboard-welcome-subtitle">
+            {activeChild.nickname} · {translations.dashboard_child_activity_title}
+          </p>
+        </header>
 
-      <section className="pp-dashboard-welcome pp-card" aria-labelledby="dashboard-welcome-title">
-        <div className="pp-dashboard-welcome-head">
-          <span className="pp-dashboard-welcome-icon" aria-hidden="true">
-            <Sparkles size={18} strokeWidth={2.2} />
-          </span>
-          <h2 id="dashboard-welcome-title" className="pp-title">{translations.dashboard_page_title}</h2>
+        <div className="pp-dashboard-shell-body">
+          <div className="pp-bento pp-dashboard-shell-grid">
+            <TodayStrip
+              childName={activeChild.nickname}
+              childAvatar={activeChild.avatar}
+              analytics={analyticsQuery}
+              embedded
+            />
+
+            <AiInsightsCard
+              childId={activeChild.child_id}
+              childName={activeChild.nickname}
+              embedded
+            />
+
+            <TimeArcCard
+              dailyLimitMinutes={dailyLimit}
+              analytics={analyticsQuery}
+              embedded
+            />
+
+            <WeeklyBarChart
+              dailyLimitMinutes={dailyLimit}
+              analytics={analyticsQuery}
+              embedded
+            />
+
+            <SubjectsGrid childId={activeChild.child_id} embedded />
+
+            <QuickActions childId={activeChild.child_id} embedded />
+          </div>
         </div>
-        <p className="pp-dashboard-welcome-subtitle">
-          {activeChild.nickname} · {translations.dashboard_child_activity_title}
-        </p>
-      </section>
-
-      <div className="pp-bento pp-bento-dashboard">
-        <TodayStrip
-          childName={activeChild.nickname}
-          childAvatar={activeChild.avatar}
-          analytics={analyticsQuery}
-        />
-
-        <AiInsightsCard
-          childId={activeChild.child_id}
-          childName={activeChild.nickname}
-        />
-
-        <TimeArcCard
-          dailyLimitMinutes={dailyLimit}
-          analytics={analyticsQuery}
-        />
-
-        <WeeklyBarChart
-          dailyLimitMinutes={dailyLimit}
-          analytics={analyticsQuery}
-        />
-
-        <SubjectsGrid childId={activeChild.child_id} />
-
-        <QuickActions childId={activeChild.child_id} />
-      </div>
+      </article>
     </main>
   );
 };

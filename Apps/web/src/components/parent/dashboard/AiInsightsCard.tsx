@@ -27,16 +27,18 @@ const resolveSeverityClassName = (severity: 'warning' | 'positive' | 'info'): st
 export interface AiInsightsCardProps {
   childId: number | null;
   childName: string;
+  embedded?: boolean;
 }
 
-const AiInsightsCard = ({ childId, childName }: AiInsightsCardProps) => {
+const AiInsightsCard = ({ childId, childName, embedded = false }: AiInsightsCardProps) => {
   const { translations } = useLanguage();
   const navigate = useNavigate();
   const insightsQuery = useChildInsights(childId);
+  const rootClassName = `${embedded ? 'pp-dashboard-panel' : 'pp-card'} pp-col-span-2`;
 
   if (insightsQuery.isLoading) {
     return (
-      <section className="pp-card pp-col-span-2" aria-label={translations.loading}>
+      <section className={rootClassName} aria-label={translations.loading}>
         <h3 className="pp-title">{translations.dashboard_child_activity_title}</h3>
         <div className="pp-skeleton" style={{ height: 62, marginTop: '0.6rem' }} />
         <div className="pp-skeleton" style={{ height: 62, marginTop: '0.6rem' }} />
@@ -47,7 +49,7 @@ const AiInsightsCard = ({ childId, childName }: AiInsightsCardProps) => {
 
   if (insightsQuery.error) {
     return (
-      <section className="pp-card pp-col-span-2" role="alert">
+      <section className={rootClassName} role="alert">
         <h3 className="pp-title">{translations.dashboard_child_activity_title}</h3>
         <p className="pp-error">{insightsQuery.error.message}</p>
         <button
@@ -69,7 +71,7 @@ const AiInsightsCard = ({ childId, childName }: AiInsightsCardProps) => {
   const cacheHeader = insightsQuery.data?.cacheHeader;
 
   return (
-    <section className="pp-card pp-col-span-2" aria-labelledby="ai-insights-title">
+    <section className={rootClassName} aria-labelledby="ai-insights-title">
       <div className="pp-insight-head">
         <div className="pp-section-heading">
           <span className="pp-section-heading-icon" aria-hidden="true">
