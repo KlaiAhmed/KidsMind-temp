@@ -33,7 +33,7 @@ interface NavItem {
   icon: React.ReactNode;
 }
 
-const WINDOW_SIZE = 3;
+const WINDOW_SIZE = 2;
 
 const ParentLayout = () => {
   const { translations } = useLanguage();
@@ -51,6 +51,8 @@ const ParentLayout = () => {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [collapsedAvatarOffset, setCollapsedAvatarOffset] = useState(0);
+  const [collapsedAvatarMotionDirection, setCollapsedAvatarMotionDirection] = useState<'up' | 'down' | null>(null);
+  const [collapsedAvatarAnimationKey, setCollapsedAvatarAnimationKey] = useState(0);
   const previousSidebarStateRef = useRef<'expanded' | 'collapsed'>(sidebarState);
 
   // Child selector dropup state
@@ -267,64 +269,109 @@ const ParentLayout = () => {
       const canGoUp = currentOffset > 0;
       const canGoDown = currentOffset + WINDOW_SIZE < totalChildren;
       const hasOverflow = totalChildren > WINDOW_SIZE;
+      const collapsedAvatarWindowClassName = [
+        'pp-child-avatar-window',
+        collapsedAvatarMotionDirection === 'up'
+          ? 'pp-child-avatar-window-up'
+          : collapsedAvatarMotionDirection === 'down'
+            ? 'pp-child-avatar-window-down'
+            : '',
+      ]
+        .filter(Boolean)
+        .join(' ');
 
       return (
         <div className="pp-child-avatars-collapsed">
-          {hasOverflow && canGoUp && (
+          {hasOverflow && (
             <button
               type="button"
               className="pp-child-nav-button pp-touch pp-focusable"
-              onClick={() => setCollapsedAvatarOffset((current) => Math.max(current - 1, 0))}
+              onClick={() => {
+                setCollapsedAvatarMotionDirection('up');
+                setCollapsedAvatarAnimationKey((current) => current + 1);
+                setCollapsedAvatarOffset((current) => Math.max(current - 1, 0));
+              }}
+              disabled={!canGoUp}
+              aria-disabled={!canGoUp}
               aria-label="Show previous children"
               title="Show previous children"
             >
-              <span className="pp-child-nav-icon pp-child-nav-icon-desktop" aria-hidden="true">
-                <ChevronUp size={16} />
-              </span>
-              <span className="pp-child-nav-icon pp-child-nav-icon-mobile" aria-hidden="true">
-                <ChevronLeft size={16} />
-              </span>
+              {canGoUp ? (
+                <>
+                  <span className="pp-child-nav-icon pp-child-nav-icon-desktop" aria-hidden="true">
+                    <ChevronUp size={14} />
+                  </span>
+                  <span className="pp-child-nav-icon pp-child-nav-icon-mobile" aria-hidden="true">
+                    <ChevronLeft size={14} />
+                  </span>
+                </>
+              ) : (
+                <span className="pp-child-nav-icon-placeholder" aria-hidden="true" />
+              )}
             </button>
           )}
 
-          {hasOverflow && overflowBefore > 0 && (
-            <span className="pp-child-count">+{overflowBefore}</span>
-          )}
+          <div
+            key={`pp-child-avatar-window-${collapsedAvatarAnimationKey}`}
+            className={collapsedAvatarWindowClassName}
+          >
+            {hasOverflow && overflowBefore > 0 && (
+              <span className="pp-child-count">+{overflowBefore}</span>
+            )}
 
-          {visibleChildren.map((child) => {
-            const isActive = child.child_id === displayChild.child_id;
-            return (
-              <button
-                key={child.child_id}
-                type="button"
-                className={`pp-child-avatar-btn pp-touch pp-focusable ${isActive ? 'pp-child-avatar-active' : ''}`}
-                onClick={() => setActiveChildId(child.child_id)}
-                aria-label={child.nickname}
-                title={child.nickname}
-              >
-                <span className="pp-child-avatar-small">{child.avatar ?? '🧒'}</span>
-              </button>
-            );
-          })}
+            {visibleChildren.map((child) => {
+              const childAvatarMotionClassName = collapsedAvatarMotionDirection === 'up'
+                ? 'pp-child-avatar-btn-motion-up'
+                : collapsedAvatarMotionDirection === 'down'
+                  ? 'pp-child-avatar-btn-motion-down'
+                  : '';
+              const isActive = child.child_id === displayChild.child_id;
+              return (
+                <button
+                  key={child.child_id}
+                  type="button"
+                  className={`pp-child-avatar-btn pp-touch pp-focusable ${childAvatarMotionClassName} ${isActive ? 'pp-child-avatar-active' : ''}`}
+                  style={{ animationDelay: `${visibleChildren.indexOf(child) * 40}ms` }}
+                  onClick={() => setActiveChildId(child.child_id)}
+                  aria-label={child.nickname}
+                  title={child.nickname}
+                >
+                  <span className="pp-child-avatar-small">{child.avatar ?? '🧒'}</span>
+                </button>
+              );
+            })}
 
-          {hasOverflow && overflowAfter > 0 && (
-            <span className="pp-child-count">+{overflowAfter}</span>
-          )}
+            {hasOverflow && overflowAfter > 0 && (
+              <span className="pp-child-count">+{overflowAfter}</span>
+            )}
+          </div>
 
-          {hasOverflow && canGoDown && (
+          {hasOverflow && (
             <button
               type="button"
               className="pp-child-nav-button pp-touch pp-focusable"
-              onClick={() => setCollapsedAvatarOffset((current) => Math.min(current + 1, maxOffset))}
+              onClick={() => {
+                setCollapsedAvatarMotionDirection('down');
+                setCollapsedAvatarAnimationKey((current) => current + 1);
+                setCollapsedAvatarOffset((current) => Math.min(current + 1, maxOffset));
+              }}
+              disabled={!canGoDown}
+              aria-disabled={!canGoDown}
               aria-label="Show next children"
               title="Show next children"
             >
-              <span className="pp-child-nav-icon pp-child-nav-icon-desktop" aria-hidden="true">
-                <ChevronDown size={16} />
-              </span>
-              <span className="pp-child-nav-icon pp-child-nav-icon-mobile" aria-hidden="true">
-                <ChevronRight size={16} />
-              </span>
+              {canGoDown ? (
+                <>
+                  <span className="pp-child-nav-icon pp-child-nav-icon-desktop" aria-hidden="true">
+                    <ChevronDown size={14} />
+                  </span>
+                  <span className="pp-child-nav-icon pp-child-nav-icon-mobile" aria-hidden="true">
+                    <ChevronRight size={14} />
+                  </span>
+                </>
+              ) : (
+                <span className="pp-child-nav-icon-placeholder" aria-hidden="true" />
+              )}
             </button>
           )}
 
@@ -348,7 +395,10 @@ const ParentLayout = () => {
         <button
           type="button"
           className="pp-child-selector-trigger pp-touch pp-focusable"
-          onClick={() => setIsChildDropUpOpen((current) => !current)}
+          onClick={(event) => {
+            event.stopPropagation();
+            setIsChildDropUpOpen((current) => !current);
+          }}
           aria-expanded={isChildDropUpOpen}
           aria-haspopup="listbox"
           aria-label={`${translations.dashboard_settings_profile}: ${displayChild.nickname}`}

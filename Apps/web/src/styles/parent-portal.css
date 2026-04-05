@@ -197,6 +197,13 @@
   margin-top: auto; padding-top: 1rem; border-top: var(--pp-card-border);
   display: flex; justify-content: center;
 }
+.pp-sidebar-collapsed .pp-sidebar-nav {
+  flex: 0 1 auto;
+}
+.pp-sidebar-collapsed .pp-sidebar-child-selector {
+  margin-top: .125rem;
+  padding-top: .675rem;
+}
 .pp-sidebar-backdrop {
   position: fixed; inset: var(--nav-height,64px) 0 0 0;
   background: rgba(15,15,26,.35); backdrop-filter: blur(2px); z-index: 35;
@@ -336,22 +343,57 @@
 /* Collapsed Child Avatars */
 .pp-child-avatars-collapsed {
   display: flex; flex-direction: column; align-items: center;
-  gap: .375rem; justify-content: center;
-  padding: .5rem;
+  gap: .25rem; justify-content: center;
+  padding: .375rem .25rem;
+}
+.pp-child-avatar-window {
+  display: flex; flex-direction: column; align-items: center;
+  gap: .25rem;
+  will-change: transform, opacity;
+}
+.pp-child-avatar-window-up {
+  animation: ppChildAvatarWindowUp 260ms var(--pp-ease-out-expo) both;
+}
+.pp-child-avatar-window-down {
+  animation: ppChildAvatarWindowDown 260ms var(--pp-ease-out-expo) both;
+}
+@keyframes ppChildAvatarWindowUp {
+  from { opacity: .45; transform: translateY(-6px) scale(.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes ppChildAvatarWindowDown {
+  from { opacity: .45; transform: translateY(6px) scale(.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 .pp-child-avatar-btn {
-  width: 32px; height: 32px; border-radius: 50%;
+  width: 34px; height: 34px; min-width: 34px; min-height: 34px; border-radius: 50%;
   background: var(--bg-surface-alt); border: 2px solid var(--border-subtle);
   display: flex; align-items: center; justify-content: center;
   font-size: 1rem; cursor: pointer;
   transition: border-color var(--pp-dur-fast) var(--pp-ease-smooth),
               transform var(--pp-dur-fast) var(--pp-ease-spring);
 }
-.pp-child-avatar-btn:hover { transform: scale(1.1); border-color: var(--accent-main); }
+.pp-child-avatar-btn:hover { transform: scale(1.04); border-color: var(--accent-main); }
+.pp-child-avatar-btn-motion-up {
+  animation: ppChildAvatarBtnInUp 260ms var(--pp-ease-out-expo) both;
+}
+.pp-child-avatar-btn-motion-down {
+  animation: ppChildAvatarBtnInDown 260ms var(--pp-ease-out-expo) both;
+}
+@keyframes ppChildAvatarBtnInUp {
+  from { opacity: 0; transform: translateY(-5px) scale(.96); }
+  70% { opacity: 1; transform: translateY(1px) scale(1.01); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes ppChildAvatarBtnInDown {
+  from { opacity: 0; transform: translateY(5px) scale(.96); }
+  70% { opacity: 1; transform: translateY(-1px) scale(1.01); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
 .pp-child-avatar-active { border-color: var(--accent-main); background: var(--bg-surface); }
 .pp-child-avatar-small { line-height: 1; }
 .pp-child-nav-button {
-  width: 32px; height: 32px; border-radius: 10px;
+  width: 28px; height: 28px; min-width: 28px; min-height: 28px; border-radius: 9px;
   background: transparent; border: var(--pp-card-border);
   color: var(--text-secondary); display: flex;
   align-items: center; justify-content: center;
@@ -364,18 +406,35 @@
   background: var(--bg-surface-hover); color: var(--accent-main);
 }
 .pp-child-nav-button:active { transform: scale(.92); }
+.pp-child-nav-button:disabled,
+.pp-child-nav-button[aria-disabled="true"] {
+  opacity: .45;
+  cursor: default;
+}
+.pp-child-nav-button:disabled:hover,
+.pp-child-nav-button[aria-disabled="true"]:hover {
+  background: transparent;
+  color: var(--text-secondary);
+}
+.pp-child-nav-button:disabled:active,
+.pp-child-nav-button[aria-disabled="true"]:active {
+  transform: none;
+}
 .pp-child-nav-icon {
   display: inline-flex; align-items: center; justify-content: center;
 }
+.pp-child-nav-icon-placeholder {
+  width: 14px; height: 14px; display: inline-flex;
+}
 .pp-child-nav-icon-mobile { display: none; }
 .pp-child-count {
-  width: 32px; height: 32px; border-radius: 50%;
+  width: 25px; height: 25px; border-radius: 999px;
   background: var(--bg-surface-alt); border: 1px solid var(--border-subtle);
   display: flex; align-items: center; justify-content: center;
-  font-size: .75rem; font-weight: 600; color: var(--text-muted);
+  font-size: .6875rem; font-weight: 700; line-height: 1; color: var(--text-muted);
 }
 .pp-child-add-avatar {
-  width: 32px; height: 32px; border-radius: 50%;
+  width: 32px; height: 32px; min-width: 32px; min-height: 32px; border-radius: 50%;
   background: var(--bg-surface-alt); border: 1px dashed var(--border-subtle);
   display: flex; align-items: center; justify-content: center;
   cursor: pointer; color: var(--accent-main);
@@ -407,6 +466,9 @@
   flex-direction: row;
   flex-wrap: nowrap;
   justify-content: center;
+}
+.pp-sidebar-mobile .pp-child-avatar-window {
+  flex-direction: row;
 }
 .pp-sidebar-mobile .pp-child-nav-icon-desktop { display: none; }
 .pp-sidebar-mobile .pp-child-nav-icon-mobile { display: inline-flex; }
@@ -1087,6 +1149,10 @@
   }
   .pp-content > .pp-card, .pp-dashboard > .pp-card,
   .pp-bento > .pp-card { animation: none; opacity: 1; }
+  .pp-child-avatar-window-up,
+  .pp-child-avatar-window-down,
+  .pp-child-avatar-btn-motion-up,
+  .pp-child-avatar-btn-motion-down { animation: none; }
 }
 
 /* ─── Safety Form (GetStarted Step 3 style) ──────────────────────────────── */
