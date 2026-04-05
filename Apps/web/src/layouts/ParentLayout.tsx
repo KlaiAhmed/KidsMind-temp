@@ -226,15 +226,17 @@ const ParentLayout = () => {
           {children.length > 3 && (
             <span className="pp-child-count">+{children.length - 3}</span>
           )}
-          <button
-            type="button"
-            className="pp-child-add-avatar pp-touch pp-focusable"
-            onClick={() => navigate('/parent/children/new')}
-            aria-label={translations.dashboard_add_child}
-            title={translations.dashboard_add_child}
-          >
-            <Plus size={16} />
-          </button>
+          {children.length < 5 && (
+            <button
+              type="button"
+              className="pp-child-add-avatar pp-touch pp-focusable"
+              onClick={() => navigate('/parent/children/new')}
+              aria-label={translations.dashboard_add_child}
+              title={translations.dashboard_add_child}
+            >
+              <Plus size={16} />
+            </button>
+          )}
         </div>
       );
     }
@@ -280,17 +282,19 @@ const ParentLayout = () => {
                 </button>
               );
             })}
-            <button
-              type="button"
-              className="pp-child-option pp-child-option-add pp-touch pp-focusable"
-              onClick={() => {
-                setIsChildDropUpOpen(false);
-                navigate('/parent/children/new');
-              }}
-            >
-              <Plus size={16} aria-hidden="true" />
-              <span>{translations.dashboard_add_child}</span>
-            </button>
+            {children.length < 5 && (
+              <button
+                type="button"
+                className="pp-child-option pp-child-option-add pp-touch pp-focusable"
+                onClick={() => {
+                  setIsChildDropUpOpen(false);
+                  navigate('/parent/children/new');
+                }}
+              >
+                <Plus size={16} aria-hidden="true" />
+                <span>{translations.dashboard_add_child}</span>
+              </button>
+            )}
           </div>
         )}
       </div>
