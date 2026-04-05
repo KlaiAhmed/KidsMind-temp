@@ -989,6 +989,12 @@
   .pp-actions-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
 }
 
+/* Narrow desktop with sidebar: grid columns are too cramped at 280px sidebar width */
+@media (max-width: 1080px) {
+  .pp-grid-two { grid-template-columns: 1fr; }
+  .pp-content { padding: 1.5rem 1.25rem; }
+}
+
 @media (max-width: 1024px) {
   .pp-bento { grid-template-columns: repeat(2, minmax(0,1fr)); }
   .pp-col-span-3 { grid-column: span 2; }
@@ -1019,6 +1025,13 @@
   .pp-today-strip { grid-template-columns: 1fr; gap: 1rem; }
   .pp-topbar { padding: .875rem 1rem; }
   .pp-content { padding: 1.25rem 1rem; }
+}
+
+@media (max-width: 400px) {
+  .pp-card { padding: 1rem; }
+  .pp-profile-actions { grid-template-columns: 1fr; }
+  .pp-profile-actions .pp-button { min-height: 44px; }
+  .pp-profile-header { flex-wrap: wrap; gap: .5rem; }
 }
 
 @media (max-width: 480px) {
