@@ -589,9 +589,10 @@ const ChildProfilesPage = () => {
       )}
 
       {editForm && (
-        <div className="pp-sheet-backdrop" role="dialog" aria-modal="true" aria-label="Edit child profile">
-          <aside className="pp-sheet">
-            <h2 className="pp-title">{COPY.edit}</h2>
+        <div className="pp-sheet-backdrop" role="dialog" aria-modal="true" aria-label="Edit child profile" onClick={() => { setEditForm(null); }}>
+          <aside className="pp-sheet" onClick={(e) => e.stopPropagation()}>
+            <h2 className="pp-title" style={{ fontFamily: 'var(--font-display)', fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>{COPY.edit}</h2>
+            <p style={{ fontSize: '.875rem', color: 'var(--text-secondary)', margin: '0.25rem 0 0' }}>Update your child profile details.</p>
 
             <form
               className="pp-form-grid"
@@ -599,25 +600,26 @@ const ChildProfilesPage = () => {
                 event.preventDefault();
                 void saveChildEdit();
               }}
+              style={{ marginTop: '1.5rem' }}
             >
+              {/* Nickname */}
               <div className="pp-form-row">
-                <label htmlFor="edit-child-nickname">Nickname</label>
+                <label htmlFor="edit-child-nickname" style={{ fontSize: '.875rem', fontWeight: 600 }}>Nickname</label>
                 <input
                   id="edit-child-nickname"
                   value={editForm.nickname}
+                  placeholder="Enter nickname"
                   aria-label="Nickname"
                   onChange={(event) => {
                     const nickname = event.currentTarget.value;
-                    setEditForm((current) => current ? {
-                      ...current,
-                      nickname,
-                    } : current);
+                    setEditForm((current) => current ? { ...current, nickname } : current);
                   }}
                 />
               </div>
 
+              {/* Birth date */}
               <div className="pp-form-row">
-                <label htmlFor="edit-child-birth-date">Birth date</label>
+                <label htmlFor="edit-child-birth-date" style={{ fontSize: '.875rem', fontWeight: 600 }}>Birth date</label>
                 <input
                   id="edit-child-birth-date"
                   type="date"
@@ -625,26 +627,21 @@ const ChildProfilesPage = () => {
                   aria-label="Birth date"
                   onChange={(event) => {
                     const birthDate = event.currentTarget.value;
-                    setEditForm((current) => current ? {
-                      ...current,
-                      birthDate,
-                    } : current);
+                    setEditForm((current) => current ? { ...current, birthDate } : current);
                   }}
                 />
               </div>
 
+              {/* Education stage */}
               <div className="pp-form-row">
-                <label htmlFor="edit-child-education-stage">Education stage</label>
+                <label htmlFor="edit-child-education-stage" style={{ fontSize: '.875rem', fontWeight: 600 }}>Education stage</label>
                 <select
                   id="edit-child-education-stage"
                   value={editForm.educationStage}
                   aria-label="Education stage"
                   onChange={(event) => {
                     const educationStage = event.currentTarget.value;
-                    setEditForm((current) => current ? {
-                      ...current,
-                      educationStage,
-                    } : current);
+                    setEditForm((current) => current ? { ...current, educationStage } : current);
                   }}
                 >
                   <option value="KINDERGARTEN">Kindergarten</option>
@@ -653,12 +650,15 @@ const ChildProfilesPage = () => {
                 </select>
               </div>
 
-              <fieldset className="pp-form-row">
-                <legend>Languages</legend>
+              {/* Divider */}
+              <hr style={{ border: 'none', borderTop: '1px dashed var(--border-subtle)', margin: '1.25rem 0' }} />
+
+              {/* Languages */}
+              <fieldset className="pp-form-row" style={{ border: 'none', margin: 0, padding: 0 }}>
+                <legend style={{ fontSize: '.875rem', fontWeight: 600, marginBottom: '.5rem' }}>Languages</legend>
                 <div className="pp-tabs">
                   {LANGUAGE_OPTIONS.map((language) => {
                     const selected = editForm.languages.includes(language);
-
                     return (
                       <button
                         key={language}
@@ -666,10 +666,7 @@ const ChildProfilesPage = () => {
                         className={`pp-tab pp-touch pp-focusable ${selected ? 'pp-tab-active' : ''}`}
                         aria-label={`Toggle ${language}`}
                         onClick={() => {
-                          setEditForm((current) => current ? {
-                            ...current,
-                            languages: toggleTagValue(current.languages, language),
-                          } : current);
+                          setEditForm((current) => current ? { ...current, languages: toggleTagValue(current.languages, language) } : current);
                         }}
                       >
                         {language.toUpperCase()}
@@ -679,8 +676,9 @@ const ChildProfilesPage = () => {
                 </div>
               </fieldset>
 
-              <fieldset className="pp-form-row">
-                <legend>Avatar</legend>
+              {/* Avatar */}
+              <fieldset className="pp-form-row" style={{ border: 'none', margin: 0, padding: 0 }}>
+                <legend style={{ fontSize: '.875rem', fontWeight: 600, marginBottom: '.5rem' }}>Avatar</legend>
                 <div className="pp-tabs">
                   {AVATAR_OPTIONS.map((avatar) => (
                     <button
@@ -689,10 +687,7 @@ const ChildProfilesPage = () => {
                       className={`pp-tab pp-touch pp-focusable ${editForm.avatar === avatar ? 'pp-tab-active' : ''}`}
                       aria-label={`Select avatar ${avatar}`}
                       onClick={() => {
-                        setEditForm((current) => current ? {
-                          ...current,
-                          avatar,
-                        } : current);
+                        setEditForm((current) => current ? { ...current, avatar } : current);
                       }}
                     >
                       {avatar}
@@ -701,37 +696,43 @@ const ChildProfilesPage = () => {
                 </div>
               </fieldset>
 
-              <div className="pp-toggle-row">
-                <span>Accelerated stage</span>
-                <button
-                  type="button"
-                  className={`pp-switch pp-touch pp-focusable ${editForm.isAccelerated ? 'pp-switch-on' : ''}`}
-                  aria-label="Toggle accelerated"
-                  onClick={() => {
-                    setEditForm((current) => current ? {
-                      ...current,
-                      isAccelerated: !current.isAccelerated,
-                    } : current);
-                  }}
-                />
+              {/* Divider */}
+              <hr style={{ border: 'none', borderTop: '1px dashed var(--border-subtle)', margin: '1.25rem 0' }} />
+
+              {/* Stage toggles — mutually exclusive */}
+              <div className="pp-form-row" style={{ display: 'flex', flexDirection: 'column', gap: '.75rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: '.875rem', fontWeight: 600 }}>Accelerated stage</span>
+                  <ModernSwitch
+                    checked={editForm.isAccelerated}
+                    onChange={() => {
+                      setEditForm((current) => current ? {
+                        ...current,
+                        isAccelerated: !current.isAccelerated,
+                        isBelowExpectedStage: false,
+                      } : current);
+                    }}
+                    ariaLabel="Toggle accelerated stage"
+                  />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: '.875rem', fontWeight: 600 }}>Below expected stage</span>
+                  <ModernSwitch
+                    checked={editForm.isBelowExpectedStage}
+                    onChange={() => {
+                      setEditForm((current) => current ? {
+                        ...current,
+                        isBelowExpectedStage: !current.isBelowExpectedStage,
+                        isAccelerated: false,
+                      } : current);
+                    }}
+                    ariaLabel="Toggle below expected stage"
+                  />
+                </div>
               </div>
 
-              <div className="pp-toggle-row">
-                <span>Below expected stage</span>
-                <button
-                  type="button"
-                  className={`pp-switch pp-touch pp-focusable ${editForm.isBelowExpectedStage ? 'pp-switch-on' : ''}`}
-                  aria-label="Toggle below expected stage"
-                  onClick={() => {
-                    setEditForm((current) => current ? {
-                      ...current,
-                      isBelowExpectedStage: !current.isBelowExpectedStage,
-                    } : current);
-                  }}
-                />
-              </div>
-
-              <div className="pp-topbar-actions">
+              {/* Actions */}
+              <div className="pp-topbar-actions" style={{ marginTop: '1.25rem' }}>
                 <button
                   type="button"
                   className="pp-button pp-touch pp-focusable"

@@ -810,18 +810,22 @@
 .pp-pin-input:focus { border-color: var(--accent-main); outline: none; box-shadow: 0 0 0 3px var(--pp-input-glow); }
 .pp-shake { animation: ppShake .3s ease 0s 2; }
 
-/* Sheet */
+/* Sheet (now centered modal) */
 .pp-sheet-backdrop {
-  background: rgba(15,15,26,.4); display: flex;
-  justify-content: flex-end;
+  background: rgba(15,15,26,.5); display: flex;
+  justify-content: center;
   animation: ppFadeIn var(--pp-dur-normal) var(--pp-ease-out-expo);
 }
 .pp-sheet {
-  width: min(500px, 100%); background: var(--bg-surface);
-  border-left: var(--pp-card-border); padding: 2rem; overflow-y: auto;
-  animation: ppSlideInLeft var(--pp-dur-normal) var(--pp-ease-out-expo);
+  width: min(520px, 100%); background: var(--bg-surface);
+  border-radius: var(--pp-card-r-lg); padding: 2rem; overflow-y: auto;
+  position: relative;
+  animation: ppModalIn var(--pp-dur-normal) var(--pp-ease-out-expo);
 }
-@keyframes ppSlideInLeft { from { transform:translateX(100%); } to { transform:translateX(0); } }
+@keyframes ppModalIn {
+  from { opacity: 0; transform: scale(.96) translateY(12px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
 
 /* PIN form: extra gap between OTP inputs and the submit button */
 .pp-form-grid button[type='submit'] { margin-top: 1rem; }
@@ -837,7 +841,7 @@
 .pp-form-grid { display: grid; gap: 0.25rem; }
 .pp-form-row { display: grid; gap: .625rem; }
 .pp-form-row input, .pp-form-row select, .pp-form-row textarea {
-  border: var(--pp-card-border); border-radius: 12px;
+  border: 2px solid var(--border-subtle); border-radius: 12px;
   min-height: 48px; padding: .75rem 1rem; font: inherit;
   background: var(--bg-surface); color: var(--text-primary);
   transition: border-color var(--pp-dur-fast) var(--pp-ease-smooth),
