@@ -373,7 +373,8 @@ const ParentLayout = () => {
                   className={`pp-child-option pp-touch pp-focusable ${isActive ? 'pp-child-option-active' : ''}`}
                   role="option"
                   aria-selected={isActive}
-                  onPointerDown={() => {
+                  onPointerDown={(event) => {
+                    event.stopPropagation();
                     setActiveChildId(child.child_id);
                     setIsChildDropUpOpen(false);
                   }}
@@ -388,7 +389,8 @@ const ParentLayout = () => {
               <button
                 type="button"
                 className="pp-child-option pp-child-option-add pp-touch pp-focusable"
-                onPointerDown={() => {
+                onPointerDown={(event) => {
+                  event.stopPropagation();
                   setIsChildDropUpOpen(false);
                   navigate('/parent/children/new');
                 }}
