@@ -10,11 +10,8 @@
           var prefersReduced =
             typeof window.matchMedia === 'function' &&
             window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-          var reduceAnimationsRaw = window.localStorage.getItem('reduceAnimations');
-          var reduceAnimations =
-            reduceAnimationsRaw === null
-              ? window.localStorage.getItem('kidsmind_reduce_motion') === 'true'
-              : reduceAnimationsRaw === 'true';
+          var reduceAnimationsRaw = window.localStorage.getItem('kidsmind_reduce_animations');
+      var reduceAnimations = reduceAnimationsRaw === 'true';
           document.documentElement.setAttribute(
             'data-reduce-motion',
             reduceAnimations || prefersReduced ? 'true' : 'false'

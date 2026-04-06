@@ -1,7 +1,6 @@
 const REDUCE_MOTION_MEDIA_QUERY = '(prefers-reduced-motion: reduce)';
-const LEGACY_REDUCE_MOTION_STORAGE_KEY = 'kidsmind_reduce_motion';
 
-export const REDUCE_ANIMATIONS_STORAGE_KEY = 'reduceAnimations';
+export const REDUCE_ANIMATIONS_STORAGE_KEY = 'kidsmind_reduce_animations';
 export const REDUCE_MOTION_DATA_ATTRIBUTE = 'data-reduce-motion';
 export const REDUCE_MOTION_PREFERENCE_CHANGED_EVENT = 'kidsmind:reduce-animations-updated';
 
@@ -30,16 +29,7 @@ const createMotionMediaQuery = (): MediaQueryList | null => {
 
 export const readStoredReduceAnimationsPreference = (): boolean => {
   const explicitPreference = readStoredBoolean(REDUCE_ANIMATIONS_STORAGE_KEY);
-  if (explicitPreference !== null) {
-    return explicitPreference;
-  }
-
-  const legacyPreference = readStoredBoolean(LEGACY_REDUCE_MOTION_STORAGE_KEY);
-  if (legacyPreference !== null) {
-    return legacyPreference;
-  }
-
-  return false;
+  return explicitPreference ?? false;
 };
 
 export const getSystemPrefersReducedMotion = (): boolean => {
@@ -75,8 +65,6 @@ export const setStoredReduceAnimationsPreference = (enabled: boolean): void => {
   }
 
   window.localStorage.setItem(REDUCE_ANIMATIONS_STORAGE_KEY, String(enabled));
-  window.localStorage.removeItem(LEGACY_REDUCE_MOTION_STORAGE_KEY);
-
   applyReducedMotionAttribute();
   dispatchReducedMotionPreferenceChanged();
 };
@@ -110,7 +98,7 @@ export const subscribeToReducedMotionChanges = (onChange: () => void): (() => vo
   }
 
   const handleStorage = (event: StorageEvent): void => {
-    if (!event.key || event.key === REDUCE_ANIMATIONS_STORAGE_KEY || event.key === LEGACY_REDUCE_MOTION_STORAGE_KEY) {
+    if (!event.key || event.key === REDUCE_ANIMATIONS_STORAGE_KEY) {
       onChange();
     }
   };

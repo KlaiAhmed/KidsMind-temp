@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import allTranslations, { type LanguageCode, type TranslationMap } from '../locales';
 import { LANGUAGES } from '../config/constants';
 
-const LANGUAGE_STORAGE_KEY = 'km_lang';
+const LANGUAGE_STORAGE_KEY = 'kidsmind_lang';
 const SUPPORTED_LANGUAGE_CODES: LanguageCode[] = ['en', 'fr', 'es', 'it', 'ar', 'zh'];
 
 const normalizeLanguageCode = (rawLanguageCode: string | null): LanguageCode | null => {

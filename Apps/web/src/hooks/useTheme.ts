@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import type { ThemeMode } from '../types';
 import { applyTheme } from '../utils/cssVariables';
 
-const THEME_STORAGE_KEY = 'km_theme';
+const THEME_STORAGE_KEY = 'kidsmind_theme';
 
 const getInitialTheme = (): ThemeMode => {
   if (typeof window === 'undefined') return 'light';
