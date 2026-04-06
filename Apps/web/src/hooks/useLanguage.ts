@@ -1,12 +1,11 @@
 /** Hook for managing the app's active language, translations, and text direction. */
 
 import { useState, useEffect, useCallback } from 'react';
-import type { LanguageCode, TranslationMap } from '../types';
-import allTranslations from '../utils/translations';
-import { LANGUAGES } from '../utils/constants';
+import allTranslations, { type LanguageCode, type TranslationMap } from '../locales';
+import { LANGUAGES } from '../config/constants';
 
 const LANGUAGE_STORAGE_KEY = 'km_lang';
-const SUPPORTED_LANGUAGE_CODES: LanguageCode[] = ['en', 'fr', 'es', 'it', 'ar', 'ch'];
+const SUPPORTED_LANGUAGE_CODES: LanguageCode[] = ['en', 'fr', 'es', 'it', 'ar', 'zh'];
 
 const normalizeLanguageCode = (rawLanguageCode: string | null): LanguageCode | null => {
   if (!rawLanguageCode) return null;
@@ -14,7 +13,7 @@ const normalizeLanguageCode = (rawLanguageCode: string | null): LanguageCode | n
   const normalizedCode = rawLanguageCode.trim().toLowerCase();
 
   if (normalizedCode.startsWith('ar')) return 'ar';
-  if (normalizedCode.startsWith('zh') || normalizedCode.startsWith('ch')) return 'ch';
+  if (normalizedCode.startsWith('zh') || normalizedCode.startsWith('ch')) return 'zh';
   if (normalizedCode.startsWith('fr')) return 'fr';
   if (normalizedCode.startsWith('es')) return 'es';
   if (normalizedCode.startsWith('it')) return 'it';
@@ -59,7 +58,7 @@ const useLanguage = (): {
 
   useEffect(() => {
     document.documentElement.setAttribute('dir', isRTL ? 'rtl' : 'ltr');
-    document.documentElement.setAttribute('lang', language === 'ch' ? 'zh' : language);
+    document.documentElement.setAttribute('lang', language);
     localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
   }, [language, isRTL]);
 

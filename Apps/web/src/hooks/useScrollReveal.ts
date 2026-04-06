@@ -26,7 +26,6 @@ const useScrollReveal = (options?: ScrollRevealOptions): {
 
   useEffect(() => {
     if (isReducedMotion) {
-      setIsVisible(true);
       return;
     }
 
@@ -54,7 +53,7 @@ const useScrollReveal = (options?: ScrollRevealOptions): {
     };
   }, [isReducedMotion, threshold, rootMargin, once]);
 
-  return { ref, isVisible };
+  return { ref, isVisible: isReducedMotion || isVisible };
 };
 
 export { useScrollReveal };

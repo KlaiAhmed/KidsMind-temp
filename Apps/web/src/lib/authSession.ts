@@ -1,4 +1,4 @@
-import { apiBaseUrl } from '../utils/api';
+import { apiBaseUrl } from '../config/env';
 import { clearCsrfToken, getCsrfHeader, setCsrfToken } from '../utils/csrf';
 
 interface RefreshResponse {

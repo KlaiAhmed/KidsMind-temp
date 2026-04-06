@@ -1,10 +1,10 @@
 /** Form validation functions for login, parent account, child profile, and preferences forms. */
 import type {
-  FormErrors,
-  ParentAccountFormData,
   ChildProfileFormData,
+  ParentAccountFormData,
   PreferencesFormData,
-} from '../types';
+} from '../features/onboarding/types';
+import type { FormErrors } from '../types';
 import {
   MIN_CHILD_AGE,
   MAX_CHILD_AGE,

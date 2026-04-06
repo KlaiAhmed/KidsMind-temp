@@ -1,4 +1,4 @@
-import type { EducationStageId } from '../types';
+import type { EducationStageId } from '../features/onboarding/types';
 
 const MIN_CHILD_AGE = 3;
 const MAX_CHILD_AGE = 15;

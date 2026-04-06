@@ -1,5 +1,6 @@
 import { getCsrfHeader } from '../utils/csrf';
 import { logoutAuthSession, refreshAuthSession } from './authSession';
+import type { ApiError, ApiResponse, RequestOptions } from '../types';
 
 const COPY = {
   unauthorized: 'Your session expired. Please log in again.',
@@ -10,25 +11,6 @@ const envBaseUrl = (import.meta.env.VITE_API_URL ?? import.meta.env.VITE_API_BAS
 const API_BASE_URL = envBaseUrl.replace(/\/$/, '');
 
 type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
-
-export interface ApiError {
-  message: string;
-  status: number;
-}
-
-export interface ApiResponse<TData> {
-  data: TData;
-  headers: Headers;
-  status: number;
-}
-
-export interface RequestOptions {
-  query?: Record<string, string | number | boolean | null | undefined>;
-  body?: unknown;
-  headers?: Record<string, string>;
-  signal?: AbortSignal;
-  skipAuthRecovery?: boolean;
-}
 
 const buildQueryString = (query?: RequestOptions['query']): string => {
   if (!query) {

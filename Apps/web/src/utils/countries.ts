@@ -1,5 +1,5 @@
 import countries from 'world-countries';
-import type { LanguageCode } from '../types';
+import type { LanguageCode } from '../locales/types';
 
 export interface CountryOption {
   value: string;
@@ -12,7 +12,7 @@ const LANGUAGE_TO_COUNTRY_TRANSLATION_KEY: Record<LanguageCode, string> = {
   es: 'spa',
   it: 'ita',
   ar: 'ara',
-  ch: 'zho',
+  zh: 'zho',
 };
 
 const getLocalizedCountryName = (country: (typeof countries)[number], language: LanguageCode): string => {
@@ -28,7 +28,7 @@ const getCountryOptions = (language: LanguageCode): CountryOption[] => {
       value: country.cca2,
       label: getLocalizedCountryName(country, language),
     }))
-    .sort((a, b) => a.label.localeCompare(b.label, language === 'ch' ? 'zh' : language, { sensitivity: 'base' }));
+    .sort((a, b) => a.label.localeCompare(b.label, language, { sensitivity: 'base' }));
 };
 
 const getPrimaryTimezoneByCountryCode = (countryCode: string): string => {

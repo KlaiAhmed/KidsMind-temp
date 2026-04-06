@@ -4,7 +4,7 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import './styles/globals.css'
 import App from './App.tsx'
 import { queryClient } from './lib/queryClient'
-import { AccessibilityProvider } from './store/AccessibilityContext'
+import { AccessibilityProvider } from './stores/AccessibilityContext'
 import { initializeReducedMotionPreferenceSync } from './utils/motionPreferences'
 
 initializeReducedMotionPreferenceSync();

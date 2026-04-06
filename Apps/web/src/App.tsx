@@ -1,16 +1,9 @@
-import React, { Suspense } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import HomePage from './pages/HomePage/HomePage';
-import { useMeSummaryQuery } from './hooks/api/useMeSummaryQuery';
+import { Suspense } from 'react';
+import { BrowserRouter } from 'react-router-dom';
+import { useMeSummaryQuery } from './features/auth';
 import { useReducedMotionPreference } from './hooks/useReducedMotionPreference';
-import AppErrorBoundary from './components/shared/AppErrorBoundary/AppErrorBoundary';
-import ErrorPage from './pages/ErrorPage/ErrorPage';
-import { ParentRoutes } from './router/parent.routes';
-
-const LoginPage = React.lazy(() => import('./pages/LoginPage/LoginPage'));
-const GetStartedPage = React.lazy(() => import('./pages/GetStartedPage/GetStartedPage'));
-const ParentProfilePage = React.lazy(() => import('./pages/ParentProfilePage/ParentProfilePage'));
-const NotFoundPage = React.lazy(() => import('./pages/NotFoundPage/NotFoundPage'));
+import AppErrorBoundary from './components/layout/AppErrorBoundary/AppErrorBoundary';
+import { AppRoutes } from './routes';
 
 const App = () => {
   const { isAuthenticated, isLoading } = useMeSummaryQuery();
@@ -46,22 +39,7 @@ const App = () => {
             </div>
           }
         >
-          <Routes>
-            <Route path="/" element={<HomePage isAuthenticated={isAuthenticated} />} />
-            <Route
-              path="/login"
-              element={isAuthenticated ? <Navigate to="/" replace /> : <LoginPage />}
-            />
-            <Route
-        path="/get-started"
-        element={isLoading ? null : isAuthenticated ? <Navigate to="/" replace /> : <GetStartedPage />}
-        />
-            <Route path="/dashboard" element={<Navigate to="/parent/dashboard" replace />} />
-            <Route path="/parent-profile" element={<ParentProfilePage isAuthenticated={isAuthenticated} />} />
-            {ParentRoutes}
-            <Route path="/error" element={<ErrorPage />} />
-            <Route path="*" element={<NotFoundPage />} />
-          </Routes>
+          <AppRoutes isAuthenticated={isAuthenticated} isLoading={isLoading} />
         </Suspense>
       </AppErrorBoundary>
     </BrowserRouter>
