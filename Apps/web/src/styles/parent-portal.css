@@ -193,6 +193,7 @@
 .pp-sidebar-collapsed .pp-sidebar-header-subtitle { opacity: 0; }
 .pp-logo-icon { font-size: 1.5rem; }
 .pp-sidebar-nav { flex: 1; display: grid; gap: .375rem; align-content: start; width: 100%; }
+.pp-sidebar-nav-dropup-locked { pointer-events: none; }
 .pp-sidebar-child-selector {
   margin-top: auto; padding-top: 1rem; border-top: var(--pp-card-border);
   display: flex; justify-content: center;

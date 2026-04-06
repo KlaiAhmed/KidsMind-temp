@@ -20,6 +20,26 @@ import { useChildrenQuery, useActiveChild } from '../features/parent';
 import { logout } from '../lib/logout';
 import { buildParentMainNav, getParentPageTitle, WINDOW_SIZE, type ParentNavItem } from './parentLayoutNavigation';
 import '../styles/parent-portal.css';
+
+/*
+ * IMPORTANT - READ BEFORE MODIFYING EVENT HANDLING HERE
+ *
+ * The open/close toggle and outside-close logic both use MOUSEDOWN, not click.
+ * This is intentional. Using click for either creates a race between the trigger
+ * and the outside listener in the same event cycle.
+ *
+ * Nav items behind the child dropup use pointer-events:none while the dropup is open.
+ * Do NOT use stopPropagation() on dropup items - it breaks the outside-close listener.
+ * Do NOT switch the outside listener back to click - it breaks the toggle.
+ *
+ * The three concerns are separated by design:
+ *   - Toggle     -> mousedown on trigger
+ *   - Outside    -> mousedown on document
+ *   - Item click -> click on item (safe because nav is pointer-events:none while open)
+ *
+ * This layout renders the child selector twice (desktop + mobile), so each
+ * instance needs its own refs and the outside-close check must consider both.
+ */
 const ParentLayout = () => {
   const { translations } = useLanguage();
   const { theme, toggleTheme } = useTheme();
@@ -37,7 +57,10 @@ const ParentLayout = () => {
   const [collapsedAvatarMotionDirection, setCollapsedAvatarMotionDirection] = useState<'up' | 'down' | null>(null);
   const [collapsedAvatarAnimationKey, setCollapsedAvatarAnimationKey] = useState(0);
   const [isChildDropUpOpen, setIsChildDropUpOpen] = useState(false);
-  const childSelectorRef = useRef<HTMLDivElement>(null);
+  const desktopTriggerRef = useRef<HTMLButtonElement>(null);
+  const desktopDropupRef = useRef<HTMLDivElement>(null);
+  const mobileTriggerRef = useRef<HTMLButtonElement>(null);
+  const mobileDropupRef = useRef<HTMLDivElement>(null);
   const isSidebarExpanded = sidebarState === 'expanded';
   const children = useMemo(() => childrenQuery.data ?? [], [childrenQuery.data]);
   const displayChild = activeChild ?? children[0];
@@ -47,35 +70,55 @@ const ParentLayout = () => {
       return 0;
     }
 
-    const normalizedOffset = Math.min(collapsedAvatarOffsetState, maxCollapsedAvatarOffset);
-    if (!displayChild) {
-      return normalizedOffset;
+    return Math.min(collapsedAvatarOffsetState, maxCollapsedAvatarOffset);
+  }, [collapsedAvatarOffsetState, isSidebarExpanded, maxCollapsedAvatarOffset]);
+  const mainNav = useMemo<ParentNavItem[]>(() => buildParentMainNav(translations), [translations]);
+  const pageTitle = useMemo(() => getParentPageTitle(location.pathname, translations), [location.pathname, translations]);
+  useEffect(() => {
+    const handleOutsideMouseDown = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        return;
+      }
+
+      const isInsideAnyChildSelector = [
+        desktopTriggerRef.current,
+        desktopDropupRef.current,
+        mobileTriggerRef.current,
+        mobileDropupRef.current,
+      ].some((element) => Boolean(element && element.contains(target)));
+
+      if (!isInsideAnyChildSelector) {
+        setIsChildDropUpOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleOutsideMouseDown);
+    return () => document.removeEventListener('mousedown', handleOutsideMouseDown);
+  }, []);
+  useEffect(() => {
+    if (isSidebarExpanded || children.length === 0 || !displayChild) {
+      return;
     }
 
     const activeChildIndex = children.findIndex((child) => child.child_id === displayChild.child_id);
     if (activeChildIndex < 0) {
-      return normalizedOffset;
+      return;
     }
-    if (activeChildIndex < normalizedOffset) {
-      return activeChildIndex;
+
+    const currentOffset = Math.min(collapsedAvatarOffsetState, maxCollapsedAvatarOffset);
+    let nextOffset = currentOffset;
+
+    if (activeChildIndex < currentOffset) {
+      nextOffset = activeChildIndex;
+    } else if (activeChildIndex >= currentOffset + WINDOW_SIZE) {
+      nextOffset = Math.min(activeChildIndex - WINDOW_SIZE + 1, maxCollapsedAvatarOffset);
     }
-    if (activeChildIndex >= normalizedOffset + WINDOW_SIZE) {
-      return Math.min(activeChildIndex - WINDOW_SIZE + 1, maxCollapsedAvatarOffset);
+
+    if (nextOffset !== currentOffset) {
+      setCollapsedAvatarOffsetState(nextOffset);
     }
-    return normalizedOffset;
-  }, [children, collapsedAvatarOffsetState, displayChild, isSidebarExpanded, maxCollapsedAvatarOffset]);
-  const mainNav = useMemo<ParentNavItem[]>(() => buildParentMainNav(translations), [translations]);
-  const pageTitle = useMemo(() => getParentPageTitle(location.pathname, translations), [location.pathname, translations]);
-  useEffect(() => {
-    const handlePointerDownOutside = (event: PointerEvent) => {
-      const target = event.target as Node;
-      if (childSelectorRef.current && !childSelectorRef.current.contains(target)) {
-        setIsChildDropUpOpen(false);
-      }
-    };
-    document.addEventListener('pointerdown', handlePointerDownOutside);
-    return () => document.removeEventListener('pointerdown', handlePointerDownOutside);
-  }, []);
+  }, [children, displayChild?.child_id, isSidebarExpanded, maxCollapsedAvatarOffset]);
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -99,6 +142,18 @@ const ParentLayout = () => {
       await logout();
     } catch { void 0; }
   }, [isLoggingOut]);
+  const handleChildSelectorTriggerMouseDown = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    setIsChildDropUpOpen((current) => !current);
+  };
+  const handleChildSelectorTriggerKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key !== 'Enter' && event.key !== ' ') {
+      return;
+    }
+
+    event.preventDefault();
+    setIsChildDropUpOpen((current) => !current);
+  };
   const renderNavItems = (items: ParentNavItem[]): React.ReactNode =>
     items.map((item) => (
       <NavLink
@@ -115,7 +170,10 @@ const ParentLayout = () => {
         <span className="pp-nav-link-text">{item.label}</span>
       </NavLink>
     ));
-  const renderChildSelector = () => {
+  const renderChildSelector = (
+    triggerRef: React.RefObject<HTMLButtonElement | null>,
+    dropupRef: React.RefObject<HTMLDivElement | null>,
+  ) => {
     if (childrenQuery.isLoading) {
       return (
         <div className="pp-child-selector-loading">
@@ -209,7 +267,7 @@ const ParentLayout = () => {
               onClick={() => {
                 setCollapsedAvatarMotionDirection('up');
                 setCollapsedAvatarAnimationKey((current) => current + 1);
-                setCollapsedAvatarOffsetState(Math.max(collapsedAvatarOffset - 1, 0));
+                setCollapsedAvatarOffsetState((current) => Math.max(current - 1, 0));
               }}
               disabled={!canGoUp}
               aria-disabled={!canGoUp}
@@ -269,7 +327,7 @@ const ParentLayout = () => {
               onClick={() => {
                 setCollapsedAvatarMotionDirection('down');
                 setCollapsedAvatarAnimationKey((current) => current + 1);
-                setCollapsedAvatarOffsetState(Math.min(collapsedAvatarOffset + 1, maxOffset));
+                setCollapsedAvatarOffsetState((current) => Math.min(current + 1, maxOffset));
               }}
               disabled={!canGoDown}
               aria-disabled={!canGoDown}
@@ -305,13 +363,13 @@ const ParentLayout = () => {
       );
     }
     return (
-      <div className="pp-child-selector" ref={childSelectorRef}>
+      <div className="pp-child-selector">
         <button
           type="button"
+          ref={triggerRef}
           className="pp-child-selector-trigger pp-touch pp-focusable"
-          onClick={() => {
-            setIsChildDropUpOpen((current) => !current);
-          }}
+          onMouseDown={handleChildSelectorTriggerMouseDown}
+          onKeyDown={handleChildSelectorTriggerKeyDown}
           aria-expanded={isChildDropUpOpen}
           aria-haspopup="listbox"
           aria-label={`${translations.dashboard_settings_profile}: ${displayChild.nickname}`}
@@ -325,7 +383,7 @@ const ParentLayout = () => {
           </>
         </button>
         {isChildDropUpOpen && (
-          <div className="pp-child-dropup" role="listbox" aria-label={translations.dashboard_settings_profile}>
+          <div ref={dropupRef} className="pp-child-dropup" role="listbox" aria-label={translations.dashboard_settings_profile}>
             {children.map((child) => {
               const isActive = child.child_id === displayChild.child_id;
               return (
@@ -336,8 +394,6 @@ const ParentLayout = () => {
                   role="option"
                   aria-selected={isActive}
                   onClick={() => {
-                    // Use click (not pointerdown + stopPropagation) so the menu stays mounted
-                    // through event dispatch and cannot leak a click to sidebar links behind it.
                     setActiveChildId(child.child_id);
                     setIsChildDropUpOpen(false);
                   }}
@@ -402,7 +458,7 @@ const ParentLayout = () => {
             )}
           </div>
           {/* Navigation */}
-          <nav className="pp-sidebar-nav">
+          <nav className={`pp-sidebar-nav ${isChildDropUpOpen ? 'pp-sidebar-nav-dropup-locked' : ''}`}>
             {renderNavItems(mainNav)}
             <button
               type="button"
@@ -417,7 +473,9 @@ const ParentLayout = () => {
             </button>
           </nav>
           {/* Child Selector */}
-          <div className="pp-sidebar-child-selector">{renderChildSelector()}</div>
+          <div className="pp-sidebar-child-selector">
+            {renderChildSelector(desktopTriggerRef, desktopDropupRef)}
+          </div>
         </aside>
         {/* Mobile Sidebar Overlay */}
         {isMobileSidebarOpen && (
@@ -443,7 +501,7 @@ const ParentLayout = () => {
               <X size={20} />
             </button>
           </div>
-          <nav className="pp-sidebar-nav">
+          <nav className={`pp-sidebar-nav ${isChildDropUpOpen ? 'pp-sidebar-nav-dropup-locked' : ''}`}>
             {renderNavItems(mainNav)}
             <button
               type="button"
@@ -457,7 +515,9 @@ const ParentLayout = () => {
               <span className="pp-nav-link-text">{translations.nav_logout}</span>
             </button>
           </nav>
-          <div className="pp-sidebar-child-selector">{renderChildSelector()}</div>
+          <div className="pp-sidebar-child-selector">
+            {renderChildSelector(mobileTriggerRef, mobileDropupRef)}
+          </div>
         </aside>
         {/* Main Content */}
         <main className="pp-main">
