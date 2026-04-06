@@ -309,8 +309,7 @@ const ParentLayout = () => {
         <button
           type="button"
           className="pp-child-selector-trigger pp-touch pp-focusable"
-          onClick={(event) => {
-            event.stopPropagation();
+          onClick={() => {
             setIsChildDropUpOpen((current) => !current);
           }}
           aria-expanded={isChildDropUpOpen}
@@ -336,8 +335,9 @@ const ParentLayout = () => {
                   className={`pp-child-option pp-touch pp-focusable ${isActive ? 'pp-child-option-active' : ''}`}
                   role="option"
                   aria-selected={isActive}
-                  onPointerDown={(event) => {
-                    event.stopPropagation();
+                  onClick={() => {
+                    // Use click (not pointerdown + stopPropagation) so the menu stays mounted
+                    // through event dispatch and cannot leak a click to sidebar links behind it.
                     setActiveChildId(child.child_id);
                     setIsChildDropUpOpen(false);
                   }}
@@ -352,8 +352,7 @@ const ParentLayout = () => {
               <button
                 type="button"
                 className="pp-child-option pp-child-option-add pp-touch pp-focusable"
-                onPointerDown={(event) => {
-                  event.stopPropagation();
+                onClick={() => {
                   setIsChildDropUpOpen(false);
                   navigate('/parent/children/new');
                 }}
