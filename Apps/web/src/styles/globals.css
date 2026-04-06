@@ -61,28 +61,61 @@ html[data-font-size="large"] {
   --font-scale-factor: 1.125;
 }
 
-html[data-high-contrast="true"] {
+html[data-high-contrast="true"],
+html[data-high-contrast="true"][data-theme="light"],
+html[data-high-contrast="true"][data-theme="dark"] {
   --bg-primary: #000000;
   --bg-surface: #000000;
-  --bg-surface-alt: #101010;
-  --bg-surface-hover: #1a1a1a;
+  --bg-surface-alt: #000000;
+  --bg-surface-hover: #000000;
   --nav-bg: #000000;
-  --accent-main: #ffd400;
-  --accent-main-hover: #ffea80;
-  --accent-learn: #00f0ff;
-  --accent-fun: #ffd400;
-  --accent-grow: #00ff8c;
-  --accent-safety: #ff7a00;
+  --accent-main: #ffff00;
+  --accent-main-hover: #ffff00;
+  --accent-learn: #ffff00;
+  --accent-fun: #ffff00;
+  --accent-grow: #ffff00;
+  --accent-safety: #ffff00;
   --text-primary: #ffffff;
   --text-secondary: #ffffff;
-  --text-muted: #f5f5f5;
+  --text-muted: #ffff00;
   --text-on-accent: #000000;
-  --border-subtle: rgba(255, 255, 255, 0.92);
+  --border-subtle: #ffffff;
   --shadow-card: none;
   --shadow-card-hover: none;
   --shadow-nav: none;
-  --gradient-hero: linear-gradient(180deg, #000000 0%, #111111 100%);
-  --gradient-cta: linear-gradient(135deg, #ffd400, #00f0ff);
+  --gradient-hero: none;
+  --gradient-cta: none;
+}
+
+html[data-high-contrast="true"] *,
+html[data-high-contrast="true"] *::before,
+html[data-high-contrast="true"] *::after {
+  box-shadow: none !important;
+  text-shadow: none !important;
+  background-image: none !important;
+}
+
+html[data-high-contrast="true"] button,
+html[data-high-contrast="true"] [role="button"],
+html[data-high-contrast="true"] input,
+html[data-high-contrast="true"] select,
+html[data-high-contrast="true"] textarea {
+  border: 2px solid var(--border-subtle) !important;
+  background: var(--bg-surface) !important;
+  color: var(--text-primary) !important;
+}
+
+html[data-high-contrast="true"] button:hover,
+html[data-high-contrast="true"] [role="button"]:hover,
+html[data-high-contrast="true"] input:hover,
+html[data-high-contrast="true"] select:hover,
+html[data-high-contrast="true"] textarea:hover {
+  border-color: var(--accent-main) !important;
+  color: var(--accent-main) !important;
+}
+
+html[data-high-contrast="true"] a {
+  color: var(--accent-main) !important;
 }
 
 body {
@@ -136,7 +169,8 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 html[data-high-contrast="true"] :focus-visible {
-  outline-width: 4px;
+  outline: 3px solid var(--accent-main);
+  outline-offset: 3px;
 }
 
 .srOnly {

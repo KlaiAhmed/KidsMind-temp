@@ -12,6 +12,7 @@ import { Sun, Moon, Menu, X, Languages, User, ChevronLeft, ChevronRight } from '
 import type { ThemeMode, LanguageCode, TranslationMap } from '../../types';
 import { LANGUAGES } from '../../utils/constants';
 import { useScrollPosition } from '../../hooks/useScrollPosition';
+import { useAccessibility } from '../../hooks/useAccessibility';
 import { useReducedMotionPreference } from '../../hooks/useReducedMotionPreference';
 import { useVerifyParentPinMutation } from '../../hooks/api/useVerifyParentPinMutation';
 import type { UiError } from '../../hooks/api/error';
@@ -67,10 +68,12 @@ const NavBar = ({
 }: NavBarProps) => {
   const navigate = useNavigate();
   const { isHiddenByScroll } = useScrollPosition();
+  const { highContrast: isHighContrast } = useAccessibility();
   const [isLanguageDropdownOpen, setIsLanguageDropdownOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [activeMobileMenu, setActiveMobileMenu] = useState<MobileMenuView>('main');
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isThemeToggleShaking, setIsThemeToggleShaking] = useState(false);
   const verifyParentPinMutation = useVerifyParentPinMutation();
   const isVerifyingPin = verifyParentPinMutation.isPending;
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
@@ -81,8 +84,28 @@ const NavBar = ({
   const languageDropdownRef = useRef<HTMLDivElement>(null);
   const pinInputRefs = useRef<Array<HTMLInputElement | null>>([]);
   const lastSubmittedPinRef = useRef<string | null>(null);
+  const refusedThemeActionTimeoutRef = useRef<number | null>(null);
   const shouldHideNav = isHiddenByScroll && !isMobileMenuOpen;
   const mobileMenuOffset = MOBILE_MENU_OFFSET_BY_VIEW[activeMobileMenu];
+
+  // Clicking a blocked theme control should replay a short shake animation,
+  // then cleanly reset so subsequent clicks can trigger it again.
+  const triggerRefusedThemeAction = useCallback(() => {
+    if (refusedThemeActionTimeoutRef.current !== null) {
+      window.clearTimeout(refusedThemeActionTimeoutRef.current);
+      refusedThemeActionTimeoutRef.current = null;
+    }
+
+    setIsThemeToggleShaking(false);
+    window.requestAnimationFrame(() => {
+      setIsThemeToggleShaking(true);
+    });
+
+    refusedThemeActionTimeoutRef.current = window.setTimeout(() => {
+      setIsThemeToggleShaking(false);
+      refusedThemeActionTimeoutRef.current = null;
+    }, 500);
+  }, []);
 
   const closeAllDropdownMenus = useCallback(() => {
     setIsLanguageDropdownOpen(false);
@@ -106,13 +129,27 @@ const NavBar = ({
 
   const handleThemeSelect = useCallback(
     (selectedTheme: ThemeMode) => {
+      if (isHighContrast) {
+        triggerRefusedThemeAction();
+        return;
+      }
+
       if (selectedTheme !== theme) {
         onToggleTheme();
       }
       setActiveMobileMenu('main');
     },
-    [onToggleTheme, theme]
+    [isHighContrast, onToggleTheme, theme, triggerRefusedThemeAction]
   );
+
+  const handleThemeToggleClick = useCallback(() => {
+    if (isHighContrast) {
+      triggerRefusedThemeAction();
+      return;
+    }
+
+    onToggleTheme();
+  }, [isHighContrast, onToggleTheme, triggerRefusedThemeAction]);
 
   const handleMobileMenuToggle = useCallback(() => {
     setIsMobileMenuOpen((previousValue) => {
@@ -411,6 +448,14 @@ const NavBar = ({
   }, [isMobileMenuOpen]);
 
   useEffect(() => {
+    return () => {
+      if (refusedThemeActionTimeoutRef.current !== null) {
+        window.clearTimeout(refusedThemeActionTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     if (shouldHideNav) {
       closeAllDropdownMenus();
     }
@@ -457,9 +502,10 @@ const NavBar = ({
             </div>
 
             <button
-              className={styles.themeToggle}
-              onClick={onToggleTheme}
+              className={`${styles.themeToggle} ${isHighContrast ? styles.themeToggleDisabled : ''} ${isThemeToggleShaking ? styles.themeToggleShake : ''}`}
+              onClick={handleThemeToggleClick}
               aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
+              aria-disabled={isHighContrast}
             >
               {theme === 'light' ? <Moon size={20} strokeWidth={2} /> : <Sun size={20} strokeWidth={2} />}
             </button>
@@ -545,9 +591,17 @@ const NavBar = ({
                 <div className={styles.mobileMenuSection}>
                   <button
                     type="button"
-                    className={styles.mobileSubmenuTrigger}
-                    onClick={() => setActiveMobileMenu('theme')}
+                    className={`${styles.mobileSubmenuTrigger} ${isHighContrast ? styles.mobileSubmenuTriggerDisabled : ''} ${isThemeToggleShaking ? styles.themeToggleShake : ''}`}
+                    onClick={() => {
+                      if (isHighContrast) {
+                        triggerRefusedThemeAction();
+                        return;
+                      }
+
+                      setActiveMobileMenu('theme');
+                    }}
                     aria-haspopup="listbox"
+                    aria-disabled={isHighContrast}
                   >
                     <span>{translations.nav_change_theme}</span>
                     <ChevronRight size={18} strokeWidth={2} aria-hidden="true" />
@@ -599,19 +653,21 @@ const NavBar = ({
                 <div className={styles.mobileMenuSection} role="listbox" aria-label={translations.nav_change_theme}>
                   <button
                     type="button"
-                    className={`${styles.mobileOptionButton} ${theme === 'light' ? styles.mobileOptionButtonActive : ''}`}
+                    className={`${styles.mobileOptionButton} ${theme === 'light' ? styles.mobileOptionButtonActive : ''} ${isHighContrast ? styles.mobileOptionButtonDisabled : ''} ${isThemeToggleShaking ? styles.themeToggleShake : ''}`}
                     onClick={() => handleThemeSelect('light')}
                     role="option"
                     aria-selected={theme === 'light'}
+                    aria-disabled={isHighContrast}
                   >
                     <span>{translations.nav_theme_light}</span>
                   </button>
                   <button
                     type="button"
-                    className={`${styles.mobileOptionButton} ${theme === 'dark' ? styles.mobileOptionButtonActive : ''}`}
+                    className={`${styles.mobileOptionButton} ${theme === 'dark' ? styles.mobileOptionButtonActive : ''} ${isHighContrast ? styles.mobileOptionButtonDisabled : ''} ${isThemeToggleShaking ? styles.themeToggleShake : ''}`}
                     onClick={() => handleThemeSelect('dark')}
                     role="option"
                     aria-selected={theme === 'dark'}
+                    aria-disabled={isHighContrast}
                   >
                     <span>{translations.nav_theme_dark}</span>
                   </button>
