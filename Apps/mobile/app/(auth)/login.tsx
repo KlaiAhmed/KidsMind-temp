@@ -18,7 +18,7 @@ import { Colors, Spacing, Radii, Shadows, Typography } from '@/constants/theme';
 import { PrimaryButton } from '@/components/ui/PrimaryButton';
 import { FormTextInput } from '@/components/ui/FormTextInput';
 import { PasswordInput } from '@/components/ui/PasswordInput';
-import { useAuth, type LoginFormValues } from '@/contexts/AuthContext';
+import { useAuth } from '@/contexts/AuthContext';
 
 const loginSchema = z.object({
   email: z.email('Please enter a valid email'),
@@ -174,22 +174,6 @@ export default function LoginScreen() {
             <Text style={styles.googleText}>Google Account</Text>
           </TouchableOpacity>
 
-          {/* PIN option */}
-          <TouchableOpacity
-            style={styles.pinOption}
-            activeOpacity={0.7}
-            onPress={() => {
-              // TODO: PIN login
-            }}
-          >
-            <MaterialCommunityIcons
-              name="dialpad"
-              size={20}
-              color={Colors.primary}
-            />
-            <Text style={styles.pinText}>Use PIN instead</Text>
-          </TouchableOpacity>
-
           {/* Sign up link */}
           <View style={styles.signUpRow}>
             <Text style={styles.signUpText}>Don&apos;t have an account? </Text>
@@ -200,7 +184,7 @@ export default function LoginScreen() {
 
           {/* Footer */}
           <Text style={styles.footer}>
-            Secure Parental Access{'  '}\u00A9{'  '}KidsMind
+            Secure Parental Access{'  '}©{'  '}KidsMind
           </Text>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -312,18 +296,6 @@ const styles = StyleSheet.create({
   googleText: {
     ...Typography.captionMedium,
     color: Colors.text,
-    fontFamily: 'Inter_500Medium',
-  },
-  pinOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.sm,
-    marginBottom: Spacing.xl,
-  },
-  pinText: {
-    ...Typography.caption,
-    color: Colors.primary,
     fontFamily: 'Inter_500Medium',
   },
   signUpRow: {

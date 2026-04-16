@@ -18,7 +18,7 @@ import { Colors, Spacing, Radii, Shadows, Typography } from '@/constants/theme';
 import { PrimaryButton } from '@/components/ui/PrimaryButton';
 import { FormTextInput } from '@/components/ui/FormTextInput';
 import { PasswordInput } from '@/components/ui/PasswordInput';
-import { useAuth, type RegisterFormValues } from '@/contexts/AuthContext';
+import { useAuth } from '@/contexts/AuthContext';
 
 const registerSchema = z
   .object({
@@ -55,9 +55,8 @@ function getPasswordStrength(password: string): {
 
 export default function RegisterScreen() {
   const router = useRouter();
-  const { register, loading, error, clearError } = useAuth();
+  const { register, loading, error } = useAuth();
   const [apiError, setApiError] = useState<string | null>(null);
-  const [passwordVisible, setPasswordVisible] = useState(false);
 
   const {
     control,

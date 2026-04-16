@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { type TextInputProps, TouchableOpacity } from 'react-native';
+import { TouchableOpacity } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { FormTextInput, type FormTextInputProps } from './FormTextInput';
-import { Colors, Sizing } from '@/constants/theme';
+import { Colors } from '@/constants/theme';
 
 export interface PasswordInputProps extends Omit<FormTextInputProps, 'leftIcon' | 'secureTextEntry'> {
   /** Override the icon shown on the left. Defaults to "lock-outline". */
