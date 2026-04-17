@@ -1,5 +1,13 @@
 import { memo } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  FlatList,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 import { Image } from 'expo-image';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -12,12 +20,14 @@ interface AvatarPickerProps {
   avatars: AvatarOption[];
   selectedAvatarId: string;
   onSelect: (avatarId: string) => void;
+  style?: StyleProp<ViewStyle>;
 }
 
 function AvatarPickerComponent({
   avatars,
   selectedAvatarId,
   onSelect,
+  style,
 }: AvatarPickerProps) {
   function handleSelect(avatarId: string) {
     void Haptics.selectionAsync().catch(() => undefined);
@@ -27,6 +37,7 @@ function AvatarPickerComponent({
   return (
     <FlatList
       data={avatars}
+      style={[styles.list, style]}
       keyExtractor={(item) => item.id}
       numColumns={COLUMN_COUNT}
       columnWrapperStyle={styles.row}
@@ -65,6 +76,10 @@ function AvatarPickerComponent({
 export const AvatarPicker = memo(AvatarPickerComponent);
 
 const styles = StyleSheet.create({
+  list: {
+    flex: 1,
+    minHeight: 0,
+  },
   contentContainer: {
     gap: Spacing.sm,
   },

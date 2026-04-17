@@ -37,7 +37,6 @@ export const WizardStepIndicator = memo(WizardStepIndicatorComponent);
 const styles = StyleSheet.create({
   container: {
     gap: Spacing.sm,
-    marginBottom: Spacing.lg,
   },
   counterText: {
     ...Typography.captionMedium,

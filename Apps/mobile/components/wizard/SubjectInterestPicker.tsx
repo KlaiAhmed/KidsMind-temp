@@ -6,6 +6,8 @@ import {
   StyleSheet,
   Text,
   View,
+  type StyleProp,
+  type ViewStyle,
 } from 'react-native';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
@@ -18,6 +20,7 @@ interface SubjectInterestPickerProps {
   subjects: Subject[];
   selectedSubjectIds: string[];
   onToggleSubject: (subjectId: string) => void;
+  style?: StyleProp<ViewStyle>;
 }
 
 interface SubjectChipProps {
@@ -76,10 +79,12 @@ function SubjectInterestPickerComponent({
   subjects,
   selectedSubjectIds,
   onToggleSubject,
+  style,
 }: SubjectInterestPickerProps) {
   return (
     <FlatList
       data={subjects}
+      style={[styles.list, style]}
       keyExtractor={(item) => item.id}
       numColumns={COLUMN_COUNT}
       columnWrapperStyle={styles.row}
@@ -102,6 +107,10 @@ function SubjectInterestPickerComponent({
 export const SubjectInterestPicker = memo(SubjectInterestPickerComponent);
 
 const styles = StyleSheet.create({
+  list: {
+    flex: 1,
+    minHeight: 0,
+  },
   contentContainer: {
     gap: Spacing.sm,
   },
