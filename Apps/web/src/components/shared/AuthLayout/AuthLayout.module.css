@@ -234,7 +234,8 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: var(--spacing-md) var(--spacing-lg) var(--spacing-2xl);
+  padding: var(--spacing-sm) var(--spacing-lg) var(--spacing-2xl);
+  padding-block-start: var(--spacing-xl);
   max-width: 480px;
   width: 100%;
   margin-inline: auto;
