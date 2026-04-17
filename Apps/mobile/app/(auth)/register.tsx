@@ -22,6 +22,7 @@ import { PasswordInput } from '@/components/ui/PasswordInput';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   COMMON_COUNTRY_CODES,
+  BLOCKED_COUNTRIES,
   detectCountryByIp,
   getCountryOptions,
   type CountryOption,
@@ -34,9 +35,9 @@ const registerSchema = z
     countryCode: z.string().regex(/^[A-Z]{2}$/, 'Please select your country/region'),
     password: z.string().min(8, 'Password must be at least 8 characters'),
     confirmPassword: z.string().min(8, 'Please confirm your password'),
-    agreeToTerms: z.literal(true, {
-      message: 'You must agree to the terms',
-    }),
+    agreeToTerms: z
+      .boolean()
+      .refine((value) => value === true, { message: 'You must agree to the terms' }),
   })
   .refine((d) => d.password === d.confirmPassword, {
     message: 'Passwords do not match',
@@ -90,8 +91,7 @@ export default function RegisterScreen() {
 
   const passwordValue = watch('password');
   const strength = useMemo(() => getPasswordStrength(passwordValue), [passwordValue]);
-  const countryHelperText = countryDetectionMessage
-    ?? 'Search by country name or ISO alpha-2 code.';
+
 
   useEffect(() => {
     let isMounted = true;
@@ -114,18 +114,33 @@ export default function RegisterScreen() {
         const currentCountryCode = getValues('countryCode').trim().toUpperCase();
 
         if (!currentCountryCode && detectedCountry) {
-          const matchedCountry = availableCountries.find(
-            (country) => country.code === detectedCountry.code
+          // Check if detected country is blocked
+          const isBlocked = BLOCKED_COUNTRIES.includes(
+            detectedCountry.code as typeof BLOCKED_COUNTRIES[number]
           );
 
-          setValue('countryCode', detectedCountry.code, {
-            shouldValidate: true,
-            shouldDirty: false,
-            shouldTouch: false,
-          });
+          if (!isBlocked) {
+            const matchedCountry = availableCountries.find(
+              (country) => country.code === detectedCountry.code
+            );
 
-          const detectedCountryName = matchedCountry?.name || detectedCountry.name || detectedCountry.code;
-          setCountryDetectionMessage(`We've detected you're in ${detectedCountryName}. Is this correct?`);
+            setValue('countryCode', detectedCountry.code, {
+              shouldValidate: true,
+              shouldDirty: false,
+              shouldTouch: false,
+            });
+
+            const detectedCountryName = matchedCountry?.name || detectedCountry.name || detectedCountry.code;
+            setCountryDetectionMessage(`We've detected you're in ${detectedCountryName}. Is this correct?`);
+          } else {
+            // Detected country is blocked - clear the value and show a message
+            setValue('countryCode', '', {
+              shouldValidate: false,
+              shouldDirty: false,
+              shouldTouch: false,
+            });
+            setCountryDetectionMessage(`Service not available in ${detectedCountry.name}. Please select from available countries.`);
+          }
         }
       } finally {
         if (isMounted) {
@@ -217,7 +232,7 @@ export default function RegisterScreen() {
               render={({ field: { onChange, onBlur, value } }) => (
                 <FormTextInput
                   label="Full Name"
-                  placeholder="Jane Doe"
+                  placeholder="John Doe"
                   autoCapitalize="words"
                   onBlur={onBlur}
                   onChangeText={onChange}
@@ -268,8 +283,8 @@ export default function RegisterScreen() {
                   value={value}
                   countries={countries}
                   commonCountryCodes={COMMON_COUNTRY_CODES}
+                  blockedCountryCodes={BLOCKED_COUNTRIES}
                   loading={countryLoading}
-                  helperText={countryHelperText}
                   error={errors.countryCode?.message}
                   onChange={(nextCountryCode) => {
                     onChange(nextCountryCode);

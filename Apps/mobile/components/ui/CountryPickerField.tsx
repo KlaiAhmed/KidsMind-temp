@@ -31,6 +31,7 @@ interface CountryPickerFieldProps {
   helperText?: string;
   loading?: boolean;
   placeholder?: string;
+  blockedCountryCodes?: readonly string[];
 }
 
 function normalizeSearchTerm(value: string): string {
@@ -47,6 +48,7 @@ export function CountryPickerField({
   helperText,
   loading = false,
   placeholder = 'Search and select your country',
+  blockedCountryCodes,
 }: CountryPickerFieldProps) {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -58,8 +60,13 @@ export function CountryPickerField({
       return null;
     }
 
-    return countries.find((country) => country.code === normalizedValue) ?? null;
-  }, [countries, normalizedValue]);
+    const country = countries.find((c) => c.code === normalizedValue);
+    // Don't allow blocked countries to be selected
+    if (blockedCountryCodes && blockedCountryCodes.includes(normalizedValue)) {
+      return null;
+    }
+    return country ?? null;
+  }, [countries, normalizedValue, blockedCountryCodes]);
 
   const commonCountryCodeSet = useMemo(() => {
     return new Set(commonCountryCodes.map((code) => code.toUpperCase()));
@@ -75,12 +82,17 @@ export function CountryPickerField({
     const normalizedSearchUpper = normalizedSearch.toUpperCase();
 
     return countries.filter((country) => {
+      // Filter out blocked countries
+      if (blockedCountryCodes && blockedCountryCodes.includes(country.code)) {
+        return false;
+      }
+
       return (
         country.name.toLowerCase().includes(normalizedSearch) ||
         country.code.includes(normalizedSearchUpper)
       );
     });
-  }, [countries, searchTerm]);
+  }, [countries, searchTerm, blockedCountryCodes]);
 
   const sections = useMemo<CountrySection[]>(() => {
     const commonCountries: CountryOption[] = [];
@@ -162,9 +174,6 @@ export function CountryPickerField({
           >
             {fieldLabel}
           </Text>
-          {!!selectedCountry && (
-            <Text style={styles.selectedCodeText}>{selectedCountry.code}</Text>
-          )}
         </View>
 
         {loading ? (
@@ -319,6 +328,9 @@ const styles = StyleSheet.create({
   inputValueContainer: {
     flex: 1,
     minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
   },
   inputText: {
     ...Typography.body,
@@ -327,11 +339,7 @@ const styles = StyleSheet.create({
   placeholderText: {
     color: Colors.placeholder,
   },
-  selectedCodeText: {
-    ...Typography.label,
-    color: Colors.textTertiary,
-    marginTop: 2,
-  },
+
   helperText: {
     ...Typography.caption,
     color: Colors.textSecondary,

@@ -34,6 +34,9 @@ export const COMMON_COUNTRY_CODES = [
   'NZ',
 ] as const;
 
+// Countries not yet supported - remove when services are available
+export const BLOCKED_COUNTRIES = ['IL'] as const;
+
 const FALLBACK_COUNTRIES: CountryOption[] = [
   { code: 'AU', name: 'Australia', flag: '🇦🇺' },
   { code: 'CA', name: 'Canada', flag: '🇨🇦' },
@@ -165,10 +168,18 @@ export async function getCountryOptions(): Promise<CountryOption[]> {
 
   countryFetchPromise = (async () => {
     try {
-      countryCache = await fetchCountriesFromApi();
+      const allCountries = await fetchCountriesFromApi();
+      // Filter out blocked countries
+      countryCache = allCountries.filter(
+        (country) => !BLOCKED_COUNTRIES.includes(country.code as typeof BLOCKED_COUNTRIES[number])
+      );
       return countryCache;
     } catch {
       countryCache = sortCountries(FALLBACK_COUNTRIES);
+      // Also filter blocked countries from fallback
+      countryCache = countryCache.filter(
+        (country) => !BLOCKED_COUNTRIES.includes(country.code as typeof BLOCKED_COUNTRIES[number])
+      );
       return countryCache;
     } finally {
       countryFetchPromise = null;
