@@ -169,6 +169,128 @@ export default function ChildProfileWizard() {
   const entering = direction === 'forward' ? SlideInRight.duration(300) : SlideInLeft.duration(300);
   const exiting = direction === 'forward' ? SlideOutLeft.duration(220) : SlideOutRight.duration(220);
 
+  function renderStepContent() {
+    return (
+      <>
+        {wizard.step === 1 ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>What should we call you?</Text>
+            <Text style={styles.sectionSubtitle}>Pick a name your child loves to hear.</Text>
+            <FormTextInput
+              label="Child Name"
+              placeholder="Enter child name"
+              value={wizard.childName}
+              onChangeText={(value) => {
+                setNameError(undefined);
+                setWizard((current) => ({
+                  ...current,
+                  childName: value,
+                }));
+              }}
+              error={nameError}
+            />
+          </View>
+        ) : null}
+
+        {wizard.step === 2 ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>How old are you?</Text>
+            <Text style={styles.sectionSubtitle}>Tap an age to personalize the lessons.</Text>
+            <View style={styles.ageGrid}>
+              {ageOptions.map((age) => {
+                const selected = wizard.age === age;
+
+                return (
+                  <Pressable
+                    key={`age-${age}`}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Select age ${age}`}
+                    accessibilityState={{ selected }}
+                    onPress={() =>
+                      setWizard((current) => ({
+                        ...current,
+                        age,
+                      }))
+                    }
+                    style={({ pressed }) => [
+                      styles.ageButton,
+                      selected ? styles.ageButtonSelected : null,
+                      pressed ? styles.ageButtonPressed : null,
+                    ]}
+                  >
+                    <Text style={[styles.ageText, selected ? styles.ageTextSelected : null]}>{age}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
+
+        {wizard.step === 3 ? (
+          <View style={[styles.section, styles.sectionFill]}>
+            <Text style={styles.sectionTitle}>Choose your avatar</Text>
+            <Text style={styles.sectionSubtitle}>This buddy appears on your dashboard.</Text>
+            <AvatarPicker
+              avatars={avatars}
+              selectedAvatarId={wizard.avatarId}
+              onSelect={(avatarId) =>
+                setWizard((current) => ({
+                  ...current,
+                  avatarId,
+                }))
+              }
+              style={styles.pickerList}
+            />
+          </View>
+        ) : null}
+
+        {wizard.step === 4 ? (
+          <View style={[styles.section, styles.sectionFill]}>
+            <Text style={styles.sectionTitle}>Pick your favorite subjects</Text>
+            <Text style={styles.sectionSubtitle}>Select at least one subject to continue.</Text>
+            <SubjectInterestPicker
+              subjects={allSubjects}
+              selectedSubjectIds={wizard.selectedSubjectIds}
+              onToggleSubject={toggleSubject}
+              style={styles.pickerList}
+            />
+            {wizard.selectedSubjectIds.length === 0 ? (
+              <Text style={styles.inlineError}>Please choose at least one subject.</Text>
+            ) : null}
+          </View>
+        ) : null}
+
+        {wizard.step === 5 ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>You are all set!</Text>
+            <Text style={styles.sectionSubtitle}>Review and begin your learning adventure.</Text>
+
+            <View style={styles.summaryCard}>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Name</Text>
+                <Text style={styles.summaryValue}>{wizard.childName}</Text>
+              </View>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Age</Text>
+                <Text style={styles.summaryValue}>{wizard.age ?? '--'}</Text>
+              </View>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Subjects</Text>
+                <Text style={styles.summaryValue}>
+                  {selectedSubjectNames.length > 0 ? selectedSubjectNames.join(', ') : 'None selected'}
+                </Text>
+              </View>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Daily Goal</Text>
+                <Text style={styles.summaryValue}>{profile?.dailyGoalMinutes ?? 25} min</Text>
+              </View>
+            </View>
+          </View>
+        ) : null}
+      </>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
       <KeyboardAvoidingView
@@ -193,129 +315,24 @@ export default function ChildProfileWizard() {
           </Text>
         </View>
 
-        <WizardStepIndicator step={wizard.step} totalSteps={5} />
+        <View style={styles.wizardBody}>
+          <WizardStepIndicator step={wizard.step} totalSteps={5} />
 
-        <Animated.View key={wizard.step} entering={entering} exiting={exiting} style={styles.stepCard}>
-          <ScrollView
-            keyboardShouldPersistTaps="handled"
-            contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={false}
-          >
-            {wizard.step === 1 ? (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>What should we call you?</Text>
-                <Text style={styles.sectionSubtitle}>Pick a name your child loves to hear.</Text>
-                <FormTextInput
-                  label="Child Name"
-                  placeholder="Enter child name"
-                  value={wizard.childName}
-                  onChangeText={(value) => {
-                    setNameError(undefined);
-                    setWizard((current) => ({
-                      ...current,
-                      childName: value,
-                    }));
-                  }}
-                  error={nameError}
-                />
-              </View>
-            ) : null}
-
-            {wizard.step === 2 ? (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>How old are you?</Text>
-                <Text style={styles.sectionSubtitle}>Tap an age to personalize the lessons.</Text>
-                <View style={styles.ageGrid}>
-                  {ageOptions.map((age) => {
-                    const selected = wizard.age === age;
-
-                    return (
-                      <Pressable
-                        key={`age-${age}`}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Select age ${age}`}
-                        accessibilityState={{ selected }}
-                        onPress={() =>
-                          setWizard((current) => ({
-                            ...current,
-                            age,
-                          }))
-                        }
-                        style={({ pressed }) => [
-                          styles.ageButton,
-                          selected ? styles.ageButtonSelected : null,
-                          pressed ? styles.ageButtonPressed : null,
-                        ]}
-                      >
-                        <Text style={[styles.ageText, selected ? styles.ageTextSelected : null]}>{age}</Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </View>
-            ) : null}
-
-            {wizard.step === 3 ? (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Choose your avatar</Text>
-                <Text style={styles.sectionSubtitle}>This buddy appears on your dashboard.</Text>
-                <AvatarPicker
-                  avatars={avatars}
-                  selectedAvatarId={wizard.avatarId}
-                  onSelect={(avatarId) =>
-                    setWizard((current) => ({
-                      ...current,
-                      avatarId,
-                    }))
-                  }
-                />
-              </View>
-            ) : null}
-
-            {wizard.step === 4 ? (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Pick your favorite subjects</Text>
-                <Text style={styles.sectionSubtitle}>Select at least one subject to continue.</Text>
-                <SubjectInterestPicker
-                  subjects={allSubjects}
-                  selectedSubjectIds={wizard.selectedSubjectIds}
-                  onToggleSubject={toggleSubject}
-                />
-                {wizard.selectedSubjectIds.length === 0 ? (
-                  <Text style={styles.inlineError}>Please choose at least one subject.</Text>
-                ) : null}
-              </View>
-            ) : null}
-
-            {wizard.step === 5 ? (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>You are all set!</Text>
-                <Text style={styles.sectionSubtitle}>Review and begin your learning adventure.</Text>
-
-                <View style={styles.summaryCard}>
-                  <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>Name</Text>
-                    <Text style={styles.summaryValue}>{wizard.childName}</Text>
-                  </View>
-                  <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>Age</Text>
-                    <Text style={styles.summaryValue}>{wizard.age ?? '--'}</Text>
-                  </View>
-                  <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>Subjects</Text>
-                    <Text style={styles.summaryValue}>
-                      {selectedSubjectNames.length > 0 ? selectedSubjectNames.join(', ') : 'None selected'}
-                    </Text>
-                  </View>
-                  <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>Daily Goal</Text>
-                    <Text style={styles.summaryValue}>{profile?.dailyGoalMinutes ?? 25} min</Text>
-                  </View>
-                </View>
-              </View>
-            ) : null}
-          </ScrollView>
-        </Animated.View>
+          <Animated.View key={wizard.step} entering={entering} exiting={exiting} style={styles.stepCard}>
+            {wizard.step === 3 || wizard.step === 4 ? (
+              <View style={styles.stepContent}>{renderStepContent()}</View>
+            ) : (
+              <ScrollView
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={styles.scrollContent}
+                showsVerticalScrollIndicator={false}
+                style={styles.stepScrollView}
+              >
+                {renderStepContent()}
+              </ScrollView>
+            )}
+          </Animated.View>
+        </View>
 
         <PrimaryButton
           label={nextLabel}
@@ -367,20 +384,43 @@ const styles = StyleSheet.create({
     color: Colors.text,
     flex: 1,
   },
+  wizardBody: {
+    flex: 1,
+    minHeight: 0,
+    gap: Spacing.lg,
+  },
   stepCard: {
     flex: 1,
+    minHeight: 0,
     borderRadius: Radii.xl,
     borderWidth: 1,
     borderColor: Colors.outline,
     backgroundColor: Colors.surfaceContainerLowest,
     padding: Spacing.md,
-    marginBottom: Spacing.md,
+  },
+  stepScrollView: {
+    flex: 1,
+    minHeight: 0,
+  },
+  stepContent: {
+    flex: 1,
+    minHeight: 0,
   },
   scrollContent: {
+    flexGrow: 1,
     gap: Spacing.md,
+    paddingBottom: Spacing.md,
   },
   section: {
     gap: Spacing.md,
+  },
+  sectionFill: {
+    flex: 1,
+    minHeight: 0,
+  },
+  pickerList: {
+    flex: 1,
+    minHeight: 0,
   },
   sectionTitle: {
     ...Typography.headline,
@@ -449,6 +489,6 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   nextButton: {
-    marginTop: 'auto',
+    marginTop: Spacing.md,
   },
 });
