@@ -23,8 +23,11 @@ class RefreshTokenSession(Base):
         id: Primary key identifier.
         user_id: Foreign key to user.
         jti: Unique JWT identifier.
-        token_family: Family identifier for rotation tracking.
+        family_id: Family identifier for rotation tracking.
         token_hash: SHA-256 hash of the token.
+        client_kind: Client category ('web' or 'mobile').
+                     Existing legacy rows were backfilled by migration
+                     using a temporary server default of 'web'.
         expires_at: Token expiration timestamp.
         revoked: Whether token has been revoked.
         replaced_by_jti: JTI of replacement token.
@@ -37,14 +40,21 @@ class RefreshTokenSession(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
 
     jti = Column(String(64), unique=True, nullable=False, index=True)
-    token_family = Column(String(64), nullable=False, index=True)
+    family_id = Column(String(64), nullable=False, index=True)
+    session_id = Column(String(64), nullable=False, index=True)
+    generation = Column(Integer, nullable=False, default=0)
     token_hash = Column(String(128), unique=True, nullable=False, index=True)
+    client_kind = Column(String(16), nullable=False, default="mobile")
+    device_info = Column(String(512), nullable=True)
+    attestation_status = Column(String(32), nullable=False, default="unknown")
+    trust_level = Column(String(32), nullable=False, default="normal")
 
     expires_at = Column(DateTime(timezone=True), nullable=False)
     revoked = Column(Boolean, nullable=False, default=False)
     revoked_at = Column(DateTime(timezone=True), nullable=True)
     replaced_by_jti = Column(String(64), nullable=True)
     reuse_detected = Column(Boolean, nullable=False, default=False)
+    last_used_at = Column(DateTime(timezone=True), nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)

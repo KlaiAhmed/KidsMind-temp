@@ -8,6 +8,7 @@ slowapi==0.1.9
 redis==7.3.0
 pydantic-settings==2.13.1
 sqlalchemy==2.0.48
+alembic==1.16.5
 psycopg2-binary==2.9.11
 argon2-cffi==25.1.0
 pyjwt==2.12.1

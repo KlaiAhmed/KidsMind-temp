@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session, selectinload
 from models.child_profile import ChildProfile
 from models.refresh_token_session import RefreshTokenSession
 from models.user import User
+from utils.manage_pwd import hash_password
 
 
 SOFT_DELETE_RETENTION_DAYS = 30
@@ -94,6 +95,49 @@ def soft_delete_user_account(db: Session, user: User) -> dict:
     }
 
 
+def revoke_all_user_sessions(db: Session, user: User) -> datetime:
+    """Globally invalidate access tokens and revoke all active refresh sessions."""
+    revoked_at = datetime.now(timezone.utc)
+    user.token_valid_after = revoked_at
+    _revoke_active_refresh_sessions(db, user.id, revoked_at)
+    db.commit()
+    return revoked_at
+
+
+def update_user_password(db: Session, user: User, new_password: str) -> datetime:
+    """Update password and invalidate all previously issued access tokens."""
+    changed_at = datetime.utcnow()
+    user.hashed_password = hash_password(new_password)
+    user.password_changed_at = changed_at
+    user.token_valid_after = changed_at
+    db.commit()
+    db.refresh(user)
+    return changed_at
+
+
+def update_user_email(db: Session, user: User, new_email: str) -> datetime:
+    """Update email and invalidate all previously issued access tokens."""
+    changed_at = datetime.utcnow()
+    user.email = new_email
+    user.email_changed_at = changed_at
+    user.token_valid_after = changed_at
+    db.commit()
+    db.refresh(user)
+    return changed_at
+
+
+def update_user_mfa_settings(db: Session, user: User, *, mfa_enabled: bool, mfa_secret: str | None = None) -> datetime:
+    """Update MFA state and invalidate all previously issued access tokens."""
+    changed_at = datetime.utcnow()
+    user.mfa_enabled = mfa_enabled
+    user.mfa_secret = mfa_secret if mfa_enabled else None
+    user.mfa_changed_at = changed_at
+    user.token_valid_after = changed_at
+    db.commit()
+    db.refresh(user)
+    return changed_at
+
+
 def hard_delete_user_account_by_id(db: Session, user_id: int) -> dict | None:
     """Permanently delete a user account by id and owned child profiles.
 
@@ -125,18 +169,10 @@ def hard_delete_user_account_by_id(db: Session, user_id: int) -> dict | None:
 
 def _revoke_active_refresh_sessions(db: Session, user_id: int, revoked_at: datetime) -> None:
     """Revoke all active refresh sessions for a user account."""
-    sessions = (
-        db.query(RefreshTokenSession)
-        .filter(
-            RefreshTokenSession.user_id == user_id,
-            RefreshTokenSession.revoked.is_(False),
-        )
-        .all()
-    )
-
-    for session in sessions:
-        session.revoked = True
-        session.revoked_at = revoked_at
+    db.query(RefreshTokenSession).filter(
+        RefreshTokenSession.user_id == user_id,
+        RefreshTokenSession.revoked.is_(False),
+    ).update({"revoked": True, "revoked_at": revoked_at}, synchronize_session="fetch")
 
 
 def hard_delete_child_by_id(db: Session, parent_id: int, child_id: int) -> dict | None:

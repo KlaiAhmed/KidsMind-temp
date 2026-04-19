@@ -48,23 +48,6 @@
 ---
 
 
-### STT Service Implementation Details :
-#### Model Selection: `faster-whisper` vs. Original `whisper`
-While the initial technical specification recommended the standard OpenAI `whisper` model, this project implements `faster-whisper` to maximize efficiency and execution speed.
-
-Faster-whisper (CTranslate2) delivers the exact same accuracy as the original model (PyTorch) but runs up to **4x faster**. Additionally, through efficient INT8 quantization, it reduces memory consumption by over **50%**. This architectural pivot was chosen for speed optimizations and reduced memory footprints that provide a massive performance gains specifically on CPUs and lower-end GPUs, ensuring the application remains highly responsive and resource-efficient in hardware-constrained environments.
-
-### Optimized Language Detection Pipeline
-To further reduce latency, this project implements a dual-model architecture. We observed that running native language detection directly through the main model introduced unnecessary computational overhead.
-
-To resolve this, we utilize a `tiny` model dedicated exclusively to fast, initial language detection. The detected language is then passed as a parameter to the main `faster-whisper` model for the actual transcription.
-
-To ensure transcription accuracy is never compromised, a confidence threshold is enforced: if the `tiny` model's language prediction indicates high uncertainty, the system dynamically falls back, prompting the main model to re-evaluate the language. This hybrid pipeline preserves the main model's high-fidelity output while yielding an additional **16.5%** reduction in total processing time (when utilizing the `medium` model as the primary transcriber).
-
-
-
----
-
 ## 📂 Project Structure
 
 ```bash
@@ -130,20 +113,9 @@ On startup, `bucket-provisioner` ensures these buckets exist:
 - `media-private`
 - `loki-chunks`
 
-To run/re-run only bucket provisioning:
-```bash
-docker compose up --force-recreate --no-deps bucket-provisioner
-```
-
-Expected success output includes:
-- `Added \`myminio\` successfully.`
-- `Bucket created successfully ...` (or already exists)
-- `Setup complete. Buckets are ready.`
-
 ### 3.2 Windows Note (CRLF vs LF)
-If you see errors like `/provision.sh: line 2: set: -`, it is a line-ending issue (`CRLF`) when mounting shell scripts into Linux containers.
 
-This repository now mitigates that in two ways:
+This repository  mitigates that in two ways:
 - `.gitattributes` enforces `LF` for `*.sh`, `*.yml`, `*.yaml`
 - `bucket-provisioner` entrypoint normalizes `\r` at runtime before executing the script
 

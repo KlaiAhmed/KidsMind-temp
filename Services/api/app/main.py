@@ -23,14 +23,21 @@ from core.error_handlers import http_exception_handler, request_validation_excep
 from core.database import init_db
 from core.logging_setup import setup_logging, RequestTracingMiddleware
 from core.cache_client import get_cache_client, close_cache_client
+from core.rate_limit_policy import (
+    build_resolved_rate_limit_policy,
+    dev_mode_startup_warning,
+    set_resolved_rate_limit_policy,
+)
+from middlewares.rate_limit_middleware import RateLimitMiddleware
 from middlewares.csrf_middleware import CSRFMiddleware
-from routers.auth import router as auth_router
+from routers.mobile_auth import router as mobile_auth_router
 from routers.admin_users import router as admin_users_router
 from routers.chat import router as chat_router
 from routers.children import router as children_router
 from routers.health import router as health_router
 from routers.safety_and_rules import router as safety_and_rules_router
 from routers.users import router as users_router
+from routers.web_auth import router as web_auth_router
 from services.bootstrap_admin import ensure_super_admin_exists
 from utils.limiter import limiter
 from utils.logger import logger
@@ -78,6 +85,13 @@ async def lifespan(app: FastAPI):
         app.state.http_client = client
         logger.info("HTTP client initialized")
 
+        resolved_rate_limit_policy = build_resolved_rate_limit_policy()
+        set_resolved_rate_limit_policy(resolved_rate_limit_policy)
+        app.state.rate_limit_policy = resolved_rate_limit_policy
+
+        if not resolved_rate_limit_policy.is_prod:
+            logger.warning(dev_mode_startup_warning())
+
         await get_cache_client()
         logger.info("Cache connection established")
 
@@ -124,7 +138,7 @@ def create_app() -> FastAPI:
         allow_origins=settings.CORS_ORIGINS,
         allow_credentials=True,
         allow_methods=["POST", "GET", "DELETE", "PUT", "PATCH", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type", "X-Client-Type", "X-CSRF-Token"],
+        allow_headers=["Authorization", "Content-Type", "X-CSRF-Token", "X-Device-Info"],
     )
 
     # CSRF protection middleware
@@ -132,6 +146,9 @@ def create_app() -> FastAPI:
 
     # Request tracing middleware
     app.add_middleware(RequestTracingMiddleware)
+
+    # Centralized endpoint-aware rate limiting
+    app.add_middleware(RateLimitMiddleware)
 
     # Rate limiting
     app.state.limiter = limiter
@@ -141,7 +158,8 @@ def create_app() -> FastAPI:
 
     # Mount routers
     app.include_router(health_router, prefix="", tags=["Health"])
-    app.include_router(auth_router, prefix="/api/v1/auth", tags=["Auth"])
+    app.include_router(web_auth_router, prefix="/api/web/auth", tags=["Web Auth"])
+    app.include_router(mobile_auth_router, prefix="/api/mobile/auth", tags=["Mobile Auth"])
     app.include_router(chat_router, prefix="/api/v1/chat", tags=["Chat"])
     app.include_router(children_router, prefix="/api/v1/children", tags=["Children"])
     app.include_router(safety_and_rules_router, prefix="/api/v1", tags=["Safety and Rules"])

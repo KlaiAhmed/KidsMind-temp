@@ -9,7 +9,7 @@ Domain: Children
 
 import time
 
-from fastapi import APIRouter, Body, Depends, Request
+from fastapi import APIRouter, Body, Depends, Request, Response
 from redis.asyncio import Redis
 from sqlalchemy.orm import Session
 
@@ -20,22 +20,20 @@ from controllers.children import (
     list_children_controller,
     update_child_controller,
 )
-from core.config import settings
-from dependencies.authentication import get_current_user
+from dependencies.auth import get_current_user
 from dependencies.infrastructure import get_db, get_redis
 from models.user import User
 from schemas.child_profile_schema import ChildProfileCreate, ChildProfileResponse, ChildProfileUpdate
 from services.child_profile_context_cache import invalidate_child_profile_context_cache
-from utils.limiter import limiter
 from utils.logger import logger
 
 router = APIRouter()
 
 
 @router.post("", response_model=ChildProfileResponse, status_code=201)
-@limiter.limit(settings.RATE_LIMIT)
 async def create_child_profile(
     request: Request,
+    response: Response,
     payload: ChildProfileCreate = Body(...),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -56,9 +54,9 @@ async def create_child_profile(
 
 
 @router.get("", response_model=list[ChildProfileResponse])
-@limiter.limit(settings.RATE_LIMIT)
 async def get_my_children(
     request: Request,
+    response: Response,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -75,10 +73,10 @@ async def get_my_children(
 
 
 @router.get("/{child_id}", response_model=ChildProfileResponse)
-@limiter.limit(settings.RATE_LIMIT)
 async def get_my_child_by_id(
     child_id: int,
     request: Request,
+    response: Response,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -95,10 +93,10 @@ async def get_my_child_by_id(
 
 
 @router.patch("/{child_id}", response_model=ChildProfileResponse)
-@limiter.limit(settings.RATE_LIMIT)
 async def patch_child_profile(
     child_id: int,
     request: Request,
+    response: Response,
     payload: ChildProfileUpdate = Body(...),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -118,10 +116,10 @@ async def patch_child_profile(
 
 
 @router.delete("/{child_id}", status_code=204)
-@limiter.limit(settings.RATE_LIMIT)
 async def delete_child_profile(
     child_id: int,
     request: Request,
+    response: Response,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
     redis: Redis = Depends(get_redis),

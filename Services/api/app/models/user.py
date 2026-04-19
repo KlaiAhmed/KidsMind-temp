@@ -71,6 +71,10 @@ class User(Base):
     last_login_at = Column(DateTime, nullable=True)
     failed_login_attempts = Column(Integer, default=0, nullable=False)
     locked_until = Column(DateTime, nullable=True)
+    token_valid_after = Column(DateTime(timezone=True), nullable=True)
+    password_changed_at = Column(DateTime(timezone=True), nullable=True)
+    email_changed_at = Column(DateTime(timezone=True), nullable=True)
+    mfa_changed_at = Column(DateTime(timezone=True), nullable=True)
 
     # RESET PASSWORD
     reset_token = Column(String(255), nullable=True)

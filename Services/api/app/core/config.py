@@ -7,7 +7,9 @@ Layer: Core
 Domain: Configuration
 """
 
-from pydantic import Field, field_validator
+import os
+
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Set
 
@@ -26,8 +28,7 @@ class Settings(BaseSettings):
     SERVICE_NAME: str = "KidsMind API Service"
 
     # App State
-    IS_PROD: bool = False
-    DEV_USER_ID: int | None = None
+    IS_PROD: bool = os.getenv("IS_PROD", "true").lower() == "true"
     logger.info(f"Running in {'production' if IS_PROD else 'development'} mode")
 
     # CORS configuration
@@ -35,10 +36,15 @@ class Settings(BaseSettings):
 
     # Auth tokens and cookies
     ACCESS_TOKEN_EXPIRE_SECONDS: int = 900
+    REFRESH_TOKEN_WEB_EXPIRE_SECONDS: int = 604800
+    REFRESH_TOKEN_MOBILE_EXPIRE_SECONDS: int = 2592000
+    # Legacy compatibility fallback used by older code paths.
     REFRESH_TOKEN_EXPIRE_SECONDS: int = 604800
+    JWT_AUD_WEB: str = "web-client"
+    JWT_AUD_MOBILE: str = "mobile-client"
     COOKIE_DOMAIN: str | None = None
     COOKIE_SAMESITE: str = "strict"
-    COOKIE_SECURE: bool = False if not IS_PROD else True
+    COOKIE_SECURE: bool | None = None
     CSRF_TOKEN_EXPIRE_SECONDS: int = 604800
 
     # Service Endpoints
@@ -74,7 +80,63 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     
     # App Config
+    DEV_MULTIPLIER: int = 1000
+
+    # Legacy global limits kept for backward compatibility during migration.
     RATE_LIMIT: str = "100/minute" if not IS_PROD else "5/minute"
+    AUTH_LOGIN_RATE_LIMIT: str = "5/15minute"
+    AUTH_REGISTER_RATE_LIMIT: str = "3/hour"
+    AUTH_REFRESH_RATE_LIMIT: str = "10/minute"
+
+    # Tier 0
+    RL_T0_IP_1M: int = 600
+
+    # Tier 1
+    RL_T1_USER_1M: int = 180
+    RL_T1_USER_1H: int = 5000
+
+    # Tier 2 (refresh)
+    RL_T2_WEB_USER_1M: int = 40
+    RL_T2_WEB_USER_1H: int = 600
+    RL_T2_MOBILE_USER_1M: int = 20
+    RL_T2_MOBILE_DEVICE_1M: int = 20
+    RL_T2_MOBILE_USER_1H: int = 300
+    RL_T2_RETRY_AFTER_SECONDS: int = 10
+
+    # Tier 3 (auth operations, dual-key)
+    RL_T3_LOGIN_IP_15M: int = 20
+    RL_T3_LOGIN_CREDENTIAL_15M: int = 8
+    RL_T3_REGISTER_IP_1H: int = 10
+    RL_T3_REGISTER_CREDENTIAL_1H: int = 3
+    RL_T3_LOGOUT_IP_1H: int = 120
+    RL_T3_LOGOUT_USER_1H: int = 60
+    RL_T3_LOGOUT_ALL_IP_1H: int = 30
+    RL_T3_LOGOUT_ALL_USER_1H: int = 10
+    RL_T3_VERIFY_PIN_IP_15M: int = 15
+    RL_T3_VERIFY_PIN_USER_15M: int = 5
+    RL_T3_LOCKOUT_FAILURE_THRESHOLD: int = 5
+    RL_T3_LOCKOUT_TTL_SECONDS: int = 15 * 60
+    RL_T3_LOCKOUT_TTL_DEV_SECONDS: int = 10
+
+    # Tier 4
+    RL_T4_USER_1M: int = 60
+    RL_T4_USER_1H: int = 1200
+
+    # Tier 5 (AI cost-controlled)
+    RL_T5_TEXT_BURST_1M: int = 6
+    RL_T5_TEXT_SUSTAINED_1H: int = 60
+    RL_T5_TEXT_DAILY: int = 200
+    RL_T5_VOICE_BURST_1M: int = 3
+    RL_T5_VOICE_SUSTAINED_1H: int = 30
+    RL_T5_VOICE_DAILY: int = 100
+
+    CAPTCHA_ENABLED: bool = os.getenv("CAPTCHA_ENABLED", "true").lower() == "true"
+    LOGIN_CAPTCHA_THRESHOLD: int = int(os.getenv("LOGIN_CAPTCHA_THRESHOLD", "3"))
+    LOGIN_LOCKOUT_THRESHOLD: int = int(os.getenv("LOGIN_LOCKOUT_THRESHOLD", "5"))
+    LOGIN_LOCKOUT_MINUTES: int = int(os.getenv("LOGIN_LOCKOUT_MINUTES", "15"))
+    MOBILE_MAX_ACTIVE_SESSIONS: int = 10
+    APP_ATTESTATION_ENABLED: bool = False
+    APP_ATTESTATION_STRICT: bool = False
     SERVICE_TOKEN: str = ""
     DUMMY_HASH: str 
     SECRET_KEY: str | None = None
@@ -101,5 +163,11 @@ class Settings(BaseSettings):
         if not v.strip():
             raise ValueError("SECRET_KEY cannot be empty")
         return v
+
+    @model_validator(mode="after")
+    def derive_cookie_secure_from_prod(self):
+        if self.COOKIE_SECURE is None:
+            self.COOKIE_SECURE = self.IS_PROD
+        return self
 
 settings = Settings()

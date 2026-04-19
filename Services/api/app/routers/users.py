@@ -9,25 +9,25 @@ Domain: Users
 
 import time
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
-from dependencies.authentication import get_current_user
+from dependencies.auth import get_current_user
 from dependencies.infrastructure import get_db
 from models.user import User
+from schemas.auth_schema import MessageResponse
 from schemas.user_schema import DeleteAccountResponse, UserFullResponse, UserSummaryResponse
-from services.user_service import soft_delete_user_account
+from services.user_service import revoke_all_user_sessions, soft_delete_user_account
 from utils.token_blocklist import blocklist_access_token_jti
-from utils.limiter import limiter
 from utils.logger import logger
 
 router = APIRouter()
 
 
 @router.get("/me", response_model=UserFullResponse)
-@limiter.limit("60/minute")
 async def get_current_user_full_data(
     request: Request,
+    response: Response,
     current_user: User = Depends(get_current_user),
 ) -> User:
     """
@@ -50,9 +50,9 @@ async def get_current_user_full_data(
 
 
 @router.get("/me/summary", response_model=UserSummaryResponse)
-@limiter.limit("60/minute")
 async def get_current_user_summary_data(
     request: Request,
+    response: Response,
     current_user: User = Depends(get_current_user),
 ) -> User:
     """
@@ -75,9 +75,9 @@ async def get_current_user_summary_data(
 
 
 @router.delete("/me", response_model=DeleteAccountResponse)
-@limiter.limit("60/minute")
 async def soft_delete_my_account(
     request: Request,
+    response: Response,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
@@ -85,7 +85,7 @@ async def soft_delete_my_account(
     timer = time.perf_counter()
     logger.info(f"Soft delete requested for user_id={current_user.id}")
 
-    access_token_payload = getattr(request.state, "access_token_payload", None)
+    access_token_payload = request.state.access_token_payload
     if not isinstance(access_token_payload, dict):
         raise HTTPException(status_code=401, detail="Invalid token")
 
@@ -102,3 +102,22 @@ async def soft_delete_my_account(
     logger.info(f"Soft delete completed for user_id={current_user.id} in {timer:.3f} seconds")
 
     return result
+
+
+@router.post("/logout-all", response_model=MessageResponse)
+async def logout_all_sessions(
+    request: Request,
+    response: Response,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Invalidate all issued tokens and revoke active refresh sessions for the current user."""
+    timer = time.perf_counter()
+    logger.info(f"Logout-all requested for user_id={current_user.id}")
+
+    revoke_all_user_sessions(db, current_user)
+
+    timer = time.perf_counter() - timer
+    logger.info(f"Logout-all completed for user_id={current_user.id} in {timer:.3f} seconds")
+
+    return {"message": "All sessions revoked successfully"}

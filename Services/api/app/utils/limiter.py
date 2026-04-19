@@ -1,5 +1,16 @@
-from slowapi import Limiter
-from slowapi.util import get_remote_address
-from core.config import  settings
+"""Passive SlowAPI compatibility shim.
 
-limiter = Limiter(key_func=get_remote_address, storage_uri=f"redis://:{settings.CACHE_PASSWORD}@cache:6379")
+Responsibility: Keep existing imports/decorator usage functional during
+rate-limit middleware migration without performing active enforcement.
+"""
+
+
+class PassiveLimiter:
+	def limit(self, *_args, **_kwargs):
+		def _decorator(func):
+			return func
+
+		return _decorator
+
+
+limiter = PassiveLimiter()

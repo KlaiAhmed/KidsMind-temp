@@ -21,22 +21,31 @@ def _build_error_response(
     message: str,
     error_code: str,
     errors: Iterable[ErrorItem] | None = None,
+    extra: dict[str, object] | None = None,
+    headers: dict[str, str] | None = None,
 ) -> JSONResponse:
     payload = ErrorResponse(
         message=message,
         error_code=error_code,
         errors=list(errors or []),
-    )
-    return JSONResponse(status_code=status_code, content=payload.model_dump())
+    ).model_dump()
+    if extra:
+        payload.update(extra)
+    return JSONResponse(status_code=status_code, content=payload, headers=headers)
 
 
-def _normalize_http_detail(detail: object) -> tuple[str, list[ErrorItem]]:
+def _normalize_http_detail(detail: object) -> tuple[str, list[ErrorItem], dict[str, object]]:
     if isinstance(detail, str):
-        return detail, []
+        return detail, [], {}
 
     if isinstance(detail, dict):
         message = detail.get("message") or detail.get("detail") or "Request failed"
-        return str(message), []
+        extra = {
+            key: value
+            for key, value in detail.items()
+            if key not in {"message", "detail", "errors"}
+        }
+        return str(message), [], extra
 
     if isinstance(detail, list):
         errors: list[ErrorItem] = []
@@ -53,9 +62,9 @@ def _normalize_http_detail(detail: object) -> tuple[str, list[ErrorItem]]:
                 )
 
         if errors:
-            return errors[0].message, errors
+            return errors[0].message, errors, {}
 
-    return "Request failed", []
+    return "Request failed", [], {}
 
 
 async def request_validation_exception_handler(
@@ -97,7 +106,7 @@ async def http_exception_handler(
     request: Request,
     exc: StarletteHTTPException,
 ) -> JSONResponse:
-    message, errors = _normalize_http_detail(exc.detail)
+    message, errors, extra = _normalize_http_detail(exc.detail)
 
     # Log 4xx warnings and 5xx errors
     if 400 <= exc.status_code < 500:
@@ -126,4 +135,6 @@ async def http_exception_handler(
         message=message,
         error_code=f"HTTP_{exc.status_code}",
         errors=errors,
+        extra=extra,
+        headers=exc.headers,
     )

@@ -8,11 +8,11 @@ Domain: Users Administration
 
 import time
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response
 from redis.asyncio import Redis
 from sqlalchemy.orm import Session
 
-from dependencies.authentication import get_current_admin_or_super_admin
+from dependencies.auth import get_current_admin_or_super_admin
 from dependencies.infrastructure import get_db, get_redis
 from models.child_profile import ChildProfile
 from models.user import User
@@ -31,7 +31,6 @@ from services.user_service import (
     hard_delete_child_by_id,
     hard_delete_user_account_by_id,
 )
-from utils.limiter import limiter
 from utils.logger import logger
 
 
@@ -39,9 +38,9 @@ router = APIRouter(dependencies=[Depends(get_current_admin_or_super_admin)])
 
 
 @router.get("/", response_model=list[UserFullResponse])
-@limiter.limit("60/minute")
 async def get_all_users_endpoint(
     request: Request,
+    response: Response,
     db: Session = Depends(get_db),
 ) -> list[User]:
     """Return all users. Restricted to admin/super_admin roles."""
@@ -55,10 +54,10 @@ async def get_all_users_endpoint(
 
 
 @router.get("/{user_id}", response_model=UserFullResponse)
-@limiter.limit("60/minute")
 async def get_user_by_id_endpoint(
     user_id: int,
     request: Request,
+    response: Response,
     db: Session = Depends(get_db),
 ) -> User:
     """Return a single user by id. Restricted to admin/super_admin roles."""
@@ -74,10 +73,10 @@ async def get_user_by_id_endpoint(
 
 
 @router.get("/{parent_id}/children", response_model=list[ChildProfileResponse])
-@limiter.limit("60/minute")
 async def get_children_by_parent_id_endpoint(
     parent_id: int,
     request: Request,
+    response: Response,
     db: Session = Depends(get_db),
 ) -> list[ChildProfile]:
     """Return all children owned by a parent id. Restricted to admin/super_admin roles."""
@@ -95,10 +94,10 @@ async def get_children_by_parent_id_endpoint(
 
 
 @router.delete("/{user_id}/hard", response_model=DeleteAccountResponse)
-@limiter.limit("60/minute")
 async def hard_delete_user_by_id_endpoint(
     user_id: int,
     request: Request,
+    response: Response,
     db: Session = Depends(get_db),
 ) -> dict:
     """Hard-delete a user by id, including owned child profiles."""
@@ -117,11 +116,11 @@ async def hard_delete_user_by_id_endpoint(
 
 
 @router.delete("/{parent_id}/children/{child_id}/hard", response_model=DeleteChildResponse)
-@limiter.limit("60/minute")
 async def hard_delete_child_by_id_endpoint(
     parent_id: int,
     child_id: int,
     request: Request,
+    response: Response,
     db: Session = Depends(get_db),
 ) -> dict:
     """Hard-delete a child's profile by id for a specific parent."""
@@ -144,10 +143,10 @@ async def hard_delete_child_by_id_endpoint(
 
 
 @router.patch("/{user_id}", response_model=UserFullResponse)
-@limiter.limit("60/minute")
 async def patch_user_by_id_endpoint(
     user_id: int,
     request: Request,
+    response: Response,
     payload: AdminUserUpdate = Body(...),
     db: Session = Depends(get_db),
 ) -> User:
@@ -177,11 +176,11 @@ async def patch_user_by_id_endpoint(
 
 
 @router.patch("/{parent_id}/children/{child_id}", response_model=ChildProfileResponse)
-@limiter.limit("60/minute")
 async def patch_child_by_id_endpoint(
     parent_id: int,
     child_id: int,
     request: Request,
+    response: Response,
     payload: ChildProfileUpdate = Body(...),
     db: Session = Depends(get_db),
     redis: Redis = Depends(get_redis),

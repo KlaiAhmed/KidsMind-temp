@@ -7,23 +7,25 @@ Layer: Router
 Domain: Infrastructure / Monitoring
 """
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Response
 
 from core.cache_client import get_cache_client
-from utils.limiter import limiter
 from utils.logger import logger
 
 router = APIRouter()
 
 
 @router.get("/", tags=["Health"])
-@limiter.limit("5/minute")
-async def health_check(request: Request) -> dict:
+async def health_check(request: Request, response: Response) -> dict:
     """
+    Health check is intentionally public — used by infrastructure probes (K8s, load balancers).
+    This endpoint returns no sensitive data and must not require authentication.
+
     Return application health status.
 
     Args:
         request: Incoming FastAPI request (required for rate limiter).
+        response: Response object used by SlowAPI to inject rate-limit headers.
 
     Returns:
         Dictionary containing application and cache connection status.

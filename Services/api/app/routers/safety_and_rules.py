@@ -9,7 +9,7 @@ Domain: Safety and Rules
 
 import time
 
-from fastapi import APIRouter, Body, Depends, Request
+from fastapi import APIRouter, Body, Depends, Request, Response
 from redis.asyncio import Redis
 from sqlalchemy.orm import Session
 
@@ -17,8 +17,7 @@ from controllers.safety_and_rules import (
     patch_safety_and_rules_controller,
     verify_parent_pin_controller,
 )
-from core.config import settings
-from dependencies.authentication import get_current_user
+from dependencies.auth import get_current_user
 from dependencies.infrastructure import get_db, get_redis
 from models.user import User
 from schemas.safety_and_rules_schema import (
@@ -28,16 +27,15 @@ from schemas.safety_and_rules_schema import (
     SafetyAndRulesVerifyPinResponse,
 )
 from services.child_profile_context_cache import invalidate_child_profile_context_cache
-from utils.limiter import limiter
 from utils.logger import logger
 
 router = APIRouter()
 
 
 @router.patch("/safety-and-rules", response_model=SafetyAndRulesPatchResponse)
-@limiter.limit(settings.RATE_LIMIT)
 async def patch_safety_and_rules(
     request: Request,
+    response: Response,
     payload: SafetyAndRulesPatchRequest = Body(...),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -57,9 +55,9 @@ async def patch_safety_and_rules(
 
 
 @router.post("/safety-and-rules/verify-parent-pin", response_model=SafetyAndRulesVerifyPinResponse)
-@limiter.limit("30/minute")
 async def verify_parent_pin(
     request: Request,
+    response: Response,
     payload: SafetyAndRulesVerifyPinRequest = Body(...),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),

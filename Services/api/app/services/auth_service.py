@@ -1,265 +1,126 @@
 """
 Authentication Service
 
-Responsibility: Implements core authentication business logic including
-registration, login, token refresh, and logout operations.
+Responsibility: Core auth primitives — token creation/verification, session
+management, password lockout, and cookie helpers. Consumed by the web and
+mobile auth service adapters.
 Layer: Service
 Domain: Auth
 """
 
+import asyncio
 import re
 import hashlib
 from datetime import datetime, timedelta, timezone
+from enum import Enum
 from uuid import uuid4
 
 import jwt
-from fastapi import HTTPException, Request, Response, status
-from fastapi.responses import JSONResponse
+from fastapi import HTTPException, Response, status
 from sqlalchemy.orm import Session
 
+from core.cache_client import get_cache_client
 from core.config import settings
+from core.rate_limit_policy import get_resolved_rate_limit_policy
 from models.refresh_token_session import RefreshTokenSession
 from models.user import User, UserRole
-from schemas.auth_schema import UserLogin, UserRegister
-from utils.csrf import generate_csrf_token
+from schemas.auth_schema import UserRegister
+from utils.csrf import generate_csrf_token as build_csrf_token
 from utils.manage_pwd import hash_password, verify_password
 from utils.logger import logger
 
 
-class AuthService:
-    def __init__(self, client_type: str, response: Response | None, db: Session):
-        """Store request-specific auth context for subsequent operations."""
-        self.db = db
-        self.client_type = client_type
-        self.response = response
+# ---------------------------------------------------------------------------
+# String enums — replace bare string literals across the auth domain
+# ---------------------------------------------------------------------------
 
-    async def register(self, payload: UserRegister) -> dict:
-        """Register a new parent account from step-1 onboarding fields."""
-        if not payload.agreed_to_terms:
-            logger.warning(
-                "Registration rejected: terms not accepted",
-                extra={"email": payload.email[:3] + "***"},
-            )
-            raise HTTPException(status_code=400, detail="Terms and conditions must be accepted")
-
-        existing_user = self.db.query(User).filter(User.email == payload.email).first()
-        if existing_user:
-            logger.warning(
-                "Registration rejected: email already exists",
-                extra={"email": payload.email[:3] + "***"},
-            )
-            raise HTTPException(status_code=409, detail="User already exists")
-
-        username = self._generate_unique_username(payload.email)
-        now = datetime.now(timezone.utc)
-        user = User(
-            email=payload.email,
-            username=username,
-            hashed_password=hash_password(payload.password),
-            role=UserRole.PARENT,
-            is_active=True,
-            is_verified=False,
-            country=payload.country,
-            timezone=payload.timezone,
-            consent_terms=payload.agreed_to_terms,
-            consent_data_processing=payload.agreed_to_terms,
-            consent_analytics=False,
-            consent_given_at=now,
-            mfa_enabled=False,
-        )
-
-        self.db.add(user)
-        self.db.commit()
-        self.db.refresh(user)
-
-        logger.info(
-            "New parent account registered",
-            extra={
-                "user_id": user.id,
-                "email": user.email[:3] + "***",
-                "role": user.role.value,
-            },
-        )
-        return {
-            "id": user.id,
-            "email": user.email,
-            "role": user.role,
-            "created_at": user.created_at,
-        }
-
-    def _generate_unique_username(self, email: str) -> str:
-        """Generate a deterministic unique username from the email prefix."""
-        base = email.split("@", 1)[0].strip().lower()
-        base = re.sub(r"[^a-z0-9_.-]", "", base) or "parent"
-        candidate = base[:100]
-
-        index = 1
-        while self.db.query(User).filter(User.username == candidate).first():
-            suffix = f"_{index}"
-            candidate = f"{base[:100 - len(suffix)]}{suffix}"
-            index += 1
-
-        return candidate
-
-    # Login
-    async def login(self, payload: UserLogin) -> dict:
-        """Authenticate user credentials and issue fresh access/refresh credentials."""
-        now = datetime.now(timezone.utc)
-        user = require_existing_user_or_reject(self.db, payload.email, payload.password)
-
-        ensure_account_is_active_for_login(user, payload.email)
-        ensure_account_not_locked(user, now, payload.email)
-        verify_password_or_apply_lockout(self.db, user, payload.password, now, payload.email)
-        reset_login_security_state(user, now)
-
-        access_token, refresh_token, refresh_jti, token_family = generate_tokens(user.id, user.role)
-        create_refresh_session(self.db, user.id, refresh_token, refresh_jti, token_family)
-        self.db.commit()
-
-        logger.info(
-            "User login successful",
-            extra={
-                "user_id": user.id,
-                "email": user.email[:3] + "***",
-                "client_type": self.client_type,
-            },
-        )
-
-        return deliver_tokens(self.response, self.client_type, user, access_token, refresh_token, "Login successful")
-
-    # Refresh Token
-    async def refresh_token(self, request: Request, refresh_token: str | None = None, authorization: str | None = None) -> dict:
-        """Rotate refresh token session and return newly issued credentials."""
-        provided_refresh_token = extract_refresh_token(self.client_type, request, refresh_token, authorization)
-        if not provided_refresh_token:
-            logger.warning(
-                "Token refresh rejected: no refresh token provided",
-                extra={"client_type": self.client_type},
-            )
-            raise HTTPException(status_code=401, detail="Refresh token is required")
-
-        payload = verify_refresh_payload(provided_refresh_token)
-        user_id = int(payload["sub"])
-        refresh_jti = payload["jti"]
-        token_family = payload["family"]
-
-        session = find_refresh_session(self.db, refresh_jti)
-        if not session:
-            logger.warning(
-                "Token refresh rejected: session not found",
-                extra={"user_id": user_id, "jti": refresh_jti[:8] + "***"},
-            )
-            raise HTTPException(status_code=401, detail="Refresh token session not found")
-
-        now = datetime.now(timezone.utc)
-        if session.revoked:
-            session.reuse_detected = True
-            revoke_token_family(self.db, user_id, token_family)
-            self.db.commit()
-            logger.warning(
-                "Token reuse detected — all sessions revoked",
-                extra={
-                    "user_id": user_id,
-                    "token_family": token_family[:8] + "***",
-                },
-            )
-            raise HTTPException(status_code=401, detail="Refresh token reuse detected")
-
-        if session.expires_at <= now:
-            session.revoked = True
-            session.revoked_at = now
-            self.db.commit()
-            logger.info(
-                "Token refresh rejected: token expired",
-                extra={"user_id": user_id},
-            )
-            raise HTTPException(status_code=401, detail="Refresh token has expired")
-
-        if session.token_hash != hash_token(provided_refresh_token):
-            logger.warning(
-                "Token refresh rejected: hash mismatch",
-                extra={"user_id": user_id},
-            )
-            raise HTTPException(status_code=401, detail="Invalid refresh token")
-
-        user = get_active_user_by_id(self.db, user_id)
-        access_token, new_refresh_token, new_refresh_jti, _ = generate_tokens(user.id, user.role, token_family=token_family)
-
-        session.revoked = True
-        session.revoked_at = now
-        session.replaced_by_jti = new_refresh_jti
-
-        create_refresh_session(self.db, user.id, new_refresh_token, new_refresh_jti, token_family)
-        self.db.commit()
-
-        logger.info(
-            "Token refresh successful",
-            extra={
-                "user_id": user_id,
-                "client_type": self.client_type,
-            },
-        )
-
-        return deliver_tokens(
-            self.response,
-            self.client_type,
-            user,
-            access_token,
-            new_refresh_token,
-            "Token refreshed successfully",
-        )
-
-    # Logout
-    async def logout(self, request: Request, refresh_token: str | None = None, authorization: str | None = None) -> dict:
-        """Revoke a refresh session when provided and clear browser cookies on web."""
-        provided_refresh_token = extract_refresh_token(self.client_type, request, refresh_token, authorization)
-        if not provided_refresh_token and self.client_type == "mobile":
-            logger.warning("Logout rejected: no refresh token provided for mobile client")
-            raise HTTPException(status_code=401, detail="Refresh token is required")
-
-        if provided_refresh_token:
-            try:
-                payload = verify_refresh_payload(provided_refresh_token)
-                user_id = payload.get("sub")
-                session = find_refresh_session(self.db, payload["jti"])
-                if session and not session.revoked:
-                    session.revoked = True
-                    session.revoked_at = datetime.now(timezone.utc)
-                    self.db.commit()
-                    logger.info(
-                        "User logout successful",
-                        extra={"user_id": user_id, "client_type": self.client_type},
-                    )
-                elif session and session.revoked:
-                    logger.info(
-                        "Logout called with already-revoked token",
-                        extra={"user_id": user_id},
-                    )
-            except HTTPException:
-                logger.warning("Logout called with invalid refresh token")
-
-        return build_logout_response(self.client_type, self.response)
+class ClientKind(str, Enum):
+    WEB = "web"
+    MOBILE = "mobile"
 
 
-def generate_tokens(user_id: int, role: str, token_family: str | None = None) -> tuple[str, str, str, str]:
+class TrustLevel(str, Enum):
+    NORMAL = "normal"
+    DEGRADED = "degraded"
+
+
+class AttestationStatus(str, Enum):
+    UNKNOWN = "unknown"
+    SKIPPED = "skipped"
+    PASSED = "passed"
+    FAILED = "failed"
+
+
+class TokenType(str, Enum):
+    ACCESS = "access"
+    REFRESH = "refresh"
+
+
+LOGIN_FAILURE_PREFIX = "auth:login:failures:ip:"
+LOGIN_LOCKOUT_PREFIX = "auth:login:lockout:ip:"
+SECURITY_EVENTS_STREAM = "auth:security-events"
+
+
+def resolved_login_lockout_ttl_seconds() -> int:
+    try:
+        return get_resolved_rate_limit_policy().t3_lockout_ttl_seconds
+    except Exception:
+        return max(settings.LOGIN_LOCKOUT_MINUTES * 60, 1)
+
+
+def resolved_login_failure_threshold() -> int:
+    try:
+        return get_resolved_rate_limit_policy().t3_lockout_failure_threshold
+    except Exception:
+        return settings.LOGIN_LOCKOUT_THRESHOLD
+
+
+# ---------------------------------------------------------------------------
+# Token creation & verification
+# ---------------------------------------------------------------------------
+
+def generate_tokens(
+    user_id: int,
+    role: str,
+    family_id: str | None = None,
+    *,
+    audience: str | None = None,
+    refresh_expires_seconds: int | None = None,
+    refresh_generation: int = 0,
+) -> tuple[str, str, str, str]:
     """Create signed access and refresh JWTs for a user."""
     access_jti = uuid4().hex
+    access_payload = {"sub": str(user_id), "role": role, "jti": access_jti, "type": TokenType.ACCESS}
+    if audience:
+        access_payload["aud"] = audience
+
     access_token = _create_token(
-        payload={"sub": str(user_id), "role": role, "jti": access_jti, "type": "access"},
+        payload=access_payload,
         expires_delta=timedelta(seconds=settings.ACCESS_TOKEN_EXPIRE_SECONDS),
         secret=settings.SECRET_ACCESS_KEY,
     )
 
-    refresh_family = token_family or uuid4().hex
+    refresh_family_id = family_id or uuid4().hex
     refresh_jti = uuid4().hex
+    refresh_payload = {
+        "sub": str(user_id),
+        "jti": refresh_jti,
+        "family_id": refresh_family_id,
+        # Keep legacy field until all old refresh tokens are phased out.
+        "family": refresh_family_id,
+        "generation": refresh_generation,
+        "type": TokenType.REFRESH,
+    }
+    if audience:
+        refresh_payload["aud"] = audience
 
     refresh_token = _create_token(
-        payload={"sub": str(user_id), "jti": refresh_jti, "family": refresh_family, "type": "refresh"},
-        expires_delta=timedelta(seconds=settings.REFRESH_TOKEN_EXPIRE_SECONDS),
+        payload=refresh_payload,
+        expires_delta=timedelta(seconds=refresh_expires_seconds or settings.REFRESH_TOKEN_EXPIRE_SECONDS),
         secret=settings.SECRET_REFRESH_KEY,
     )
 
-    return access_token, refresh_token, refresh_jti, refresh_family
+    return access_token, refresh_token, refresh_jti, refresh_family_id
 
 
 def _create_token(payload: dict, expires_delta: timedelta, secret: str) -> str:
@@ -273,16 +134,22 @@ def _create_token(payload: dict, expires_delta: timedelta, secret: str) -> str:
     return jwt.encode(to_encode, secret, algorithm="HS256")
 
 
-def verify_token(token: str, token_type: str) -> dict:
+def verify_token(token: str, token_type: str, expected_audience: str | None = None) -> dict:
     """Decode and validate a JWT, raising HTTP 401 on failure."""
-    secret = settings.SECRET_REFRESH_KEY if token_type == "refresh" else settings.SECRET_ACCESS_KEY
+    secret = settings.SECRET_REFRESH_KEY if token_type == TokenType.REFRESH else settings.SECRET_ACCESS_KEY
     try:
-        payload = jwt.decode(token, secret, algorithms=["HS256"])
+        decode_kwargs: dict = {"algorithms": ["HS256"]}
+        if expected_audience:
+            decode_kwargs["audience"] = expected_audience
+        else:
+            decode_kwargs["options"] = {"verify_aud": False}
+
+        payload = jwt.decode(token, secret, **decode_kwargs)
 
         payload_type = payload.get("type")
-        if token_type == "refresh" and payload_type != "refresh":
+        if token_type == TokenType.REFRESH and payload_type != TokenType.REFRESH:
             raise jwt.InvalidTokenError("Invalid token type")
-        if token_type == "access" and payload_type and payload_type != "access":
+        if token_type == TokenType.ACCESS and payload_type and payload_type != TokenType.ACCESS:
             raise jwt.InvalidTokenError("Invalid token type")
 
         return payload
@@ -299,6 +166,274 @@ def verify_token(token: str, token_type: str) -> dict:
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+
+# ---------------------------------------------------------------------------
+# Refresh session helpers
+# ---------------------------------------------------------------------------
+
+def find_refresh_session(db: Session, refresh_jti: str) -> RefreshTokenSession | None:
+    """Load a refresh session by token JTI."""
+    return db.query(RefreshTokenSession).filter(RefreshTokenSession.jti == refresh_jti).first()
+
+
+def create_refresh_session(
+    db: Session,
+    user_id: int,
+    refresh_token: str,
+    refresh_jti: str,
+    family_id: str,
+    *,
+    generation: int = 0,
+    session_id: str | None = None,
+    client_kind: str = ClientKind.MOBILE,
+    device_info: str | None = None,
+    refresh_expires_seconds: int | None = None,
+    attestation_status: str = AttestationStatus.UNKNOWN,
+    trust_level: str = TrustLevel.NORMAL,
+) -> None:
+    """Persist a new refresh token session record for rotation and revocation."""
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(seconds=refresh_expires_seconds or settings.REFRESH_TOKEN_EXPIRE_SECONDS)
+    session = RefreshTokenSession(
+        user_id=user_id,
+        jti=refresh_jti,
+        family_id=family_id,
+        session_id=session_id or uuid4().hex,
+        generation=generation,
+        token_hash=hash_token(refresh_token),
+        client_kind=client_kind,
+        device_info=device_info,
+        attestation_status=attestation_status,
+        trust_level=trust_level,
+        last_used_at=now,
+        expires_at=expires_at,
+        revoked=False,
+    )
+    db.add(session)
+
+
+def _parse_refresh_payload(payload: dict) -> tuple[str, str, int, int]:
+    """Extract and validate lineage claims from a verified refresh payload.
+
+    Returns (refresh_jti, family_id, payload_generation, user_id).
+    Raises HTTPException on missing or invalid claims.
+    """
+    refresh_jti = payload.get("jti")
+    family_id = payload.get("family_id") or payload.get("family")
+    try:
+        payload_generation = int(payload.get("generation", 0))
+    except (TypeError, ValueError):
+        payload_generation = -1
+
+    if not refresh_jti or not family_id or payload_generation < 0:
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+
+    try:
+        user_id = int(payload["sub"])
+    except (KeyError, TypeError, ValueError):
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+
+    return refresh_jti, family_id, payload_generation, user_id
+
+
+def _normalize_client_ip(client_ip: str | None) -> str:
+    normalized_ip = (client_ip or "").strip()
+    return normalized_ip or "unknown"
+
+
+def _login_failure_key(client_ip: str) -> str:
+    return f"{LOGIN_FAILURE_PREFIX}{_normalize_client_ip(client_ip)}"
+
+
+def _login_lockout_key(client_ip: str) -> str:
+    return f"{LOGIN_LOCKOUT_PREFIX}{_normalize_client_ip(client_ip)}"
+
+
+def _has_valid_challenge_token(captcha_token: str | None, pow_token: str | None) -> bool:
+    return bool((captcha_token or "").strip() or (pow_token or "").strip())
+
+
+def _build_refresh_replay_event(*, user_id: int, family_id: str) -> dict[str, str]:
+    return {
+        "event": "refresh_replay_detected",
+        "user_id": str(user_id),
+        "family_id": family_id,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+async def _publish_security_event(event_payload: dict[str, str]) -> None:
+    try:
+        redis_client = await get_cache_client()
+        await redis_client.xadd(SECURITY_EVENTS_STREAM, event_payload)
+    except Exception:
+        logger.exception("Failed to publish auth security event", extra={"event": event_payload.get("event")})
+
+
+def emit_refresh_replay_security_event(*, user_id: int, family_id: str) -> None:
+    event_payload = _build_refresh_replay_event(user_id=user_id, family_id=family_id)
+    logger.warning("refresh_replay_detected", extra=event_payload)
+    try:
+        asyncio.get_running_loop().create_task(_publish_security_event(event_payload))
+    except RuntimeError:
+        logger.warning("No running loop available for async security event publish", extra=event_payload)
+
+
+async def enforce_login_challenge(*, client_ip: str | None, captcha_token: str | None, pow_token: str | None) -> None:
+    normalized_ip = _normalize_client_ip(client_ip)
+    redis_client = await get_cache_client()
+
+    lockout_ttl = await redis_client.ttl(_login_lockout_key(normalized_ip))
+    if lockout_ttl and lockout_ttl > 0:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many failed login attempts",
+            headers={"Retry-After": str(lockout_ttl)},
+        )
+
+    if not settings.CAPTCHA_ENABLED:
+        return
+
+    failure_count_raw = await redis_client.get(_login_failure_key(normalized_ip))
+    try:
+        failure_count = int(failure_count_raw or 0)
+    except (TypeError, ValueError):
+        failure_count = 0
+
+    if failure_count >= settings.LOGIN_CAPTCHA_THRESHOLD and not _has_valid_challenge_token(captcha_token, pow_token):
+        raise HTTPException(
+            status_code=429,
+            detail={"captcha_required": True},
+        )
+
+
+async def register_login_failure(*, client_ip: str | None) -> int:
+    normalized_ip = _normalize_client_ip(client_ip)
+    redis_client = await get_cache_client()
+    failure_key = _login_failure_key(normalized_ip)
+    lockout_key = _login_lockout_key(normalized_ip)
+
+    failure_count = int(await redis_client.incr(failure_key))
+    lockout_ttl_seconds = resolved_login_lockout_ttl_seconds()
+    await redis_client.expire(failure_key, lockout_ttl_seconds)
+
+    if failure_count >= resolved_login_failure_threshold():
+        await redis_client.set(lockout_key, "1", ex=lockout_ttl_seconds)
+
+    return failure_count
+
+
+async def clear_login_failure_state(*, client_ip: str | None) -> None:
+    normalized_ip = _normalize_client_ip(client_ip)
+    redis_client = await get_cache_client()
+    await redis_client.delete(
+        _login_failure_key(normalized_ip),
+        _login_lockout_key(normalized_ip),
+    )
+
+
+def rotate_refresh_session(
+    db: Session,
+    *,
+    provided_token: str,
+    audience: str,
+    refresh_expires_seconds: int,
+    client_kind: str,
+) -> tuple[User, str, str]:
+    """Verify, rotate, and persist a refresh token session.
+
+    Returns (user, new_access_token, new_refresh_token).
+    Raises HTTPException on any validation failure.
+    """
+    payload = verify_token(provided_token, TokenType.REFRESH, expected_audience=audience)
+    refresh_jti, family_id, payload_generation, user_id = _parse_refresh_payload(payload)
+
+    session = (
+        db.query(RefreshTokenSession)
+        .filter(RefreshTokenSession.jti == refresh_jti)
+        .with_for_update()
+        .first()
+    )
+    if not session:
+        revoke_refresh_family(db, user_id, family_id)
+        db.commit()
+        emit_refresh_replay_security_event(user_id=user_id, family_id=family_id)
+        raise HTTPException(status_code=401, detail="Replay detected")
+
+    if session.user_id != user_id:
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+
+    now = datetime.now(timezone.utc)
+    if session.revoked or session.generation != payload_generation:
+        session.reuse_detected = True
+        revoke_refresh_family(db, user_id, family_id)
+        db.commit()
+        emit_refresh_replay_security_event(user_id=user_id, family_id=family_id)
+        raise HTTPException(status_code=401, detail="Replay detected")
+
+    session_expires_at = session.expires_at
+    if session_expires_at.tzinfo is None:
+        session_expires_at = session_expires_at.replace(tzinfo=timezone.utc)
+    else:
+        session_expires_at = session_expires_at.astimezone(timezone.utc)
+
+    if session_expires_at <= now:
+        session.revoked = True
+        session.revoked_at = now
+        db.commit()
+        raise HTTPException(status_code=401, detail="Refresh token has expired")
+
+    if session.token_hash != hash_token(provided_token):
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+
+    user = get_active_user_by_id(db, user_id)
+    new_generation = payload_generation + 1
+    access_token, new_refresh_token, new_refresh_jti, _ = generate_tokens(
+        user.id,
+        user.role,
+        family_id=family_id,
+        audience=audience,
+        refresh_expires_seconds=refresh_expires_seconds,
+        refresh_generation=new_generation,
+    )
+
+    session.revoked = True
+    session.revoked_at = now
+    session.last_used_at = now
+    session.replaced_by_jti = new_refresh_jti
+
+    create_refresh_session(
+        db,
+        user.id,
+        new_refresh_token,
+        new_refresh_jti,
+        family_id,
+        generation=new_generation,
+        session_id=session.session_id,
+        client_kind=client_kind,
+        device_info=session.device_info,
+        refresh_expires_seconds=refresh_expires_seconds,
+        attestation_status=session.attestation_status,
+        trust_level=session.trust_level,
+    )
+    db.commit()
+
+    return user, access_token, new_refresh_token
+
+
+def revoke_refresh_family(db: Session, user_id: int, family_id: str) -> None:
+    """Revoke every active refresh token session in the same token family."""
+    now = datetime.now(timezone.utc)
+    db.query(RefreshTokenSession).filter(
+        RefreshTokenSession.user_id == user_id,
+        RefreshTokenSession.family_id == family_id,
+        RefreshTokenSession.revoked.is_(False),
+    ).update({"revoked": True, "revoked_at": now}, synchronize_session="fetch")
+
+
+# ---------------------------------------------------------------------------
+# Cookie helpers
+# ---------------------------------------------------------------------------
 
 def get_cookie_config() -> dict:
     """Return runtime cookie configuration for auth cookies."""
@@ -323,21 +458,33 @@ def build_user_data(user: User) -> dict:
     }
 
 
-def set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:
+def generate_csrf_token(session_id_or_user_id: str) -> str:
+    return build_csrf_token(session_id_or_user_id)
+
+
+def set_auth_cookies(
+    response: Response,
+    access_token: str,
+    refresh_token: str,
+    *,
+    access_cookie_path: str = "/api",
+    refresh_cookie_path: str = "/api/web/auth",
+    refresh_max_age: int | None = None,
+) -> None:
     """Set access and refresh HttpOnly cookies on the response."""
     cookie_config = get_cookie_config()
     response.set_cookie(
         key="access_token",
         value=access_token,
         max_age=settings.ACCESS_TOKEN_EXPIRE_SECONDS,
-        path="/",
+        path=access_cookie_path,
         **cookie_config,
     )
     response.set_cookie(
         key="refresh_token",
         value=refresh_token,
-        max_age=settings.REFRESH_TOKEN_EXPIRE_SECONDS,
-        path="/",
+        max_age=refresh_max_age or settings.REFRESH_TOKEN_EXPIRE_SECONDS,
+        path=refresh_cookie_path,
         **cookie_config,
     )
 
@@ -347,7 +494,7 @@ def set_csrf_cookie(response: Response, csrf_token: str) -> None:
         key="csrf_token",
         value=csrf_token,
         max_age=settings.CSRF_TOKEN_EXPIRE_SECONDS,
-        path="/",
+        path="/api",
         httponly=False,
         secure=settings.COOKIE_SECURE or settings.IS_PROD,
         samesite=settings.COOKIE_SAMESITE,
@@ -358,19 +505,19 @@ def set_csrf_cookie(response: Response, csrf_token: str) -> None:
 def clear_auth_cookies(response: Response) -> None:
     """Expire auth cookies for browser logout."""
     cookie_config = get_cookie_config()
-    response.set_cookie(key="access_token", value="", max_age=0, path="/", **cookie_config)
+    response.set_cookie(key="access_token", value="", max_age=0, path="/api", **cookie_config)
     response.set_cookie(
         key="refresh_token",
         value="",
         max_age=0,
-        path="/",
+        path="/api/web/auth",
         **cookie_config,
     )
     response.set_cookie(
         key="csrf_token",
         value="",
         max_age=0,
-        path="/",
+        path="/api",
         httponly=False,
         secure=settings.COOKIE_SECURE or settings.IS_PROD,
         samesite=settings.COOKIE_SAMESITE,
@@ -378,111 +525,9 @@ def clear_auth_cookies(response: Response) -> None:
     )
 
 
-def deliver_tokens(
-    response: Response,
-    client_type: str,
-    user: User,
-    access_token: str,
-    refresh_token: str,
-    message: str,
-) -> Response | dict:
-    """Deliver tokens through cookies for web or JSON for mobile clients."""
-    if client_type == "web":
-        csrf_token = generate_csrf_token(str(user.id))
-        web_response = JSONResponse(
-            content={
-                "message": message,
-                "user": build_user_data(user),
-                "csrf_token": csrf_token,
-            }
-        )
-        set_auth_cookies(web_response, access_token, refresh_token)
-        set_csrf_cookie(web_response, csrf_token)
-        return web_response
-
-    return {
-        "access_token": access_token,
-        "refresh_token": refresh_token,
-        "token_type": "bearer",
-        "expires_in": settings.ACCESS_TOKEN_EXPIRE_SECONDS,
-        "user": build_user_data(user),
-    }
-
-
-def build_logout_response(client_type: str, response: Response) -> Response | dict:
-    """Return logout payload while ensuring cookie clearing is preserved for web clients."""
-    if client_type == "web":
-        web_response = JSONResponse(content={"message": "Logout successful"})
-        clear_auth_cookies(web_response)
-        return web_response
-
-    return {"message": "Logout successful"}
-
-
-def extract_refresh_token(
-    client_type: str,
-    request: Request | None,
-    refresh_token: str | None,
-    authorization: str | None,
-) -> str | None:
-    """Extract a refresh token from cookies, auth header, or body fallback."""
-    if client_type == "web":
-        return request.cookies.get("refresh_token") if request else None
-
-    if authorization and authorization.lower().startswith("bearer "):
-        return authorization.split(" ", 1)[1].strip()
-
-    return refresh_token
-
-
-def verify_refresh_payload(token: str) -> dict:
-    """Validate refresh token and ensure required token lineage claims exist."""
-    payload = verify_token(token, "refresh")
-    refresh_jti = payload.get("jti")
-    token_family = payload.get("family")
-
-    if not refresh_jti or not token_family:
-        raise HTTPException(status_code=401, detail="Invalid refresh token")
-
-    return payload
-
-
-def find_refresh_session(db: Session, refresh_jti: str) -> RefreshTokenSession | None:
-    """Load a refresh session by token JTI."""
-    return db.query(RefreshTokenSession).filter(RefreshTokenSession.jti == refresh_jti).first()
-
-
-def create_refresh_session(db: Session, user_id: int, refresh_token: str, refresh_jti: str, token_family: str) -> None:
-    """Persist a new refresh token session record for rotation and revocation."""
-    expires_at = datetime.now(timezone.utc) + timedelta(seconds=settings.REFRESH_TOKEN_EXPIRE_SECONDS)
-    session = RefreshTokenSession(
-        user_id=user_id,
-        jti=refresh_jti,
-        token_family=token_family,
-        token_hash=hash_token(refresh_token),
-        expires_at=expires_at,
-        revoked=False,
-    )
-    db.add(session)
-
-
-def revoke_token_family(db: Session, user_id: int, token_family: str) -> None:
-    """Revoke every active refresh token session in the same token family."""
-    sessions = (
-        db.query(RefreshTokenSession)
-        .filter(
-            RefreshTokenSession.user_id == user_id,
-            RefreshTokenSession.token_family == token_family,
-            RefreshTokenSession.revoked.is_(False),
-        )
-        .all()
-    )
-
-    now = datetime.now(timezone.utc)
-    for session in sessions:
-        session.revoked = True
-        session.revoked_at = now
-
+# ---------------------------------------------------------------------------
+# Login credential helpers
+# ---------------------------------------------------------------------------
 
 def require_existing_user_or_reject(db: Session, email: str, password: str) -> User:
     """Load a user by email or raise a uniform invalid-credentials error."""
@@ -503,16 +548,20 @@ def ensure_account_not_locked(user: User, now: datetime, email: str) -> None:
     if user.locked_until:
         locked_until_utc = user.locked_until.replace(tzinfo=timezone.utc) if user.locked_until.tzinfo is None else user.locked_until
         if locked_until_utc > now:
-            time_remaining = int((locked_until_utc - now).total_seconds() // 60)
+            retry_after_seconds = int((locked_until_utc - now).total_seconds())
             logger.warning(
                 "Login attempt for locked account",
                 extra={
                     "email": email[:3] + "***",
-                    "time_remaining_minutes": time_remaining,
+                    "retry_after_seconds": retry_after_seconds,
                     "user_id": user.id,
                 },
             )
-            raise HTTPException(status_code=403, detail=f"Account is locked. Please try again in {time_remaining} minutes.")
+            raise HTTPException(
+                status_code=429,
+                detail="Too many failed login attempts",
+                headers={"Retry-After": str(max(retry_after_seconds, 1))},
+            )
 
 
 def ensure_account_is_active_for_login(user: User, email: str) -> None:
@@ -533,7 +582,7 @@ def ensure_account_is_active_for_login(user: User, email: str) -> None:
 
 
 def verify_password_or_apply_lockout(db: Session, user: User, password: str, now: datetime, email: str) -> None:
-    """Validate password and apply progressive lockout on failed attempts."""
+    """Validate password and apply lockout state for repeated failures."""
     if verify_password(password, user.hashed_password):
         return
 
@@ -547,22 +596,10 @@ def verify_password_or_apply_lockout(db: Session, user: User, password: str, now
         },
     )
 
-    if user.failed_login_attempts >= 10:
-        user.locked_until = now + timedelta(hours=24)
-        logger.warning(
-            "Suspicious activity detected — account locked 24h",
-            extra={"user_id": user.id, "attempt_count": user.failed_login_attempts},
-        )
-    elif user.failed_login_attempts >= 8:
-        user.locked_until = now + timedelta(hours=12)
-        logger.warning(
-            "Account locked 12h due to repeated failures",
-            extra={"user_id": user.id, "attempt_count": user.failed_login_attempts},
-        )
-    elif user.failed_login_attempts >= 5:
-        user.locked_until = now + timedelta(minutes=30)
+    if user.failed_login_attempts >= settings.LOGIN_LOCKOUT_THRESHOLD:
+        user.locked_until = now + timedelta(minutes=settings.LOGIN_LOCKOUT_MINUTES)
         logger.info(
-            "Account locked 30min due to failures",
+            "Account locked due to failures",
             extra={"user_id": user.id, "attempt_count": user.failed_login_attempts},
         )
 
@@ -582,4 +619,59 @@ def get_active_user_by_id(db: Session, user_id: int) -> User:
     user = db.query(User).filter(User.id == user_id, User.is_active.is_(True), User.deleted_at.is_(None)).first()
     if not user:
         raise HTTPException(status_code=401, detail="User not found or inactive")
+    return user
+
+
+def generate_unique_username(db: Session, email: str) -> str:
+    """Generate a deterministic unique username from the email prefix."""
+    base = email.split("@", 1)[0].strip().lower()
+    base = re.sub(r"[^a-z0-9_.-]", "", base) or "parent"
+    candidate = base[:100]
+
+    index = 1
+    while db.query(User).filter(User.username == candidate).first():
+        suffix = f"_{index}"
+        candidate = f"{base[:100 - len(suffix)]}{suffix}"
+        index += 1
+
+    return candidate
+
+
+def create_parent_user(db: Session, payload: UserRegister) -> User:
+    """Create and persist a parent user from registration payload."""
+    if not payload.agreed_to_terms:
+        logger.warning(
+            "Registration rejected: terms not accepted",
+            extra={"email": payload.email[:3] + "***"},
+        )
+        raise HTTPException(status_code=400, detail="Terms and conditions must be accepted")
+
+    existing_user = db.query(User).filter(User.email == payload.email).first()
+    if existing_user:
+        logger.warning(
+            "Registration rejected: email already exists",
+            extra={"email": payload.email[:3] + "***"},
+        )
+        raise HTTPException(status_code=409, detail="User already exists")
+
+    now = datetime.now(timezone.utc)
+    user = User(
+        email=payload.email,
+        username=generate_unique_username(db, payload.email),
+        hashed_password=hash_password(payload.password),
+        role=UserRole.PARENT,
+        is_active=True,
+        is_verified=False,
+        country=payload.country,
+        timezone=payload.timezone,
+        consent_terms=payload.agreed_to_terms,
+        consent_data_processing=payload.agreed_to_terms,
+        consent_analytics=False,
+        consent_given_at=now,
+        mfa_enabled=False,
+    )
+
+    db.add(user)
+    db.commit()
+    db.refresh(user)
     return user

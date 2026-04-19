@@ -63,6 +63,12 @@ class UserRegister(BaseModel):
         return self
 
 
+class MobileRegisterRequest(UserRegister):
+    attestation_token: str | None = None
+    attestation_platform: str | None = None
+    device_info: str | None = None
+
+
 class RegisterResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -74,6 +80,8 @@ class RegisterResponse(BaseModel):
 class UserLogin(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8)
+    captcha_token: str | None = None
+    pow_token: str | None = None
 
     @field_validator("password")
     @classmethod
@@ -105,9 +113,26 @@ class LogoutRequest(BaseModel):
     refresh_token: str | None = None
 
 
+class MobileRefreshRequest(BaseModel):
+    refresh_token: str = Field(min_length=1)
+
+
+class MobileLogoutRequest(BaseModel):
+    refresh_token: str = Field(min_length=1)
+
+
 class AuthUser(BaseModel):
     id: int
     email: EmailStr
+
+
+class MessageResponse(BaseModel):
+    message: str
+
+
+class WebAuthResponse(BaseModel):
+    message: str
+    user: AuthUser
 
 
 class MobileTokenResponse(BaseModel):

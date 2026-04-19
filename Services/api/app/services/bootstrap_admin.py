@@ -9,6 +9,7 @@ Domain: Auth / Admin
 from datetime import datetime, timezone
 
 from sqlalchemy import or_
+from sqlalchemy.exc import ProgrammingError
 
 from core.config import settings
 from core.database import SessionLocal
@@ -31,11 +32,20 @@ def ensure_super_admin_exists() -> None:
 
     db = SessionLocal()
     try:
-        existing_user = (
-            db.query(User)
-            .filter(or_(User.email == email, User.username == username))
-            .first()
-        )
+        try:
+            existing_user = (
+                db.query(User)
+                .filter(or_(User.email == email, User.username == username))
+                .first()
+            )
+        except ProgrammingError as exc:
+            db.rollback()
+            logger.exception(
+                "Schema drift detected during super admin bootstrap. Run 'alembic upgrade head' from services/api before starting the server."
+            )
+            raise RuntimeError(
+                "Schema drift detected in users table. Run 'alembic upgrade head' from services/api before starting the server."
+            ) from exc
 
         if existing_user:
             updated = False
