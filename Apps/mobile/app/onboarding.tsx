@@ -72,7 +72,7 @@ export default function OnboardingScreen() {
 
   function handleNext() {
     if (isLast) {
-      router.replace('/(auth)/login' as never);
+      router.replace('/(auth)/register' as never);
     } else {
       flatListRef.current?.scrollToIndex({
         index: activeIndex + 1,
@@ -82,6 +82,10 @@ export default function OnboardingScreen() {
   }
 
   function handleSkip() {
+    router.replace('/(auth)/register' as never);
+  }
+
+  function handleAlreadyHaveAccount() {
     router.replace('/(auth)/login' as never);
   }
 
@@ -132,7 +136,7 @@ export default function OnboardingScreen() {
           style={styles.ctaButton}
         />
         {isLast && (
-          <TouchableOpacity onPress={handleSkip} style={styles.existingAccountLink}>
+          <TouchableOpacity onPress={handleAlreadyHaveAccount} style={styles.existingAccountLink}>
             <Text style={styles.existingAccountText}>
               I already have an account
             </Text>
