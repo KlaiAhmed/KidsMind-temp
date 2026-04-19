@@ -65,6 +65,9 @@ def init_db() -> None:
     """
     import models.user  # noqa: F401
     import models.child_profile  # noqa: F401
+    import models.child_rules  # noqa: F401
+    import models.media_asset  # noqa: F401
+    import models.avatar_tier_threshold  # noqa: F401
     import models.refresh_token_session  # noqa: F401
 
     Base.metadata.create_all(bind=engine)

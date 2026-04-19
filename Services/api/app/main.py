@@ -31,14 +31,17 @@ from core.rate_limit_policy import (
 from middlewares.rate_limit_middleware import RateLimitMiddleware
 from middlewares.csrf_middleware import CSRFMiddleware
 from routers.mobile_auth import router as mobile_auth_router
+from routers.admin_media import router as admin_media_router
 from routers.admin_users import router as admin_users_router
 from routers.chat import router as chat_router
 from routers.children import router as children_router
 from routers.health import router as health_router
+from routers.media import router as media_router
 from routers.safety_and_rules import router as safety_and_rules_router
 from routers.users import router as users_router
 from routers.web_auth import router as web_auth_router
 from services.bootstrap_admin import ensure_super_admin_exists
+from services.media_cache_service import warm_base_avatar_cache
 from utils.limiter import limiter
 from utils.logger import logger
 from utils.upstream_headers import build_service_headers
@@ -101,6 +104,9 @@ async def lifespan(app: FastAPI):
         ensure_super_admin_exists()
         logger.info("Super admin bootstrap completed")
 
+        await warm_base_avatar_cache()
+        logger.info("Base avatar cache warm-up completed")
+
         logger.info(
             "Application startup complete",
             extra={
@@ -160,6 +166,8 @@ def create_app() -> FastAPI:
     app.include_router(health_router, prefix="", tags=["Health"])
     app.include_router(web_auth_router, prefix="/api/web/auth", tags=["Web Auth"])
     app.include_router(mobile_auth_router, prefix="/api/mobile/auth", tags=["Mobile Auth"])
+    app.include_router(media_router, prefix="/api/v1/media", tags=["Media"])
+    app.include_router(admin_media_router, prefix="/api/v1/media/admin", tags=["Admin Media"])
     app.include_router(chat_router, prefix="/api/v1/chat", tags=["Chat"])
     app.include_router(children_router, prefix="/api/v1/children", tags=["Children"])
     app.include_router(safety_and_rules_router, prefix="/api/v1", tags=["Safety and Rules"])

@@ -45,6 +45,10 @@ def _is_me_route(request: Request) -> bool:
     return "me" in segments
 
 
+def _is_media_route(request: Request) -> bool:
+    return request.url.path.startswith("/api/v1/media")
+
+
 def _extract_bearer_token(authorization: str | None) -> str | None:
     if not authorization:
         return None
@@ -122,6 +126,7 @@ async def get_web_user(
     is_bypass_eligible = (
         not settings.IS_PROD
         and not _is_me_route(request)
+        and not _is_media_route(request)
         and not _is_strict_auth_route(request)
     )
     if is_bypass_eligible:
@@ -182,7 +187,7 @@ async def get_current_user(
     if has_cookies:
         return await get_web_user(request=request, authorization=authorization, db=db)
 
-    if not settings.IS_PROD and not _is_me_route(request) and not _is_strict_auth_route(request):
+    if not settings.IS_PROD and not _is_me_route(request) and not _is_media_route(request) and not _is_strict_auth_route(request):
         return await get_web_user(request=request, authorization=authorization, db=db)
     raise HTTPException(status_code=401, detail="No credentials")
 

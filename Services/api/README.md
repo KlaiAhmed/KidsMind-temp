@@ -176,8 +176,8 @@ Mental model in one sentence: routers define HTTP contracts, controllers orchest
 | GET | `/api/v1/children` | Access token | T1 read | Parent | List children |
 | GET | `/api/v1/children/{child_id}` | Access token | T1 read | Parent | Get child |
 | PATCH | `/api/v1/children/{child_id}` | Access token | T4 write | Parent | Update child + invalidate cache |
+| PATCH | `/api/v1/children/{child_id}/rules` | Access token | T4 write | Parent | Update child rules (+ optional parent PIN) + invalidate cache |
 | DELETE | `/api/v1/children/{child_id}` | Access token | T4 write | Parent | Delete child + invalidate cache |
-| PATCH | `/api/v1/safety-and-rules` | Access token | T4 write | Parent | Update safety + parent PIN |
 | POST | `/api/v1/safety-and-rules/verify-parent-pin` | Access token | T3 verify_parent_pin | Parent | Verify parent PIN |
 | POST | `/api/v1/chat/text/{user_id}/{child_id}/{session_id}` | Access token + ownership | T5 text | Web/Mobile | Text chat (SSE optional) |
 | POST | `/api/v1/chat/voice/{user_id}/{child_id}/{session_id}` | Access token + ownership | T5 voice | Web/Mobile | Voice chat (SSE optional) |
@@ -231,12 +231,12 @@ Important fields and why they matter:
 - `education_stage`: pedagogical baseline.
 - `is_accelerated`: child is ahead of standard stage for age.
 - `is_below_expected_stage`: child is behind standard stage for age.
-- `settings_json`: parental controls (`daily_limit_minutes`, `allowed_subjects`, `allowed_weekdays`, `voice_enabled`, `store_audio_history`).
+- `child_rules`: normalized parental controls (`daily_limit_minutes`, subject allow/block lists, typed `week_schedule`, voice/audio/history toggles, and content safety level).
 
 Rules:
 - Max 5 child profiles per parent.
 - Context cache TTL is 1 hour (`child:profile:{child_id}`), invalidated on profile patch/delete.
-- Default `settings_json`: `daily_limit_minutes=30`, all 6 default subjects, all weekdays, `voice_enabled=true`, `store_audio_history=false`.
+- Every child profile has a one-to-one `child_rules` record with safe defaults (`voice_mode_enabled=true`, `audio_storage_enabled=false`, `conversation_history_enabled=true`, `content_safety_level=strict`).
 
 ### Account deletion flow
 
@@ -337,7 +337,8 @@ Mental model in one sentence: schema evolution should be migration-first; startu
 ### Core tables
 
 - `users`: identities, roles, consent, auth state, lockout counters, and token invalidation timestamps.
-- `child_profiles`: parent-owned learning profiles and parental controls.
+- `child_profiles`: parent-owned learning profiles.
+- `child_rules`: normalized one-to-one parental controls per child profile.
 - `refresh_token_sessions`: refresh lineage (`family_id`, `generation`), session metadata, and replay flags.
 
 ### Commands

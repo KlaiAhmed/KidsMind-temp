@@ -69,6 +69,8 @@ def normalize_education_stage(education_stage: EducationStage | str) -> Educatio
     canonical = raw_stage.strip().upper()
     if canonical == "PRIMARY_SCHOOL":
         canonical = EducationStage.PRIMARY.value
+    if canonical == "SECONDARY_SCHOOL":
+        canonical = EducationStage.SECONDARY.value
 
     if canonical == EducationStage.KINDERGARTEN.value:
         return EducationStage.KINDERGARTEN
@@ -76,7 +78,10 @@ def normalize_education_stage(education_stage: EducationStage | str) -> Educatio
         return EducationStage.PRIMARY
     if canonical == EducationStage.SECONDARY.value:
         return EducationStage.SECONDARY
-    raise ValueError("education_stage must be one of KINDERGARTEN, PRIMARY, SECONDARY")
+    raise ValueError(
+        "education_stage must be one of KINDERGARTEN, PRIMARY, SECONDARY"
+        " (aliases PRIMARY_SCHOOL and SECONDARY_SCHOOL are accepted)"
+    )
 
 
 def get_standard_age_group_for_stage(education_stage: EducationStage | str) -> str:

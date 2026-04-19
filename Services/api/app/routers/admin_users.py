@@ -16,7 +16,7 @@ from dependencies.auth import get_current_admin_or_super_admin
 from dependencies.infrastructure import get_db, get_redis
 from models.child_profile import ChildProfile
 from models.user import User
-from schemas.child_profile_schema import ChildProfileResponse, ChildProfileUpdate
+from schemas.child_profile_schema import ChildProfileRead, ChildProfileUpdate
 from schemas.user_schema import (
     AdminUserUpdate,
     DeleteAccountResponse,
@@ -72,7 +72,7 @@ async def get_user_by_id_endpoint(
     return user
 
 
-@router.get("/{parent_id}/children", response_model=list[ChildProfileResponse])
+@router.get("/{parent_id}/children", response_model=list[ChildProfileRead])
 async def get_children_by_parent_id_endpoint(
     parent_id: int,
     request: Request,
@@ -175,7 +175,7 @@ async def patch_user_by_id_endpoint(
     return user
 
 
-@router.patch("/{parent_id}/children/{child_id}", response_model=ChildProfileResponse)
+@router.patch("/{parent_id}/children/{child_id}", response_model=ChildProfileRead)
 async def patch_child_by_id_endpoint(
     parent_id: int,
     child_id: int,
@@ -204,7 +204,7 @@ async def patch_child_by_id_endpoint(
 
     update_data = payload.model_dump(exclude_unset=True)
     if update_data:
-        for field in ("nickname", "languages", "avatar", "settings_json"):
+        for field in ("nickname", "languages", "avatar"):
             if field in update_data:
                 setattr(child_profile, field, update_data[field])
 

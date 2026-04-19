@@ -147,6 +147,17 @@ def _raw_endpoint_rules() -> list[EndpointRule]:
         EndpointRule("GET", "/api/v1/chat/history/{user_id}/{child_id}/{session_id}", "T1", "chat_history_get", "chat_history_get"),
         EndpointRule("DELETE", "/api/v1/chat/history/{user_id}/{child_id}/{session_id}", "T4", "chat_history_delete", "chat_history_delete"),
 
+        EndpointRule("POST", "/api/v1/media/upload", "T4", "media_upload", "media_upload"),
+        EndpointRule("GET", "/api/v1/media/download/{media_id}", "T1", "media_download", "media_download"),
+
+        EndpointRule("GET", "/api/v1/media/admin/avatars", "T1", "admin_media_avatars_list", "admin_media_avatars_list"),
+        EndpointRule("PATCH", "/api/v1/media/admin/avatars/{media_id}", "T4", "admin_media_avatar_patch", "admin_media_avatar_patch"),
+        EndpointRule("DELETE", "/api/v1/media/admin/avatars/{media_id}", "T4", "admin_media_avatar_delete", "admin_media_avatar_delete"),
+        EndpointRule("PATCH", "/api/v1/media/admin/avatar-thresholds", "T4", "admin_media_thresholds_patch", "admin_media_thresholds_patch"),
+        EndpointRule("GET", "/api/v1/media/admin/badges", "T1", "admin_media_badges_list", "admin_media_badges_list"),
+        EndpointRule("PATCH", "/api/v1/media/admin/badges/{media_id}", "T4", "admin_media_badge_patch", "admin_media_badge_patch"),
+        EndpointRule("DELETE", "/api/v1/media/admin/badges/{media_id}", "T4", "admin_media_badge_delete", "admin_media_badge_delete"),
+
         EndpointRule("POST", "/api/v1/children", "T4", "children_create", "children_create"),
         EndpointRule("GET", "/api/v1/children", "T1", "children_list", "children_list"),
         EndpointRule("GET", "/api/v1/children/{child_id}", "T1", "children_get", "children_get"),

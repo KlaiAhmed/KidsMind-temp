@@ -9,7 +9,7 @@ Domain: Children
 
 import time
 
-from fastapi import APIRouter, Body, Depends, Request, Response
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response
 from redis.asyncio import Redis
 from sqlalchemy.orm import Session
 
@@ -19,18 +19,25 @@ from controllers.children import (
     get_child_controller,
     list_children_controller,
     update_child_controller,
+    update_child_rules_controller,
 )
 from dependencies.auth import get_current_user
 from dependencies.infrastructure import get_db, get_redis
-from models.user import User
-from schemas.child_profile_schema import ChildProfileCreate, ChildProfileResponse, ChildProfileUpdate
+from models.user import User, UserRole
+from schemas.child_profile_schema import (
+    ChildProfileCreate,
+    ChildProfileRead,
+    ChildProfileUpdate,
+    ChildRulesRead,
+    ChildRulesUpdate,
+)
 from services.child_profile_context_cache import invalidate_child_profile_context_cache
 from utils.logger import logger
 
 router = APIRouter()
 
 
-@router.post("", response_model=ChildProfileResponse, status_code=201)
+@router.post("", response_model=ChildProfileRead, status_code=201)
 async def create_child_profile(
     request: Request,
     response: Response,
@@ -53,7 +60,7 @@ async def create_child_profile(
     return result
 
 
-@router.get("", response_model=list[ChildProfileResponse])
+@router.get("", response_model=list[ChildProfileRead])
 async def get_my_children(
     request: Request,
     response: Response,
@@ -72,7 +79,7 @@ async def get_my_children(
     return result
 
 
-@router.get("/{child_id}", response_model=ChildProfileResponse)
+@router.get("/{child_id}", response_model=ChildProfileRead)
 async def get_my_child_by_id(
     child_id: int,
     request: Request,
@@ -92,7 +99,7 @@ async def get_my_child_by_id(
     return result
 
 
-@router.patch("/{child_id}", response_model=ChildProfileResponse)
+@router.patch("/{child_id}", response_model=ChildProfileRead)
 async def patch_child_profile(
     child_id: int,
     request: Request,
@@ -111,6 +118,32 @@ async def patch_child_profile(
 
     timer = time.perf_counter() - timer
     logger.info(f"Update child profile request processed in {timer:.3f} seconds")
+
+    return result
+
+
+@router.patch("/{child_id}/rules", response_model=ChildRulesRead)
+async def patch_child_rules(
+    child_id: int,
+    request: Request,
+    response: Response,
+    payload: ChildRulesUpdate = Body(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    redis: Redis = Depends(get_redis),
+):
+    """Patch child rules for one child profile owned by the authenticated parent."""
+    if current_user.role != UserRole.PARENT:
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+
+    timer = time.perf_counter()
+
+    logger.info(f"Update child rules request received for child_id={child_id} parent_id={current_user.id}")
+    result = await update_child_rules_controller(child_id, payload, current_user, db)
+    await invalidate_child_profile_context_cache(child_id, redis)
+
+    timer = time.perf_counter() - timer
+    logger.info(f"Update child rules request processed in {timer:.3f} seconds")
 
     return result
 

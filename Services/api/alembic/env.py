@@ -41,6 +41,9 @@ _load_env_file(SERVICE_ROOT / "app" / ".env")
 from core.config import settings
 from core.database import Base
 import models.child_profile
+import models.child_rules
+import models.avatar_tier_threshold
+import models.media_asset
 import models.refresh_token_session 
 import models.user 
 

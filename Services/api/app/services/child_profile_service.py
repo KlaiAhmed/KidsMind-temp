@@ -10,10 +10,19 @@ from fastapi import HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from models.child_profile import ChildProfile, default_child_profile_settings
+from crud.crud_child_profiles import (
+    create_child_profile,
+    delete_child_profile,
+    get_child_for_parent,
+    list_children_for_parent,
+)
+from crud.crud_child_rules import upsert_child_rules
+from models.child_profile import ChildProfile
+from models.child_rules import ChildRules
 from models.user import User
-from schemas.child_profile_schema import ChildProfileCreate, ChildProfileUpdate
+from schemas.child_profile_schema import ChildProfileCreate, ChildProfileUpdate, ChildRulesCreate, ChildRulesUpdate
 from utils.child_profile_logic import derive_student_profile_fields
+from utils.manage_pwd import hash_password
 
 
 class ChildProfileService:
@@ -53,37 +62,43 @@ class ChildProfileService:
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-        child_profile = ChildProfile(
+        child_profile = create_child_profile(
+            self.db,
             parent_id=parent_user.id,
             nickname=payload.nickname,
-            birth_date=derived.birth_date,
-            education_stage=derived.education_stage,
-            is_accelerated=derived.is_accelerated,
-            is_below_expected_stage=derived.is_below_expected_stage,
             languages=payload.languages,
             avatar=payload.avatar,
-            settings_json=payload.settings_json or default_child_profile_settings(),
+            derivation=derived,
         )
-        self.db.add(child_profile)
+
+        upsert_child_rules(
+            self.db,
+            child_profile_id=child_profile.id,
+            payload=payload.rules.model_dump() if payload.rules else None,
+        )
+
         self.db.commit()
-        self.db.refresh(child_profile)
-        return child_profile
+        created_child = get_child_for_parent(
+            self.db,
+            child_id=child_profile.id,
+            parent_id=parent_user.id,
+            include_rules=True,
+        )
+        if not created_child:
+            raise HTTPException(status_code=500, detail="Failed to load created child profile")
+        return created_child
 
     def get_children_for_parent(self, parent_user: User) -> list[ChildProfile]:
         """Return all child profiles for the authenticated parent account."""
-        return (
-            self.db.query(ChildProfile)
-            .filter(ChildProfile.parent_id == parent_user.id)
-            .order_by(ChildProfile.id.asc())
-            .all()
-        )
+        return list_children_for_parent(self.db, parent_id=parent_user.id, include_rules=True)
 
     def get_child_profile_for_parent(self, child_id: int, parent_user: User) -> ChildProfile:
         """Return one child profile when it belongs to the authenticated parent."""
-        child_profile = (
-            self.db.query(ChildProfile)
-            .filter(ChildProfile.id == child_id, ChildProfile.parent_id == parent_user.id)
-            .first()
+        child_profile = get_child_for_parent(
+            self.db,
+            child_id=child_id,
+            parent_id=parent_user.id,
+            include_rules=True,
         )
         if not child_profile:
             raise HTTPException(status_code=404, detail="Child profile not found")
@@ -91,10 +106,11 @@ class ChildProfileService:
 
     def update_child_profile(self, child_id: int, parent_user: User, payload: ChildProfileUpdate) -> ChildProfile:
         """Update an existing child profile owned by the authenticated parent."""
-        child_profile = (
-            self.db.query(ChildProfile)
-            .filter(ChildProfile.id == child_id, ChildProfile.parent_id == parent_user.id)
-            .first()
+        child_profile = get_child_for_parent(
+            self.db,
+            child_id=child_id,
+            parent_id=parent_user.id,
+            include_rules=True,
         )
         if not child_profile:
             raise HTTPException(status_code=404, detail="Child profile not found")
@@ -109,8 +125,6 @@ class ChildProfileService:
             child_profile.languages = update_data["languages"]
         if "avatar" in update_data:
             child_profile.avatar = update_data["avatar"]
-        if "settings_json" in update_data:
-            child_profile.settings_json = update_data["settings_json"]
 
         has_profile_derivation_input = any(
             key in update_data
@@ -142,9 +156,64 @@ class ChildProfileService:
             child_profile.is_below_expected_stage = derived.is_below_expected_stage
 
         self.db.commit()
-        self.db.refresh(child_profile)
+        updated_child = get_child_for_parent(
+            self.db,
+            child_id=child_id,
+            parent_id=parent_user.id,
+            include_rules=True,
+        )
+        if not updated_child:
+            raise HTTPException(status_code=404, detail="Child profile not found")
 
-        return child_profile
+        return updated_child
+
+    def update_child_rules(self, child_id: int, parent_user: User, payload: ChildRulesUpdate) -> ChildRules:
+        """Update normalized rule settings for one child profile owned by the parent."""
+        child_profile = get_child_for_parent(
+            self.db,
+            child_id=child_id,
+            parent_id=parent_user.id,
+            include_rules=False,
+        )
+        if not child_profile:
+            raise HTTPException(status_code=404, detail="Child profile not found")
+
+        update_data = payload.model_dump(exclude_unset=True)
+        parent_pin = update_data.pop("parent_pin", None)
+
+        rules = upsert_child_rules(self.db, child_profile_id=child_id, payload=None)
+
+        if update_data:
+            merged_rules_payload = {
+                "default_language": rules.default_language,
+                "daily_limit_minutes": rules.daily_limit_minutes,
+                "allowed_subjects": rules.allowed_subjects,
+                "blocked_subjects": rules.blocked_subjects,
+                "week_schedule": rules.week_schedule,
+                "time_window_start": rules.time_window_start,
+                "time_window_end": rules.time_window_end,
+                "homework_mode_enabled": rules.homework_mode_enabled,
+                "voice_mode_enabled": rules.voice_mode_enabled,
+                "audio_storage_enabled": rules.audio_storage_enabled,
+                "conversation_history_enabled": rules.conversation_history_enabled,
+                "content_safety_level": rules.content_safety_level,
+            }
+            merged_rules_payload.update(update_data)
+
+            validated_payload = ChildRulesCreate.model_validate(merged_rules_payload)
+            rules = upsert_child_rules(
+                self.db,
+                child_profile_id=child_id,
+                payload=validated_payload.model_dump(),
+            )
+
+        if parent_pin:
+            parent_user.parent_pin_hash = hash_password(parent_pin)
+            self.db.add(parent_user)
+
+        self.db.commit()
+        self.db.refresh(rules)
+        return rules
 
     def delete_child_profile(self, child_id: int, parent_user: User) -> None:
         """Delete a child profile owned by the authenticated parent.
@@ -156,13 +225,14 @@ class ChildProfileService:
         Raises:
             HTTPException: 404 if profile not found or doesn't belong to parent.
         """
-        child_profile = (
-            self.db.query(ChildProfile)
-            .filter(ChildProfile.id == child_id, ChildProfile.parent_id == parent_user.id)
-            .first()
+        child_profile = get_child_for_parent(
+            self.db,
+            child_id=child_id,
+            parent_id=parent_user.id,
+            include_rules=False,
         )
         if not child_profile:
             raise HTTPException(status_code=404, detail="Child profile not found")
 
-        self.db.delete(child_profile)
+        delete_child_profile(self.db, child_profile=child_profile)
         self.db.commit()

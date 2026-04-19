@@ -10,8 +10,9 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from models.child_profile import ChildProfile
+from models.child_rules import ChildRules
 from models.user import User
-from schemas.child_profile_schema import ChildProfileCreate, ChildProfileUpdate
+from schemas.child_profile_schema import ChildProfileCreate, ChildProfileUpdate, ChildRulesUpdate
 from services.child_profile_service import ChildProfileService
 from utils.logger import logger
 
@@ -135,6 +136,26 @@ async def update_child_controller(
     except Exception as e:
         logger.exception(
             "Unexpected error updating child profile",
+            extra={"parent_id": current_user.id, "child_id": child_id},
+        )
+        raise HTTPException(status_code=500, detail="Internal Server Error")
+
+
+async def update_child_rules_controller(
+    child_id: int,
+    payload: ChildRulesUpdate,
+    current_user: User,
+    db: Session,
+) -> ChildRules:
+    """Update one child's normalized rules for the authenticated parent user."""
+    try:
+        child_service = ChildProfileService(db)
+        return child_service.update_child_rules(child_id, current_user, payload)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(
+            "Unexpected error updating child rules",
             extra={"parent_id": current_user.id, "child_id": child_id},
         )
         raise HTTPException(status_code=500, detail="Internal Server Error")

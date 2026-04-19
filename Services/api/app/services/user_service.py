@@ -62,6 +62,7 @@ def get_children_by_parent_id(db: Session, parent_id: int) -> list[ChildProfile]
     """
     return (
         db.query(ChildProfile)
+        .options(selectinload(ChildProfile.rules))
         .filter(ChildProfile.parent_id == parent_id)
         .order_by(ChildProfile.id.asc())
         .all()

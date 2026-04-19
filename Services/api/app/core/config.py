@@ -63,6 +63,25 @@ class Settings(BaseSettings):
         "audio/mp3"
     }
 
+    # Generic media upload configuration
+    MEDIA_MAX_IMAGE_SIZE_BYTES: int = Field(default=10 * 1024 * 1024)
+    MEDIA_MAX_AUDIO_SIZE_BYTES: int = Field(default=10 * 1024 * 1024)
+    MEDIA_ALLOWED_IMAGE_CONTENT_TYPES: Set[str] = {
+        "image/webp",
+        "image/png",
+        "image/jpeg",
+    }
+    MEDIA_ALLOWED_AUDIO_CONTENT_TYPES: Set[str] = {
+        "audio/mpeg",
+        "audio/wav",
+        "audio/x-wav",
+        "audio/mp3",
+        "audio/ogg",
+        "audio/flac",
+        "audio/mp4",
+        "audio/x-m4a",
+    }
+
     # Credentials :
     # Database credentials
     DB_USERNAME: str = "admin"

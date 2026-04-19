@@ -2,12 +2,13 @@
 Child Profile Schemas
 
 Responsibility: Defines Pydantic request/response schemas for child profile
-               endpoints including creation, update, and response models.
+               and child rules endpoints.
 Layer: Schema
 Domain: Children
 """
 
-from datetime import date, datetime
+import re
+from datetime import date, datetime, time
 from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
@@ -38,6 +39,7 @@ LANGUAGE_CODE_ALIASES = {
 
 class ChildSubject(str, Enum):
     MATH = "math"
+    READING = "reading"
     FRENCH = "french"
     ENGLISH = "english"
     SCIENCE = "science"
@@ -45,64 +47,136 @@ class ChildSubject(str, Enum):
     ART = "art"
 
 
-class ChildWeekday(str, Enum):
-    MONDAY = "monday"
-    TUESDAY = "tuesday"
-    WEDNESDAY = "wednesday"
-    THURSDAY = "thursday"
-    FRIDAY = "friday"
-    SATURDAY = "saturday"
-    SUNDAY = "sunday"
+class ContentSafetyLevel(str, Enum):
+    STRICT = "strict"
+    MODERATE = "moderate"
 
 
-class ChildProfileSettings(BaseModel):
+class DaySchedule(BaseModel):
     model_config = ConfigDict(extra="forbid", use_enum_values=True)
 
-    daily_limit_minutes: int = Field(strict=True, ge=15, le=120)
-    allowed_subjects: list[ChildSubject] = Field(min_length=1)
-    allowed_weekdays: list[ChildWeekday] = Field(min_length=1)
-    voice_enabled: bool = Field(strict=True)
-    store_audio_history: bool = Field(strict=True)
+    enabled: bool
+    subjects: list[ChildSubject] = Field(default_factory=list)
+    duration_minutes: int | None = Field(default=None, ge=1)
 
-    @field_validator("allowed_subjects")
+    @field_validator("subjects")
     @classmethod
-    def validate_allowed_subjects_unique(cls, value: list[ChildSubject]) -> list[ChildSubject]:
+    def validate_subjects_unique(cls, value: list[ChildSubject]) -> list[ChildSubject]:
         if len(set(value)) != len(value):
-            raise ValueError("allowed_subjects cannot contain duplicate values")
-        return value
-
-    @field_validator("allowed_weekdays")
-    @classmethod
-    def validate_allowed_weekdays_unique(cls, value: list[ChildWeekday]) -> list[ChildWeekday]:
-        if len(set(value)) != len(value):
-            raise ValueError("allowed_weekdays cannot contain duplicate values")
+            raise ValueError("subjects cannot contain duplicate values")
         return value
 
     @model_validator(mode="after")
-    def validate_voice_and_audio_history(self) -> "ChildProfileSettings":
-        if not self.voice_enabled and self.store_audio_history:
-            raise ValueError("store_audio_history cannot be true when voice_enabled is false")
+    def validate_duration(self) -> "DaySchedule":
+        if not self.enabled and self.duration_minutes is not None:
+            raise ValueError("duration_minutes must be null when enabled is false")
         return self
 
 
-def _normalize_and_validate_settings_json(
-    value: dict | ChildProfileSettings | None,
-    *,
-    allow_empty_dict: bool,
-) -> dict | None:
-    if value is None:
+def default_week_schedule() -> "WeekSchedule":
+    return WeekSchedule(
+        monday=DaySchedule(enabled=True, subjects=[ChildSubject.MATH], duration_minutes=30),
+        tuesday=DaySchedule(enabled=True, subjects=[ChildSubject.FRENCH], duration_minutes=30),
+        wednesday=DaySchedule(enabled=True, subjects=[ChildSubject.ENGLISH], duration_minutes=30),
+        thursday=DaySchedule(enabled=True, subjects=[ChildSubject.SCIENCE], duration_minutes=30),
+        friday=DaySchedule(enabled=True, subjects=[ChildSubject.HISTORY], duration_minutes=30),
+        saturday=DaySchedule(enabled=False),
+        sunday=DaySchedule(enabled=False),
+    )
+
+
+class WeekSchedule(BaseModel):
+    model_config = ConfigDict(extra="forbid", use_enum_values=True)
+
+    monday: DaySchedule
+    tuesday: DaySchedule
+    wednesday: DaySchedule
+    thursday: DaySchedule
+    friday: DaySchedule
+    saturday: DaySchedule
+    sunday: DaySchedule
+
+
+class ChildRulesBase(BaseModel):
+    model_config = ConfigDict(extra="forbid", use_enum_values=True)
+
+    default_language: str = Field(default="fr", min_length=2, max_length=10)
+    daily_limit_minutes: int | None = Field(default=None, ge=1)
+    allowed_subjects: list[ChildSubject] = Field(default_factory=list)
+    blocked_subjects: list[ChildSubject] = Field(default_factory=list)
+    week_schedule: WeekSchedule = Field(default_factory=default_week_schedule)
+    time_window_start: time | None = None
+    time_window_end: time | None = None
+    homework_mode_enabled: bool = False
+    voice_mode_enabled: bool = True
+    audio_storage_enabled: bool = False
+    conversation_history_enabled: bool = True
+    content_safety_level: ContentSafetyLevel = ContentSafetyLevel.STRICT
+
+    @field_validator("allowed_subjects", "blocked_subjects")
+    @classmethod
+    def validate_subject_lists_unique(cls, value: list[ChildSubject]) -> list[ChildSubject]:
+        if len(set(value)) != len(value):
+            raise ValueError("subject lists cannot contain duplicate values")
         return value
 
-    if isinstance(value, ChildProfileSettings):
-        return value.model_dump()
+    @model_validator(mode="after")
+    def validate_subject_overlap(self) -> "ChildRulesBase":
+        if set(self.allowed_subjects).intersection(self.blocked_subjects):
+            raise ValueError("allowed_subjects and blocked_subjects cannot overlap")
+        if self.time_window_start and self.time_window_end and self.time_window_start >= self.time_window_end:
+            raise ValueError("time_window_start must be earlier than time_window_end")
+        return self
 
-    if not isinstance(value, dict):
-        raise ValueError("settings_json must be a JSON object")
 
-    if not value and allow_empty_dict:
+class ChildRulesCreate(ChildRulesBase):
+    pass
+
+
+class ChildRulesUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid", use_enum_values=True, populate_by_name=True)
+
+    default_language: str | None = Field(default=None, min_length=2, max_length=10)
+    daily_limit_minutes: int | None = Field(default=None, ge=1)
+    allowed_subjects: list[ChildSubject] | None = None
+    blocked_subjects: list[ChildSubject] | None = None
+    week_schedule: WeekSchedule | None = None
+    time_window_start: time | None = None
+    time_window_end: time | None = None
+    homework_mode_enabled: bool | None = None
+    voice_mode_enabled: bool | None = None
+    audio_storage_enabled: bool | None = None
+    conversation_history_enabled: bool | None = None
+    content_safety_level: ContentSafetyLevel | None = None
+    parent_pin: str | None = Field(default=None, alias="parentPin", min_length=4, max_length=4)
+
+    @field_validator("allowed_subjects", "blocked_subjects")
+    @classmethod
+    def validate_subject_lists_unique(cls, value: list[ChildSubject] | None) -> list[ChildSubject] | None:
+        if value is None:
+            return value
+        if len(set(value)) != len(value):
+            raise ValueError("subject lists cannot contain duplicate values")
         return value
 
-    return ChildProfileSettings.model_validate(value).model_dump()
+    @field_validator("parent_pin")
+    @classmethod
+    def validate_parent_pin_digits(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        normalized = value.strip()
+        if not re.fullmatch(r"\d{4}", normalized):
+            raise ValueError("parent pin must be exactly 4 digits")
+        return normalized
+
+
+class ChildRulesRead(ChildRulesBase):
+    model_config = ConfigDict(from_attributes=True, use_enum_values=True)
+
+    id: str
+    child_profile_id: int
+    created_at: datetime
+    updated_at: datetime
 
 
 def _normalize_and_validate_languages(value: list[str]) -> list[str]:
@@ -126,7 +200,6 @@ def _normalize_and_validate_languages(value: list[str]) -> list[str]:
     return normalized_languages
 
 
-
 class ChildProfileCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -139,7 +212,7 @@ class ChildProfileCreate(BaseModel):
     is_below_expected_stage: bool | None = None
     languages: list[str] = Field(default_factory=lambda: ["en"], min_length=1)
     avatar: str | None = Field(default=None, max_length=64)
-    settings_json: dict | ChildProfileSettings = Field(default_factory=dict)
+    rules: ChildRulesCreate | None = None
 
     @field_validator("languages")
     @classmethod
@@ -164,13 +237,6 @@ class ChildProfileCreate(BaseModel):
         self.is_below_expected_stage = derived.is_below_expected_stage
         return self
 
-    @field_validator("settings_json")
-    @classmethod
-    def validate_settings_json(cls, value: dict | ChildProfileSettings) -> dict:
-        normalized = _normalize_and_validate_settings_json(value, allow_empty_dict=True)
-        assert normalized is not None
-        return normalized
-
     @field_validator("nickname")
     @classmethod
     def validate_nickname(cls, value: str) -> str:
@@ -192,7 +258,6 @@ class ChildProfileUpdate(BaseModel):
     is_below_expected_stage: bool | None = None
     languages: list[str] | None = None
     avatar: str | None = Field(default=None, max_length=64)
-    settings_json: dict | ChildProfileSettings | None = None
 
     @field_validator("languages")
     @classmethod
@@ -219,11 +284,6 @@ class ChildProfileUpdate(BaseModel):
             raise ValueError("is_accelerated and is_below_expected_stage cannot both be true")
         return self
 
-    @field_validator("settings_json")
-    @classmethod
-    def validate_settings_json(cls, value: dict | ChildProfileSettings | None) -> dict | None:
-        return _normalize_and_validate_settings_json(value, allow_empty_dict=False)
-
     @field_validator("nickname")
     @classmethod
     def validate_nickname(cls, value: str | None) -> str | None:
@@ -235,7 +295,7 @@ class ChildProfileUpdate(BaseModel):
         return normalized
 
 
-class ChildProfileResponse(BaseModel):
+class ChildProfileRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -247,7 +307,7 @@ class ChildProfileResponse(BaseModel):
     is_below_expected_stage: bool
     languages: list[str]
     avatar: str | None
-    settings_json: dict
+    rules: ChildRulesRead | None = None
     created_at: datetime
     updated_at: datetime
 
