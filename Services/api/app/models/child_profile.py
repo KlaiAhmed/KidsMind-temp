@@ -6,7 +6,8 @@ Layer: Model
 Domain: Children
 """
 
-from sqlalchemy import Boolean, Column, Date, DateTime, Enum, ForeignKey, Integer, JSON, String, func
+from sqlalchemy import Boolean, Column, Date, DateTime, Enum, ForeignKey, Integer, JSON, String, func, text
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from core.database import Base
@@ -32,7 +33,7 @@ class ChildProfile(Base):
 
     __tablename__ = "child_profiles"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, index=True, server_default=text("gen_random_uuid()"))
     parent_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
 
     nickname = Column(String(64), nullable=False)
@@ -48,4 +49,3 @@ class ChildProfile(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     parent = relationship("User", back_populates="child_profiles")
-    rules = relationship("ChildRules", uselist=False, back_populates="child_profile")
