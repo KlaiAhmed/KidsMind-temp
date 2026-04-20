@@ -16,6 +16,7 @@ from core.config import settings
 
 TierName = Literal["T0", "T1", "T2", "T3", "T4", "T5"]
 WindowMode = Literal["sliding", "fixed"]
+StoreUnavailableMode = Literal["fail_open", "fail_closed"]
 
 
 @dataclass(frozen=True)
@@ -71,6 +72,7 @@ class ResolvedRateLimitPolicy:
     mode_header_value: str | None
     key_prefix: str
     dev_multiplier: int
+    store_unavailable_mode: StoreUnavailableMode
 
     t0_window: WindowPolicy
     t1_windows: tuple[WindowPolicy, ...]
@@ -162,9 +164,9 @@ def _raw_endpoint_rules() -> list[EndpointRule]:
         EndpointRule("GET", "/api/v1/children", "T1", "children_list", "children_list"),
         EndpointRule("GET", "/api/v1/children/{child_id}", "T1", "children_get", "children_get"),
         EndpointRule("PATCH", "/api/v1/children/{child_id}", "T4", "children_patch", "children_patch"),
+        EndpointRule("PATCH", "/api/v1/children/{child_id}/rules", "T4", "children_rules_patch", "children_rules_patch"),
         EndpointRule("DELETE", "/api/v1/children/{child_id}", "T4", "children_delete", "children_delete"),
 
-        EndpointRule("PATCH", "/api/v1/safety-and-rules", "T4", "safety_patch", "safety_patch"),
         EndpointRule("POST", "/api/v1/safety-and-rules/verify-parent-pin", "T3", "verify_parent_pin", "verify_parent_pin"),
 
         EndpointRule("GET", "/api/v1/users/me/summary", "T1", "users_me_summary", "users_me_summary"),
@@ -308,6 +310,7 @@ def build_resolved_rate_limit_policy() -> ResolvedRateLimitPolicy:
         mode_header_value=None if is_prod else "development",
         key_prefix="rl" if is_prod else "dev:rl",
         dev_multiplier=dev_multiplier,
+        store_unavailable_mode=settings.RL_STORE_UNAVAILABLE_MODE,
         t0_window=WindowPolicy(
             name="1m",
             mode="fixed",
