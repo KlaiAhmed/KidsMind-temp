@@ -7,14 +7,14 @@ Domain: Users Administration
 """
 
 import time
+from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Response
 from redis.asyncio import Redis
 from sqlalchemy.orm import Session
 
 from dependencies.auth import get_current_admin_or_super_admin
 from dependencies.infrastructure import get_db, get_redis
-from models.child_profile import ChildProfile
 from models.user import User
 from schemas.child_profile_schema import ChildProfileRead, ChildProfileUpdate
 from schemas.user_schema import (
@@ -24,9 +24,9 @@ from schemas.user_schema import (
     UserFullResponse,
 )
 from services.child_profile_context_cache import invalidate_child_profile_context_cache
+from services.child_profile_service import ChildProfileService
 from services.user_service import (
     get_all_users,
-    get_children_by_parent_id,
     get_user_by_id,
     hard_delete_child_by_id,
     hard_delete_user_account_by_id,
@@ -41,11 +41,18 @@ router = APIRouter(dependencies=[Depends(get_current_admin_or_super_admin)])
 async def get_all_users_endpoint(
     request: Request,
     response: Response,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ) -> list[User]:
     """Return all users. Restricted to admin/super_admin roles."""
     timer = time.perf_counter()
-    users = get_all_users(db, include_child_profiles=True)
+    users = get_all_users(
+        db,
+        include_child_profiles=True,
+        limit=limit,
+        offset=offset,
+    )
 
     timer = time.perf_counter() - timer
     logger.info(f"All users data requested and returned in {timer:.3f} seconds")
@@ -78,14 +85,15 @@ async def get_children_by_parent_id_endpoint(
     request: Request,
     response: Response,
     db: Session = Depends(get_db),
-) -> list[ChildProfile]:
+) -> list[ChildProfileRead]:
     """Return all children owned by a parent id. Restricted to admin/super_admin roles."""
     timer = time.perf_counter()
     parent_user = get_user_by_id(db, parent_id)
     if not parent_user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    child_profiles = get_children_by_parent_id(db, parent_id)
+    child_service = ChildProfileService(db)
+    child_profiles = child_service.get_children_for_parent_id(parent_id)
 
     timer = time.perf_counter() - timer
     logger.info(f"Children requested for parent_id={parent_id} and returned in {timer:.3f} seconds")
@@ -118,7 +126,7 @@ async def hard_delete_user_by_id_endpoint(
 @router.delete("/{parent_id}/children/{child_id}/hard", response_model=DeleteChildResponse)
 async def hard_delete_child_by_id_endpoint(
     parent_id: int,
-    child_id: int,
+    child_id: UUID,
     request: Request,
     response: Response,
     db: Session = Depends(get_db),
@@ -178,13 +186,13 @@ async def patch_user_by_id_endpoint(
 @router.patch("/{parent_id}/children/{child_id}", response_model=ChildProfileRead)
 async def patch_child_by_id_endpoint(
     parent_id: int,
-    child_id: int,
+    child_id: UUID,
     request: Request,
     response: Response,
     payload: ChildProfileUpdate = Body(...),
     db: Session = Depends(get_db),
     redis: Redis = Depends(get_redis),
-) -> ChildProfile:
+) -> ChildProfileRead:
     """Patch child profile fields by parent_id and child_id. Restricted to admin/super_admin roles."""
     timer = time.perf_counter()
     actor_id = getattr(request.state, "access_token_payload", {}).get("sub", "unknown")
@@ -194,23 +202,13 @@ async def patch_child_by_id_endpoint(
     if not parent_user:
         raise HTTPException(status_code=404, detail="Parent user not found")
 
-    child_profile = (
-        db.query(ChildProfile)
-        .filter(ChildProfile.id == child_id, ChildProfile.parent_id == parent_id)
-        .first()
+    child_service = ChildProfileService(db)
+    child_profile = child_service.update_child_profile_for_admin(
+        parent_id=parent_id,
+        child_id=child_id,
+        payload=payload,
     )
-    if not child_profile:
-        raise HTTPException(status_code=404, detail="Child profile not found")
-
-    update_data = payload.model_dump(exclude_unset=True)
-    if update_data:
-        for field in ("nickname", "languages", "avatar"):
-            if field in update_data:
-                setattr(child_profile, field, update_data[field])
-
-        db.commit()
-        db.refresh(child_profile)
-        await invalidate_child_profile_context_cache(child_id, redis)
+    await invalidate_child_profile_context_cache(child_id, redis)
 
     timer = time.perf_counter() - timer
     logger.info(f"Patch child completed for child_id={child_id} parent_id={parent_id} in {timer:.3f} seconds")

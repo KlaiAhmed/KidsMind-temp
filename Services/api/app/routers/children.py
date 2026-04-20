@@ -8,6 +8,7 @@ Domain: Children
 """
 
 import time
+from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response
 from redis.asyncio import Redis
@@ -81,7 +82,7 @@ async def get_my_children(
 
 @router.get("/{child_id}", response_model=ChildProfileRead)
 async def get_my_child_by_id(
-    child_id: int,
+    child_id: UUID,
     request: Request,
     response: Response,
     current_user: User = Depends(get_current_user),
@@ -101,7 +102,7 @@ async def get_my_child_by_id(
 
 @router.patch("/{child_id}", response_model=ChildProfileRead)
 async def patch_child_profile(
-    child_id: int,
+    child_id: UUID,
     request: Request,
     response: Response,
     payload: ChildProfileUpdate = Body(...),
@@ -124,7 +125,7 @@ async def patch_child_profile(
 
 @router.patch("/{child_id}/rules", response_model=ChildRulesRead)
 async def patch_child_rules(
-    child_id: int,
+    child_id: UUID,
     request: Request,
     response: Response,
     payload: ChildRulesUpdate = Body(...),
@@ -150,7 +151,7 @@ async def patch_child_rules(
 
 @router.delete("/{child_id}", status_code=204)
 async def delete_child_profile(
-    child_id: int,
+    child_id: UUID,
     request: Request,
     response: Response,
     current_user: User = Depends(get_current_user),

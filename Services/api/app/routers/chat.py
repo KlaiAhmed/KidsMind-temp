@@ -8,7 +8,8 @@ Domain: Chat
 """
 
 import httpx
-from fastapi import APIRouter, Depends, Request, Response, UploadFile, Form, HTTPException
+from uuid import UUID
+from fastapi import APIRouter, Depends, UploadFile, Form, HTTPException
 from redis.asyncio import Redis
 from sqlalchemy.orm import Session
 
@@ -23,17 +24,14 @@ from dependencies.infrastructure import get_client, get_db, get_redis
 from dependencies.media import validate_audio_file
 from models.user import User
 from schemas.chat_schema import TextChatRequest
-from utils.logger import logger
 
 router = APIRouter()
 
 # Voice chat endpoint
 @router.post("/voice/{user_id}/{child_id}/{session_id}")
 async def voice_chat(
-    request: Request,
-    response: Response,
     user_id: int,
-    child_id: int,
+    child_id: UUID,
     session_id: str,
     current_user: User = Depends(get_current_user),
     audio_file: UploadFile = Depends(validate_audio_file),
@@ -65,10 +63,8 @@ async def voice_chat(
 # Text chat endpoint
 @router.post("/text/{user_id}/{child_id}/{session_id}")
 async def text_chat(
-    request: Request,
-    response: Response,
     user_id: int,
-    child_id: int,
+    child_id: UUID,
     session_id: str,
     body: TextChatRequest,
     current_user: User = Depends(get_current_user),
@@ -94,10 +90,8 @@ async def text_chat(
 
 @router.get("/history/{user_id}/{child_id}/{session_id}")
 async def get_history(
-    request: Request,
-    response: Response,
     user_id: int,
-    child_id: int,
+    child_id: UUID,
     session_id: str,
     current_user: User = Depends(get_current_user),
     client: httpx.AsyncClient = Depends(get_client),
@@ -115,10 +109,8 @@ async def get_history(
 
 @router.delete("/history/{user_id}/{child_id}/{session_id}")
 async def clear_history(
-    request: Request,
-    response: Response,
     user_id: int,
-    child_id: int,
+    child_id: UUID,
     session_id: str,
     current_user: User = Depends(get_current_user),
     client: httpx.AsyncClient = Depends(get_client),

@@ -6,22 +6,27 @@ Layer: Controller
 Domain: Children
 """
 
-from fastapi import HTTPException
+from uuid import UUID
+
 from sqlalchemy.orm import Session
 
-from models.child_profile import ChildProfile
-from models.child_rules import ChildRules
+from controllers.controller_guard import guarded_controller_call
 from models.user import User
-from schemas.child_profile_schema import ChildProfileCreate, ChildProfileUpdate, ChildRulesUpdate
+from schemas.child_profile_schema import (
+    ChildProfileCreate,
+    ChildProfileRead,
+    ChildProfileUpdate,
+    ChildRulesRead,
+    ChildRulesUpdate,
+)
 from services.child_profile_service import ChildProfileService
-from utils.logger import logger
 
 
 async def create_child_controller(
     payload: ChildProfileCreate,
     current_user: User,
     db: Session,
-) -> ChildProfile:
+) -> ChildProfileRead:
     """Create a child profile for the authenticated parent user.
 
     Args:
@@ -35,23 +40,17 @@ async def create_child_controller(
     Raises:
         HTTPException: On creation errors.
     """
-    try:
-        child_service = ChildProfileService(db)
-        return child_service.create_child_profile(current_user, payload)
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception(
-            "Unexpected error creating child profile",
-            extra={"parent_id": current_user.id},
-        )
-        raise HTTPException(status_code=500, detail="Internal Server Error")
+    return await guarded_controller_call(
+        operation="creating child profile",
+        context={"parent_id": current_user.id},
+        func=lambda: ChildProfileService(db).create_child_profile(current_user, payload),
+    )
 
 
 async def list_children_controller(
     current_user: User,
     db: Session,
-) -> list[ChildProfile]:
+) -> list[ChildProfileRead]:
     """List all child profiles owned by the authenticated parent user.
 
     Args:
@@ -64,24 +63,18 @@ async def list_children_controller(
     Raises:
         HTTPException: On retrieval errors.
     """
-    try:
-        child_service = ChildProfileService(db)
-        return child_service.get_children_for_parent(current_user)
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception(
-            "Unexpected error listing child profiles",
-            extra={"parent_id": current_user.id},
-        )
-        raise HTTPException(status_code=500, detail="Internal Server Error")
+    return await guarded_controller_call(
+        operation="listing child profiles",
+        context={"parent_id": current_user.id},
+        func=lambda: ChildProfileService(db).get_children_for_parent(current_user),
+    )
 
 
 async def get_child_controller(
-    child_id: int,
+    child_id: UUID,
     current_user: User,
     db: Session,
-) -> ChildProfile:
+) -> ChildProfileRead:
     """Get one child profile that belongs to the authenticated parent user.
 
     Args:
@@ -95,25 +88,19 @@ async def get_child_controller(
     Raises:
         HTTPException: 404 if profile not found or doesn't belong to parent.
     """
-    try:
-        child_service = ChildProfileService(db)
-        return child_service.get_child_profile_for_parent(child_id, current_user)
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception(
-            "Unexpected error getting child profile",
-            extra={"parent_id": current_user.id, "child_id": child_id},
-        )
-        raise HTTPException(status_code=500, detail="Internal Server Error")
+    return await guarded_controller_call(
+        operation="getting child profile",
+        context={"parent_id": current_user.id, "child_id": child_id},
+        func=lambda: ChildProfileService(db).get_child_profile_for_parent(child_id, current_user),
+    )
 
 
 async def update_child_controller(
-    child_id: int,
+    child_id: UUID,
     payload: ChildProfileUpdate,
     current_user: User,
     db: Session,
-) -> ChildProfile:
+) -> ChildProfileRead:
     """Update one child profile that belongs to the authenticated parent user.
 
     Args:
@@ -128,41 +115,29 @@ async def update_child_controller(
     Raises:
         HTTPException: 404 if profile not found or doesn't belong to parent.
     """
-    try:
-        child_service = ChildProfileService(db)
-        return child_service.update_child_profile(child_id, current_user, payload)
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception(
-            "Unexpected error updating child profile",
-            extra={"parent_id": current_user.id, "child_id": child_id},
-        )
-        raise HTTPException(status_code=500, detail="Internal Server Error")
+    return await guarded_controller_call(
+        operation="updating child profile",
+        context={"parent_id": current_user.id, "child_id": child_id},
+        func=lambda: ChildProfileService(db).update_child_profile(child_id, current_user, payload),
+    )
 
 
 async def update_child_rules_controller(
-    child_id: int,
+    child_id: UUID,
     payload: ChildRulesUpdate,
     current_user: User,
     db: Session,
-) -> ChildRules:
+) -> ChildRulesRead:
     """Update one child's normalized rules for the authenticated parent user."""
-    try:
-        child_service = ChildProfileService(db)
-        return child_service.update_child_rules(child_id, current_user, payload)
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception(
-            "Unexpected error updating child rules",
-            extra={"parent_id": current_user.id, "child_id": child_id},
-        )
-        raise HTTPException(status_code=500, detail="Internal Server Error")
+    return await guarded_controller_call(
+        operation="updating child rules",
+        context={"parent_id": current_user.id, "child_id": child_id},
+        func=lambda: ChildProfileService(db).update_child_rules(child_id, current_user, payload),
+    )
 
 
 async def delete_child_controller(
-    child_id: int,
+    child_id: UUID,
     current_user: User,
     db: Session,
 ) -> None:
@@ -176,14 +151,8 @@ async def delete_child_controller(
     Raises:
         HTTPException: 404 if profile not found or doesn't belong to parent.
     """
-    try:
-        child_service = ChildProfileService(db)
-        child_service.delete_child_profile(child_id, current_user)
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception(
-            "Unexpected error deleting child profile",
-            extra={"parent_id": current_user.id, "child_id": child_id},
-        )
-        raise HTTPException(status_code=500, detail="Internal Server Error")
+    return await guarded_controller_call(
+        operation="deleting child profile",
+        context={"parent_id": current_user.id, "child_id": child_id},
+        func=lambda: ChildProfileService(db).delete_child_profile(child_id, current_user),
+    )

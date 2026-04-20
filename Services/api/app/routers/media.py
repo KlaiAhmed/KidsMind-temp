@@ -6,6 +6,8 @@ Layer: Router
 Domain: Media
 """
 
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, File, Form, Query, Request, Response, UploadFile
 from redis.asyncio import Redis
 from sqlalchemy.orm import Session
@@ -64,7 +66,7 @@ async def download_media(
     media_id: int,
     request: Request,
     response: Response,
-    child_id: int | None = Query(default=None),
+    child_id: UUID | None = Query(default=None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):

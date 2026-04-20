@@ -27,6 +27,114 @@ from utils.logger import logger
 SLOW_CALL_THRESHOLD_SECONDS = 3.0
 
 
+def _build_ai_request_context(
+	*,
+	user_id: str,
+	child_id: str,
+	session_id: str,
+	text: str,
+	context: str,
+	profile_context: dict,
+	client: httpx.AsyncClient,
+) -> dict[str, object]:
+	return {
+		"user_id": user_id,
+		"child_id": child_id,
+		"session_id": session_id,
+		"text": text,
+		"context": context,
+		"nickname": profile_context["nickname"],
+		"age_group": profile_context["age_group"],
+		"education_stage": profile_context["education_stage"],
+		"is_accelerated": profile_context["is_accelerated"],
+		"is_below_expected_stage": profile_context["is_below_expected_stage"],
+		"client": client,
+	}
+
+
+def _build_stream_response(ai_request_context: dict[str, object]) -> StreamingResponse:
+	return StreamingResponse(
+		stream_content(**ai_request_context),
+		media_type="text/event-stream",
+		headers={
+			"Cache-Control": "no-cache",
+			"X-Accel-Buffering": "no",
+		},
+	)
+
+
+async def _upload_audio_and_get_url(
+	*,
+	audio_file: UploadFile,
+	user_id: str,
+	child_id: str,
+	session_id: str,
+	store_audio: bool,
+) -> tuple[str, str, float]:
+	upload_start = time.perf_counter()
+	upload_result = await run_in_threadpool(
+		upload_audio,
+		audio_file,
+		user_id=user_id,
+		child_id=child_id,
+		session_id=session_id,
+		store_audio=store_audio,
+	)
+	upload_duration = time.perf_counter() - upload_start
+
+	if upload_duration > SLOW_CALL_THRESHOLD_SECONDS:
+		logger.warning(
+			"Slow audio upload",
+			extra={"duration_seconds": round(upload_duration, 3)},
+		)
+
+	return str(upload_result["filename"]), str(upload_result["url"]), upload_duration
+
+
+async def _transcribe_audio(
+	*,
+	audio_url: str,
+	context: str,
+	user_id: str,
+	child_id: str,
+	client: httpx.AsyncClient,
+) -> tuple[str, float]:
+	stt_start = time.perf_counter()
+	stt_response = await client.post(
+		f"{settings.STT_SERVICE_ENDPOINT}/v1/stt/transcriptions",
+		json={"audio_url": audio_url, "context": context},
+		timeout=30.0,
+	)
+	stt_response.raise_for_status()
+	stt_duration = time.perf_counter() - stt_start
+
+	logger.info(
+		"STT service call completed",
+		extra={
+			"status_code": stt_response.status_code,
+			"duration_seconds": round(stt_duration, 3),
+			"slow": stt_duration > SLOW_CALL_THRESHOLD_SECONDS,
+		},
+	)
+
+	text = stt_response.json().get("text", "")
+	if not text:
+		logger.warning(
+			"STT Service returned empty transcription",
+			extra={"user_id": user_id, "child_id": child_id},
+		)
+		raise HTTPException(status_code=500, detail="STT Service did not return text")
+
+	logger.info("Transcription received", extra={"text_length": len(text)})
+	return text, stt_duration
+
+
+async def _generate_non_stream_response(ai_request_context: dict[str, object]) -> tuple[dict, float]:
+	ai_start = time.perf_counter()
+	ai_response = await generate_content(**ai_request_context)
+	return ai_response, time.perf_counter() - ai_start
+
+
 async def voice_chat_controller(
 	user_id: str,
 	child_id: str,
@@ -39,30 +147,11 @@ async def voice_chat_controller(
 	db: Session,
 	redis: Redis,
 ) -> dict | StreamingResponse:
-	"""Handle voice chat flow: validate, upload audio, transcribe via STT, generate AI response.
-
-	Args:
-		user_id: Identifier of the user initiating the chat.
-		child_id: Identifier of the child profile.
-		session_id: Conversation session identifier.
-		audio_file: Validated uploaded audio file.
-		context: Optional context string for the AI.
-		stream: Whether to stream the AI response via SSE.
-		store_audio: Whether to persist the audio after processing.
-		client: Shared async HTTP client for upstream calls.
-		db: Active database session.
-		redis: Redis connection for caching.
-
-	Returns:
-		A dict containing the AI response or a StreamingResponse for SSE.
-
-	Raises:
-		HTTPException: On upstream service errors or missing STT transcription.
-	"""
+	"""Handle voice chat flow: validate, upload audio, transcribe via STT, generate AI response."""
 	filename = None
 	try:
 		async with handle_service_errors():
-			duration = time.perf_counter()
+			started_at = time.perf_counter()
 
 			logger.info(
 				"Processing voice chat request",
@@ -75,60 +164,30 @@ async def voice_chat_controller(
 				},
 			)
 
-			# Validate child_id and resolve profile context BEFORE uploading audio
-			# This prevents wasting resources on invalid requests
 			profile_context = await get_child_profile_context(child_id, redis, db)
-
-			# Upload audio file to storage and get presigned URL
-			upload_start = time.perf_counter()
-			upload_result = await run_in_threadpool(
-				upload_audio,
-				audio_file,
+			filename, audio_url, upload_duration = await _upload_audio_and_get_url(
+				audio_file=audio_file,
 				user_id=user_id,
 				child_id=child_id,
 				session_id=session_id,
 				store_audio=store_audio,
 			)
-			filename = upload_result["filename"]
-			audio_url = upload_result["url"]
-			upload_duration = time.perf_counter() - upload_start
-
-			if upload_duration > SLOW_CALL_THRESHOLD_SECONDS:
-				logger.warning(
-					"Slow audio upload",
-					extra={"duration_seconds": round(upload_duration, 3)},
-				)
-
-			# Send audio URL to STT Service for transcription
-			stt_start = time.perf_counter()
-			stt_response = await client.post(
-				f"{settings.STT_SERVICE_ENDPOINT}/v1/stt/transcriptions",
-				json={"audio_url": audio_url, "context": context},
-				timeout=30.0,
-			)
-			stt_response.raise_for_status()
-			stt_duration = time.perf_counter() - stt_start
-
-			logger.info(
-				"STT service call completed",
-				extra={
-					"status_code": stt_response.status_code,
-					"duration_seconds": round(stt_duration, 3),
-					"slow": stt_duration > SLOW_CALL_THRESHOLD_SECONDS,
-				},
+			text, stt_duration = await _transcribe_audio(
+				audio_url=audio_url,
+				context=context,
+				user_id=user_id,
+				child_id=child_id,
+				client=client,
 			)
 
-			text = stt_response.json().get("text", "")
-			if not text:
-				logger.warning(
-					"STT Service returned empty transcription",
-					extra={"user_id": user_id, "child_id": child_id},
-				)
-				raise HTTPException(status_code=500, detail="STT Service did not return text")
-
-			logger.info(
-				"Transcription received",
-				extra={"text_length": len(text)},
+			ai_request_context = _build_ai_request_context(
+				user_id=user_id,
+				child_id=child_id,
+				session_id=session_id,
+				text=text,
+				context=context,
+				profile_context=profile_context,
+				client=client,
 			)
 
 			if stream:
@@ -136,60 +195,22 @@ async def voice_chat_controller(
 					"Starting streaming AI response",
 					extra={"user_id": user_id, "child_id": child_id},
 				)
-				stream_generator = stream_content(
-					user_id=user_id,
-					child_id=child_id,
-					session_id=session_id,
-					text=text,
-					context=context,
-					nickname=profile_context["nickname"],
-					age_group=profile_context["age_group"],
-					education_stage=profile_context["education_stage"],
-					is_accelerated=profile_context["is_accelerated"],
-					is_below_expected_stage=profile_context["is_below_expected_stage"],
-					client=client,
-				)
-				return StreamingResponse(
-					stream_generator,
-					media_type="text/event-stream",
-					headers={
-						"Cache-Control": "no-cache",
-						"X-Accel-Buffering": "no",
-					},
-				)
+				return _build_stream_response(ai_request_context)
 
-			# Non-streaming: generate full AI response
-			ai_start = time.perf_counter()
-			ai_response = await generate_content(
-				user_id=user_id,
-				child_id=child_id,
-				session_id=session_id,
-				text=text,
-				context=context,
-				nickname=profile_context["nickname"],
-				age_group=profile_context["age_group"],
-				education_stage=profile_context["education_stage"],
-				is_accelerated=profile_context["is_accelerated"],
-				is_below_expected_stage=profile_context["is_below_expected_stage"],
-				client=client,
-			)
-			ai_duration = time.perf_counter() - ai_start
-
-			duration = time.perf_counter() - duration
+			ai_response, ai_duration = await _generate_non_stream_response(ai_request_context)
+			total_duration = time.perf_counter() - started_at
 			logger.info(
 				"Voice chat completed",
 				extra={
-					"total_duration_seconds": round(duration, 3),
+					"total_duration_seconds": round(total_duration, 3),
 					"ai_duration_seconds": round(ai_duration, 3),
 					"upload_duration_seconds": round(upload_duration, 3),
 					"stt_duration_seconds": round(stt_duration, 3),
 				},
 			)
-
 			return {"ai_data": ai_response}
 
 	finally:
-		# Clean up uploaded audio file if parent disabled storing audio
 		if filename and not store_audio:
 			await run_in_threadpool(remove_audio, filename)
 
