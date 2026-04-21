@@ -2,9 +2,8 @@ import { Redirect, Tabs } from 'expo-router';
 import React from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
-import { HapticTab } from '@/components/haptic-tab';
+import { BottomNavContainer } from '@/components/navigation/BottomNavContainer';
 import { useAuth } from '@/contexts/AuthContext';
-import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 
 export default function TabLayout() {
@@ -28,38 +27,43 @@ export default function TabLayout() {
 
   return (
     <Tabs
+      tabBar={(props) => (
+        <BottomNavContainer
+          {...props}
+          mode="parent"
+          ageGroup={childProfile.ageGroup}
+        />
+      )}
       screenOptions={{
-        tabBarActiveTintColor: Colors.primary,
         headerShown: false,
-        tabBarButton: HapticTab,
+        tabBarHideOnKeyboard: true,
+        sceneContainerStyle: {
+          backgroundColor: Colors.surface,
+        },
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="explore"
-        options={{
-          title: 'Browse',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: 'Profile',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="person.fill" color={color} />,
+          title: 'Overview',
         }}
       />
       <Tabs.Screen
         name="chat"
         options={{
-          title: 'Chat',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="bubble.left.and.bubble.right.fill" color={color} />,
+          title: 'Insights',
+        }}
+      />
+      <Tabs.Screen
+        name="explore"
+        options={{
+          title: 'Curriculum',
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: 'Controls',
         }}
       />
     </Tabs>
