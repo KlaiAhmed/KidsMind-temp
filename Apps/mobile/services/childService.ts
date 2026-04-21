@@ -33,6 +33,10 @@ interface ChildWeekScheduleApiResponse {
   subjects: string[];
 }
 
+interface AvatarApiResponse {
+  id: string;
+}
+
 interface ChildProfileApiResponse {
   id: string;
   parent_id: number;
@@ -42,7 +46,8 @@ interface ChildProfileApiResponse {
   is_accelerated: boolean;
   is_below_expected_stage: boolean;
   languages: string[];
-  avatar: string | null;
+  avatar_id: string | null;
+  avatar: AvatarApiResponse | null;
   rules: ChildRulesApiResponse | null;
   allowed_subjects: string[];
   week_schedule: ChildWeekScheduleApiResponse[];
@@ -91,6 +96,9 @@ const WEEKDAY_KEYS: WeekdayKey[] = [
   'saturday',
   'sunday',
 ];
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const BADGE_ICON_ASSETS = [
   require('../assets/images/icon.png'),
@@ -155,12 +163,34 @@ function normalizeSubjectKeys(value: unknown): SubjectKey[] {
 }
 
 function normalizeChildId(childId: string | number): string {
-  // Fixed: aligned with API field 'child_id' (UUID path parameter).
   const normalized = `${childId}`.trim();
   if (!normalized) {
     throw new Error(`Invalid child ID: ${childId}`);
   }
   return normalized;
+}
+
+function buildAvatarIdField(
+  avatarId: string | null | undefined,
+): { avatar_id?: string | null } {
+  if (avatarId === undefined) {
+    return {};
+  }
+
+  if (avatarId === null) {
+    return { avatar_id: null };
+  }
+
+  const trimmed = avatarId.trim();
+  if (!trimmed) {
+    return { avatar_id: null };
+  }
+
+  if (!UUID_PATTERN.test(trimmed)) {
+    return {};
+  }
+
+  return { avatar_id: trimmed };
 }
 
 function parseTimeToMinutes(value: string): number | null {
@@ -365,6 +395,10 @@ function normalizeChildProfile(data: ChildProfileApiResponse): ChildProfile {
   const normalizedWeekSchedule = normalizeWeekSchedule(data.week_schedule);
   const normalizedRules = normalizeRules(data.rules, normalizedAllowedSubjects, normalizedWeekSchedule);
   const subjectIds = normalizedAllowedSubjects;
+  const responseAvatarId =
+    typeof data.avatar_id === 'string' && data.avatar_id.trim().length > 0
+      ? data.avatar_id
+      : data.avatar?.id ?? null;
   const dailyGoalMinutes =
     normalizedRules?.dailyLimitMinutes
     ?? deriveDailyLimitMinutes(normalizedWeekSchedule)
@@ -381,7 +415,7 @@ function normalizeChildProfile(data: ChildProfileApiResponse): ChildProfile {
     gradeLevel: toGradeLevelLabel(educationStage, resolvedAge),
     languages: Array.isArray(data.languages) && data.languages.length > 0 ? data.languages : ['en'],
     rules: normalizedRules,
-    avatarId: data.avatar ?? 'avatar-1',
+    avatarId: responseAvatarId ?? 'avatar-1',
     subjectIds,
     xp: 0,
     level: 1,
@@ -411,13 +445,25 @@ function normalizeBadge(item: BadgeApiItem, index: number): Badge {
 }
 
 export async function createChildProfile(input: CreateChildProfileInput): Promise<ChildProfile> {
-  // Fixed: aligned with API field set for ChildProfileCreateIn ('age_group' removed).
+  const avatarField = buildAvatarIdField(input.avatarId);
+
   const body = {
     nickname: input.nickname,
     birth_date: input.birthDate,
     education_stage: input.educationStage,
+    is_accelerated: input.isAccelerated,
+    is_below_expected_stage: input.isBelowExpectedStage,
     languages: input.languages,
-    avatar: input.avatarId,
+    ...avatarField,
+    rules: {
+      default_language: input.rules.defaultLanguage,
+      homework_mode_enabled: input.rules.homeworkModeEnabled,
+      voice_mode_enabled: input.rules.voiceModeEnabled,
+      audio_storage_enabled: input.rules.audioStorageEnabled,
+      conversation_history_enabled: input.rules.conversationHistoryEnabled,
+    },
+    allowed_subjects: input.allowedSubjects.map((subject) => ({ subject })),
+    week_schedule: buildWeekSchedulePatchPayload(input.weekSchedule),
   };
 
   const response = await apiRequest<ChildProfileApiResponse>('/api/v1/children', {
@@ -433,14 +479,14 @@ export async function patchChildProfile(
   input: UpdateChildProfileInput,
 ): Promise<ChildProfile> {
   const resolvedChildId = normalizeChildId(childId);
+  const avatarField = buildAvatarIdField(input.avatarId);
 
-  // Fixed: aligned with API field set for ChildProfileUpdateIn ('age_group' removed).
   const body = {
     nickname: input.nickname,
     birth_date: input.birthDate,
     education_stage: input.educationStage,
     languages: input.languages,
-    avatar: input.avatarId,
+    ...avatarField,
   };
 
   const response = await apiRequest<ChildProfileApiResponse>(`/api/v1/children/${resolvedChildId}`, {
@@ -457,16 +503,13 @@ export async function patchChildRules(
 ): Promise<ChildRules> {
   const resolvedChildId = normalizeChildId(childId);
 
-  // Fixed: aligned with API field set for ChildRulesUpdateIn.
   const body = {
     default_language: input.defaultLanguage,
     homework_mode_enabled: input.homeworkModeEnabled,
     voice_mode_enabled: input.voiceModeEnabled,
     audio_storage_enabled: input.audioStorageEnabled,
     conversation_history_enabled: input.conversationHistoryEnabled,
-    // Fixed: aligned with API field 'allowed_subjects' (list of { subject }).
     allowed_subjects: input.allowedSubjects.map((subject) => ({ subject })),
-    // Fixed: aligned with API field 'week_schedule' (list of day objects).
     week_schedule: buildWeekSchedulePatchPayload(input.weekSchedule),
   };
 

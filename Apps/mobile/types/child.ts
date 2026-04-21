@@ -110,22 +110,33 @@ export interface AvatarOption {
   asset: ImageSourcePropType;
 }
 
+export interface CreateChildRulesInput {
+  defaultLanguage: string;
+  homeworkModeEnabled: boolean;
+  voiceModeEnabled: boolean;
+  audioStorageEnabled: boolean;
+  conversationHistoryEnabled: boolean;
+}
+
 export interface CreateChildProfileInput {
   nickname: string;
   birthDate: string;
   educationStage: BackendEducationStage;
-  ageGroup?: AgeGroup;
+  isAccelerated: boolean;
+  isBelowExpectedStage: boolean;
   languages: string[];
-  avatarId: string;
+  avatarId: string | null;
+  rules: CreateChildRulesInput;
+  allowedSubjects: SubjectKey[];
+  weekSchedule: WeekSchedule;
 }
 
 export interface UpdateChildProfileInput {
   nickname?: string;
   birthDate?: string;
   educationStage?: BackendEducationStage;
-  ageGroup?: AgeGroup;
   languages?: string[];
-  avatarId?: string;
+  avatarId?: string | null;
 }
 
 export interface UpdateChildRulesInput {

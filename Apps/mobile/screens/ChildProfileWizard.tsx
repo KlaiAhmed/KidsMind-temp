@@ -39,7 +39,6 @@ import {
 } from '@/src/schemas/childProfileWizardSchema';
 import {
   deriveBlockedSubjects,
-  deriveAgeGroupFromBirthDate,
   deriveTimeWindowFromWeekSchedule,
   educationLevelToBackendStage,
   isChildProfileAgeInRange,
@@ -47,10 +46,214 @@ import {
   WEEKDAY_OPTIONS,
 } from '@/src/utils/childProfileWizard';
 import { patchChildRules } from '@/services/childService';
+import { ApiClientError } from '@/services/apiClient';
+import type { WeekdayKey } from '@/types/child';
 
 const TOTAL_STEPS = 5;
 
 type WizardStep = 1 | 2 | 3 | 4 | 5;
+
+interface FastApiValidationDetailItem {
+  loc: Array<string | number>;
+  msg: string;
+  type?: string;
+}
+
+interface MappedWizardFieldError {
+  field: string;
+  message: string;
+  step: WizardStep;
+}
+
+function isFastApiValidationDetailItem(value: unknown): value is FastApiValidationDetailItem {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as {
+    loc?: unknown;
+    msg?: unknown;
+    type?: unknown;
+  };
+
+  if (!Array.isArray(candidate.loc) || typeof candidate.msg !== 'string') {
+    return false;
+  }
+
+  return candidate.loc.every((entry) => typeof entry === 'string' || typeof entry === 'number');
+}
+
+function extractFastApiValidationDetails(error: ApiClientError): FastApiValidationDetailItem[] {
+  const details = error.details;
+
+  if (!details || typeof details !== 'object') {
+    return [];
+  }
+
+  const detailPayload =
+    'detail' in details
+      ? (details as { detail?: unknown }).detail
+      : details;
+
+  if (!Array.isArray(detailPayload)) {
+    return [];
+  }
+
+  return detailPayload.filter(isFastApiValidationDetailItem);
+}
+
+function getEnabledWeekdayKeys(
+  weekSchedule: ChildProfileWizardFormValues['schedule']['weekSchedule'],
+): WeekdayKey[] {
+  return WEEKDAY_OPTIONS
+    .filter((weekday) => weekSchedule[weekday.key].enabled)
+    .map((weekday) => weekday.key);
+}
+
+function mapValidationDetailToFieldError(
+  detail: FastApiValidationDetailItem,
+  enabledWeekdayKeys: WeekdayKey[],
+): MappedWizardFieldError | null {
+  const loc = detail.loc[0] === 'body' ? detail.loc.slice(1) : detail.loc;
+  const [root, child, grandchild] = loc;
+
+  if (root === 'nickname') {
+    return { field: 'childInfo.nickname', message: detail.msg, step: 1 };
+  }
+
+  if (root === 'birth_date') {
+    return { field: 'childInfo.birthDateIso', message: detail.msg, step: 1 };
+  }
+
+  if (root === 'education_stage' || root === 'is_accelerated' || root === 'is_below_expected_stage') {
+    return { field: 'childInfo.educationLevel', message: detail.msg, step: 1 };
+  }
+
+  if (root === 'avatar_id') {
+    return { field: 'avatar.avatarId', message: detail.msg, step: 2 };
+  }
+
+  if (root === 'languages') {
+    return { field: 'rules.defaultLanguage', message: detail.msg, step: 4 };
+  }
+
+  if (root === 'rules') {
+    if (child === 'default_language') {
+      return { field: 'rules.defaultLanguage', message: detail.msg, step: 4 };
+    }
+
+    if (child === 'homework_mode_enabled') {
+      return { field: 'rules.homeworkModeEnabled', message: detail.msg, step: 4 };
+    }
+
+    if (child === 'voice_mode_enabled') {
+      return { field: 'rules.voiceModeEnabled', message: detail.msg, step: 4 };
+    }
+
+    if (child === 'audio_storage_enabled') {
+      return { field: 'rules.audioStorageEnabled', message: detail.msg, step: 4 };
+    }
+
+    if (child === 'conversation_history_enabled') {
+      return { field: 'rules.conversationHistoryEnabled', message: detail.msg, step: 4 };
+    }
+
+    return { field: 'rules.defaultLanguage', message: detail.msg, step: 4 };
+  }
+
+  if (root === 'allowed_subjects') {
+    return { field: 'schedule.allowedSubjects', message: detail.msg, step: 3 };
+  }
+
+  if (root === 'week_schedule') {
+    if (typeof child !== 'number') {
+      return { field: 'schedule.weekSchedule', message: detail.msg, step: 3 };
+    }
+
+    const dayKey = enabledWeekdayKeys[child];
+    if (!dayKey) {
+      return { field: 'schedule.weekSchedule', message: detail.msg, step: 3 };
+    }
+
+    if (grandchild === 'access_window_start') {
+      return {
+        field: `schedule.weekSchedule.${dayKey}.startTime`,
+        message: detail.msg,
+        step: 3,
+      };
+    }
+
+    if (grandchild === 'access_window_end') {
+      return {
+        field: `schedule.weekSchedule.${dayKey}.endTime`,
+        message: detail.msg,
+        step: 3,
+      };
+    }
+
+    if (grandchild === 'daily_cap_seconds') {
+      return {
+        field: `schedule.weekSchedule.${dayKey}.durationMinutes`,
+        message: detail.msg,
+        step: 3,
+      };
+    }
+
+    if (grandchild === 'subjects') {
+      return {
+        field: `schedule.weekSchedule.${dayKey}.subjects`,
+        message: detail.msg,
+        step: 3,
+      };
+    }
+
+    if (grandchild === 'day_of_week') {
+      return {
+        field: `schedule.weekSchedule.${dayKey}.enabled`,
+        message: detail.msg,
+        step: 3,
+      };
+    }
+
+    return {
+      field: `schedule.weekSchedule.${dayKey}`,
+      message: detail.msg,
+      step: 3,
+    };
+  }
+
+  return null;
+}
+
+function deriveStageAlignmentFlags(
+  selectedEducationLevel: ChildProfileWizardFormValues['childInfo']['educationLevel'],
+  derivedEducationLevel: ChildProfileWizardFormValues['childInfo']['derivedEducationLevel'],
+): { isAccelerated: boolean; isBelowExpectedStage: boolean } {
+  if (!selectedEducationLevel || !derivedEducationLevel || selectedEducationLevel === derivedEducationLevel) {
+    return {
+      isAccelerated: false,
+      isBelowExpectedStage: false,
+    };
+  }
+
+  const order = {
+    kindergarten: 0,
+    primary_school: 1,
+    secondary_school: 2,
+  } as const;
+
+  if (order[selectedEducationLevel] > order[derivedEducationLevel]) {
+    return {
+      isAccelerated: true,
+      isBelowExpectedStage: false,
+    };
+  }
+
+  return {
+    isAccelerated: false,
+    isBelowExpectedStage: true,
+  };
+}
 
 // --- 3. Nickname Animation ---
 const NICKNAME_COLORS = {
@@ -227,40 +430,56 @@ export default function ChildProfileWizard() {
       return;
     }
 
+    methods.clearErrors();
     setSubmitError(null);
     setIsSubmitting(true);
 
     try {
-      const parsedBirthDate = parseIsoDateOnly(values.childInfo.birthDateIso);
-      const ageGroup = parsedBirthDate ? (deriveAgeGroupFromBirthDate(parsedBirthDate) ?? undefined) : undefined;
+      const hasExistingProfile = Boolean(profile?.id);
       const blockedSubjects = deriveBlockedSubjects(values.schedule.allowedSubjects);
       const { timeWindowStart, timeWindowEnd } = deriveTimeWindowFromWeekSchedule(
         values.schedule.weekSchedule,
+      );
+      const { isAccelerated, isBelowExpectedStage } = deriveStageAlignmentFlags(
+        values.childInfo.educationLevel,
+        values.childInfo.derivedEducationLevel,
       );
 
       const savedProfile = await saveChildProfile({
         nickname: values.childInfo.nickname.trim(),
         birthDate: values.childInfo.birthDateIso,
         educationStage: educationLevelToBackendStage(values.childInfo.educationLevel),
-        ageGroup,
+        isAccelerated,
+        isBelowExpectedStage,
         languages: [values.rules.defaultLanguage],
         avatarId: values.avatar.avatarId,
+        rules: {
+          defaultLanguage: values.rules.defaultLanguage,
+          homeworkModeEnabled: values.rules.homeworkModeEnabled,
+          voiceModeEnabled: values.rules.voiceModeEnabled,
+          audioStorageEnabled: values.rules.audioStorageEnabled,
+          conversationHistoryEnabled: values.rules.conversationHistoryEnabled,
+        },
+        allowedSubjects: values.schedule.allowedSubjects,
+        weekSchedule: values.schedule.weekSchedule,
       });
 
-      await patchChildRules(savedProfile.id, {
-        defaultLanguage: values.rules.defaultLanguage,
-        dailyLimitMinutes: values.schedule.dailyLimitMinutes,
-        allowedSubjects: values.schedule.allowedSubjects,
-        blockedSubjects,
-        weekSchedule: values.schedule.weekSchedule,
-        timeWindowStart,
-        timeWindowEnd,
-        homeworkModeEnabled: values.rules.homeworkModeEnabled,
-        voiceModeEnabled: values.rules.voiceModeEnabled,
-        audioStorageEnabled: values.rules.audioStorageEnabled,
-        conversationHistoryEnabled: values.rules.conversationHistoryEnabled,
-        contentSafetyLevel: values.rules.contentSafetyLevel,
-      });
+      if (hasExistingProfile) {
+        await patchChildRules(savedProfile.id, {
+          defaultLanguage: values.rules.defaultLanguage,
+          dailyLimitMinutes: values.schedule.dailyLimitMinutes,
+          allowedSubjects: values.schedule.allowedSubjects,
+          blockedSubjects,
+          weekSchedule: values.schedule.weekSchedule,
+          timeWindowStart,
+          timeWindowEnd,
+          homeworkModeEnabled: values.rules.homeworkModeEnabled,
+          voiceModeEnabled: values.rules.voiceModeEnabled,
+          audioStorageEnabled: values.rules.audioStorageEnabled,
+          conversationHistoryEnabled: values.rules.conversationHistoryEnabled,
+          contentSafetyLevel: values.rules.contentSafetyLevel,
+        });
+      }
 
       await refreshChildData();
 
@@ -270,6 +489,66 @@ export default function ChildProfileWizard() {
         router.replace('/(tabs)' as never);
       }
     } catch (error) {
+      if (error instanceof ApiClientError) {
+        if (error.status === 422) {
+          const details = extractFastApiValidationDetails(error);
+          const enabledWeekdayKeys = getEnabledWeekdayKeys(values.schedule.weekSchedule);
+          const mappedErrors = details
+            .map((detail) => mapValidationDetailToFieldError(detail, enabledWeekdayKeys))
+            .filter((detail): detail is MappedWizardFieldError => detail !== null);
+
+          if (mappedErrors.length > 0) {
+            const seenFields = new Set<string>();
+            let firstInvalidStep: WizardStep | null = null;
+
+            for (const mappedError of mappedErrors) {
+              if (seenFields.has(mappedError.field)) {
+                continue;
+              }
+
+              seenFields.add(mappedError.field);
+              methods.setError(mappedError.field as any, {
+                type: 'server',
+                message: mappedError.message,
+              });
+
+              if (firstInvalidStep === null || mappedError.step < firstInvalidStep) {
+                firstInvalidStep = mappedError.step;
+              }
+            }
+
+            if (firstInvalidStep !== null) {
+              setStep(firstInvalidStep);
+            }
+
+            setSubmitError('Please review the highlighted fields.');
+            return;
+          }
+
+          if (error.message.toLowerCase().includes('avatar_id')) {
+            methods.setError('avatar.avatarId', {
+              type: 'server',
+              message: error.message,
+            });
+            setStep(2);
+            setSubmitError('Please review the highlighted fields.');
+            return;
+          }
+
+          setSubmitError(error.message || 'Validation failed. Please review your entries.');
+          return;
+        }
+
+        if (error.status === 403) {
+          const forbiddenMessage =
+            error.message.trim().length > 0
+              ? error.message
+              : 'You are not allowed to create or update this child profile.';
+          setSubmitError(forbiddenMessage);
+          return;
+        }
+      }
+
       setSubmitError(toApiErrorMessage(error));
     } finally {
       setIsSubmitting(false);

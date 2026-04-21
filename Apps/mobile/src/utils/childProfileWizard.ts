@@ -127,17 +127,19 @@ export function calculateAgeFromDateOfBirth(
   birthDate: Date,
   referenceDate: Date = new Date(),
 ): number {
-  let age = referenceDate.getFullYear() - birthDate.getFullYear();
-  const hasHadBirthdayThisYear =
-    referenceDate.getMonth() > birthDate.getMonth() ||
-    (referenceDate.getMonth() === birthDate.getMonth() &&
-      referenceDate.getDate() >= birthDate.getDate());
+  const birthDateUtc = Date.UTC(
+    birthDate.getFullYear(),
+    birthDate.getMonth(),
+    birthDate.getDate(),
+  );
+  const referenceDateUtc = Date.UTC(
+    referenceDate.getFullYear(),
+    referenceDate.getMonth(),
+    referenceDate.getDate(),
+  );
+  const daysDiff = Math.floor((referenceDateUtc - birthDateUtc) / (24 * 60 * 60 * 1000));
 
-  if (!hasHadBirthdayThisYear) {
-    age -= 1;
-  }
-
-  return age;
+  return Math.floor(daysDiff / 365);
 }
 
 export function isChildProfileAgeInRange(
