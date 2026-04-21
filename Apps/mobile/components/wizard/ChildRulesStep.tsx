@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { LabeledToggleRow } from '@/components/ui/LabeledToggleRow';
 import { Colors, Radii, Spacing, Typography } from '@/constants/theme';
 import type { ChildProfileWizardFormValues } from '@/src/schemas/childProfileWizardSchema';
-import { CONTENT_SAFETY_OPTIONS, deriveBlockedSubjects, LANGUAGE_OPTIONS } from '@/src/utils/childProfileWizard';
+import { deriveBlockedSubjects, LANGUAGE_OPTIONS } from '@/src/utils/childProfileWizard';
 
 export function ChildRulesStep() {
   const {
@@ -19,7 +19,6 @@ export function ChildRulesStep() {
   const voiceModeEnabled = useWatch({ control, name: 'rules.voiceModeEnabled' });
   const audioStorageEnabled = useWatch({ control, name: 'rules.audioStorageEnabled' });
   const conversationHistoryEnabled = useWatch({ control, name: 'rules.conversationHistoryEnabled' });
-  const contentSafetyLevel = useWatch({ control, name: 'rules.contentSafetyLevel' });
   const allowedSubjects = useWatch({ control, name: 'schedule.allowedSubjects' });
 
   useEffect(() => {
@@ -41,13 +40,15 @@ export function ChildRulesStep() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Child Rules</Text>
-      <Text style={styles.subtitle}>Set language, safety, and usage controls.</Text>
+      <Text style={styles.subtitle}>Set language and usage controls.</Text>
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Default Language</Text>
         <View style={styles.chipRow}>
           {LANGUAGE_OPTIONS.map((option) => {
             const selected = option.value === defaultLanguage;
+            const nextDefaultLanguage = option.value as ChildProfileWizardFormValues['rules']['defaultLanguage'];
+
             return (
               <Pressable
                 key={option.value}
@@ -55,7 +56,7 @@ export function ChildRulesStep() {
                 accessibilityLabel={`Set default language to ${option.label}`}
                 accessibilityState={{ selected }}
                 onPress={() => {
-                  setValue('rules.defaultLanguage', option.value, {
+                  setValue('rules.defaultLanguage', nextDefaultLanguage, {
                     shouldDirty: true,
                     shouldValidate: true,
                   });
@@ -76,38 +77,6 @@ export function ChildRulesStep() {
         {errors.rules?.defaultLanguage?.message ? (
           <Text style={styles.errorText}>{errors.rules.defaultLanguage.message}</Text>
         ) : null}
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Content Safety</Text>
-        <View style={styles.chipRow}>
-          {CONTENT_SAFETY_OPTIONS.map((option) => {
-            const selected = contentSafetyLevel === option.value;
-            return (
-              <Pressable
-                key={option.value}
-                accessibilityRole="button"
-                accessibilityLabel={`Set content safety to ${option.label}`}
-                accessibilityState={{ selected }}
-                onPress={() => {
-                  setValue('rules.contentSafetyLevel', option.value, {
-                    shouldDirty: true,
-                    shouldValidate: true,
-                  });
-                }}
-                style={({ pressed }) => [
-                  styles.safetyChip,
-                  selected ? styles.safetyChipSelected : null,
-                  pressed ? styles.chipPressed : null,
-                ]}
-              >
-                <Text style={[styles.safetyChipText, selected ? styles.chipTextSelected : null]}>
-                  {option.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
       </View>
 
       <View style={styles.section}>

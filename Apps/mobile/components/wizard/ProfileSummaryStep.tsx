@@ -15,6 +15,22 @@ interface ProfileSummaryStepProps {
   onEditStep: (step: number) => void;
 }
 
+function formatMinutesLabel(value: number | null): string {
+  if (typeof value !== 'number' || Number.isNaN(value)) {
+    return '-';
+  }
+
+  return `${value} minutes`;
+}
+
+function formatTimeWindowLabel(startTime: string | null, endTime: string | null): string {
+  if (!startTime || !endTime) {
+    return '-';
+  }
+
+  return `${startTime} - ${endTime}`;
+}
+
 export function ProfileSummaryStep({ onEditStep }: ProfileSummaryStepProps) {
   const { control } = useFormContext<ChildProfileWizardFormValues>();
 
@@ -32,9 +48,37 @@ export function ProfileSummaryStep({ onEditStep }: ProfileSummaryStepProps) {
     return calculateAgeFromDateOfBirth(date);
   }, [childInfo.birthDateIso]);
 
-  const enabledDayLabels = WEEKDAY_OPTIONS.filter((day) => schedule.weekSchedule[day.key].enabled).map((day) => day.fullLabel);
-  const blockedSubjectLabels = rules.blockedSubjects.map((subject) => SUBJECT_LABEL_MAP[subject] ?? subject);
-  const allowedSubjectLabels = schedule.allowedSubjects.map((subject) => SUBJECT_LABEL_MAP[subject] ?? subject);
+  const scheduleSummary = useMemo(() => {
+    const enabledDays = WEEKDAY_OPTIONS.filter((day) => schedule.weekSchedule[day.key].enabled);
+
+    if (enabledDays.length === 0) {
+      return {
+        dailyLimitLabel: '-',
+        sessionWindowLabel: '-',
+        enabledDayLabels: [] as string[],
+      };
+    }
+
+    const firstDay = schedule.weekSchedule[enabledDays[0].key];
+    const isUniformSchedule = enabledDays.every((day) => {
+      const dayState = schedule.weekSchedule[day.key];
+
+      return (
+        dayState.durationMinutes === firstDay.durationMinutes &&
+        dayState.startTime === firstDay.startTime &&
+        dayState.endTime === firstDay.endTime
+      );
+    });
+
+    return {
+      dailyLimitLabel: isUniformSchedule ? formatMinutesLabel(firstDay.durationMinutes) : 'custom',
+      sessionWindowLabel: isUniformSchedule
+        ? formatTimeWindowLabel(firstDay.startTime, firstDay.endTime)
+        : 'custom',
+      enabledDayLabels: enabledDays.map((day) => day.fullLabel),
+    };
+  }, [schedule.weekSchedule]);
+
 
   return (
     <View style={styles.container}>
@@ -72,8 +116,9 @@ export function ProfileSummaryStep({ onEditStep }: ProfileSummaryStepProps) {
           </Pressable>
         </View>
         <Text style={styles.itemText}>Allowed subjects: {schedule.allowedSubjects.map((subject) => SUBJECT_LABEL_MAP[subject]).join(', ') || '-'}</Text>
-        <Text style={styles.itemText}>Daily limit: {schedule.dailyLimitMinutes} minutes</Text>
-        <Text style={styles.itemText}>Enabled days: {enabledDayLabels.join(', ') || '-'}</Text>
+        <Text style={styles.itemText}>Daily limit: {scheduleSummary.dailyLimitLabel}</Text>
+        <Text style={styles.itemText}>Session window: {scheduleSummary.sessionWindowLabel}</Text>
+        <Text style={styles.itemText}>Enabled days: {scheduleSummary.enabledDayLabels.join(', ') || '-'}</Text>
       </View>
 
       <View style={styles.card}>
@@ -86,9 +131,8 @@ export function ProfileSummaryStep({ onEditStep }: ProfileSummaryStepProps) {
         <Text style={styles.itemText}>Language: {LANGUAGE_LABEL_MAP[rules.defaultLanguage] ?? rules.defaultLanguage}</Text>
         <Text style={styles.itemText}>Voice mode: {rules.voiceModeEnabled ? 'Enabled' : 'Disabled'}</Text>
         <Text style={styles.itemText}>Homework mode: {rules.homeworkModeEnabled ? 'Enabled' : 'Disabled'}</Text>
-        <Text style={styles.itemText}>Content safety: {rules.contentSafetyLevel}</Text>
-        <Text style={styles.itemText}>Allowed subjects: {allowedSubjectLabels.join(', ') || '-'}</Text>
-        <Text style={styles.itemText}>Blocked subjects: {blockedSubjectLabels.join(', ') || '-'}</Text>
+        <Text style={styles.itemText}>Audio storage: {rules.audioStorageEnabled ? 'Enabled' : 'Disabled'}</Text>
+        <Text style={styles.itemText}>Conversation history: {rules.conversationHistoryEnabled ? 'Enabled' : 'Disabled'}</Text>
       </View>
     </View>
   );

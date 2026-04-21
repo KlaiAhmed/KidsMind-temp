@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import Animated, {
-  FadeInDown,
-  FadeOutUp,
+  Easing,
+  FadeIn,
+  FadeOut,
   LinearTransition,
   useAnimatedStyle,
   useSharedValue,
@@ -80,13 +81,21 @@ export function WeekScheduleStep() {
     [enabledDays],
   );
 
+  const selectedDayOrderRef = useRef<WeekdayKey[]>(enabledDayKeys);
   const firstEnabledDayKey = enabledDayKeys[0] ?? null;
   const firstEnabledDayErrors = firstEnabledDayKey
     ? errors.schedule?.weekSchedule?.[firstEnabledDayKey]
     : undefined;
   const canUseAdvancedMode = enabledDayKeys.length > 1;
 
-  const [expandedDay, setExpandedDay] = useState<WeekdayKey | null>(null);
+  const getDefaultExpandedDay = () =>
+    selectedDayOrderRef.current.find((dayKey) => enabledDayKeys.includes(dayKey)) ??
+    enabledDayKeys[0] ??
+    null;
+
+  const [expandedDay, setExpandedDay] = useState<WeekdayKey | null>(() =>
+    scheduleMode === 'advanced' ? getDefaultExpandedDay() : null,
+  );
   const [switchWidth, setSwitchWidth] = useState(0);
   const modeProgress = useSharedValue(scheduleMode === 'advanced' ? 1 : 0);
 
@@ -119,7 +128,8 @@ export function WeekScheduleStep() {
 
   useEffect(() => {
     modeProgress.value = withTiming(scheduleMode === 'advanced' ? 1 : 0, {
-      duration: 220,
+      duration: 180,
+      easing: Easing.out(Easing.cubic),
     });
   }, [modeProgress, scheduleMode]);
 
@@ -133,13 +143,22 @@ export function WeekScheduleStep() {
   }, [canUseAdvancedMode, scheduleMode, setValue]);
 
   useEffect(() => {
-    if (expandedDay && !enabledDayKeys.includes(expandedDay)) {
-      setExpandedDay(enabledDayKeys[0] ?? null);
-      return;
-    }
+    const enabledDaySet = new Set(enabledDayKeys);
 
-    if (!expandedDay && enabledDayKeys.length > 0) {
-      setExpandedDay(enabledDayKeys[0]);
+    selectedDayOrderRef.current = selectedDayOrderRef.current.filter((dayKey) =>
+      enabledDaySet.has(dayKey),
+    );
+
+    for (const dayKey of enabledDayKeys) {
+      if (!selectedDayOrderRef.current.includes(dayKey)) {
+        selectedDayOrderRef.current.push(dayKey);
+      }
+    }
+  }, [enabledDayKeys]);
+
+  useEffect(() => {
+    if (expandedDay && !enabledDayKeys.includes(expandedDay)) {
+      setExpandedDay(null);
     }
   }, [enabledDayKeys, expandedDay]);
 
@@ -237,6 +256,13 @@ export function WeekScheduleStep() {
     });
 
     applySimpleConfig(enabledDayKeys, simpleConfig, false);
+
+    if (nextMode === 'advanced') {
+      setExpandedDay(getDefaultExpandedDay());
+      return;
+    }
+
+    setExpandedDay(null);
   }
 
   function toggleAllowedSubject(subject: SubjectKey) {
@@ -273,6 +299,19 @@ export function WeekScheduleStep() {
   function toggleDay(day: WeekdayKey) {
     const currentDay = weekSchedule[day];
     const nextEnabled = !currentDay.enabled;
+
+    if (nextEnabled) {
+      selectedDayOrderRef.current = [
+        ...selectedDayOrderRef.current.filter((entry) => entry !== day),
+        day,
+      ];
+    } else {
+      selectedDayOrderRef.current = selectedDayOrderRef.current.filter((entry) => entry !== day);
+
+      if (expandedDay === day) {
+        setExpandedDay(null);
+      }
+    }
 
     setValue(`schedule.weekSchedule.${day}.enabled` as any, nextEnabled, {
       shouldDirty: true,
@@ -456,9 +495,9 @@ export function WeekScheduleStep() {
   function renderSimpleMode() {
     return (
       <Animated.View
-        entering={FadeInDown.duration(220)}
-        exiting={FadeOutUp.duration(160)}
-        layout={LinearTransition.springify().damping(20)}
+        entering={FadeIn.duration(160)}
+        exiting={FadeOut.duration(120)}
+        layout={LinearTransition.duration(180).easing(Easing.out(Easing.cubic))}
         style={styles.modePanel}
       >
         <View style={styles.section}>
@@ -528,9 +567,9 @@ export function WeekScheduleStep() {
   function renderAdvancedMode() {
     return (
       <Animated.View
-        entering={FadeInDown.duration(220)}
-        exiting={FadeOutUp.duration(160)}
-        layout={LinearTransition.springify().damping(20)}
+        entering={FadeIn.duration(160)}
+        exiting={FadeOut.duration(120)}
+        layout={LinearTransition.duration(180).easing(Easing.out(Easing.cubic))}
         style={styles.modePanel}
       >
         <Text style={styles.sectionSubtitle}>Customize each selected day. Tap a day to edit details.</Text>
@@ -543,7 +582,11 @@ export function WeekScheduleStep() {
             .join(', ');
 
           return (
-            <Animated.View key={day.key} layout={LinearTransition.springify().damping(20)} style={styles.dayCard}>
+            <Animated.View
+              key={day.key}
+              layout={LinearTransition.duration(180).easing(Easing.out(Easing.cubic))}
+              style={styles.dayCard}
+            >
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`Edit ${day.fullLabel} details`}
@@ -562,24 +605,11 @@ export function WeekScheduleStep() {
 
               {isExpanded ? (
                 <Animated.View
-                  entering={FadeInDown.duration(180)}
-                  exiting={FadeOutUp.duration(140)}
+                  entering={FadeIn.duration(120)}
+                  exiting={FadeOut.duration(90)}
                   style={styles.dayCardBody}
                 >
                   <View style={styles.rowInputs}>
-                    <View style={styles.halfField}>
-                      <Text style={styles.dayLabel}>Daily Cap (minutes)</Text>
-                      <TextInput
-                        value={toMinuteLabel(dayState.durationMinutes)}
-                        onChangeText={(nextValue) => onAdvancedDurationChange(day.key, nextValue)}
-                        keyboardType="number-pad"
-                        inputMode="numeric"
-                        maxLength={3}
-                        style={styles.numericInput}
-                        accessibilityLabel={`${day.fullLabel} daily cap in minutes`}
-                      />
-                    </View>
-
                     <View style={styles.halfField}>
                       <Text style={styles.dayLabel}>Start (HH:MM)</Text>
                       <TextInput
@@ -591,17 +621,30 @@ export function WeekScheduleStep() {
                         accessibilityLabel={`${day.fullLabel} start time`}
                       />
                     </View>
+
+                    <View style={styles.halfField}>
+                      <Text style={styles.dayLabel}>End (HH:MM)</Text>
+                      <TextInput
+                        value={dayState.endTime ?? ''}
+                        onChangeText={(nextValue) => onAdvancedEndChange(day.key, nextValue)}
+                        placeholder="08:30"
+                        keyboardType="numbers-and-punctuation"
+                        style={styles.numericInput}
+                        accessibilityLabel={`${day.fullLabel} end time`}
+                      />
+                    </View>
                   </View>
 
-                  <View style={styles.section}>
-                    <Text style={styles.dayLabel}>End (editable)</Text>
+                  <View style={styles.dayCardFullField}>
+                    <Text style={styles.dayLabel}>Daily Cap (minutes)</Text>
                     <TextInput
-                      value={dayState.endTime ?? ''}
-                      onChangeText={(nextValue) => onAdvancedEndChange(day.key, nextValue)}
-                      placeholder="08:30"
-                      keyboardType="numbers-and-punctuation"
+                      value={toMinuteLabel(dayState.durationMinutes)}
+                      onChangeText={(nextValue) => onAdvancedDurationChange(day.key, nextValue)}
+                      keyboardType="number-pad"
+                      inputMode="numeric"
+                      maxLength={3}
                       style={styles.numericInput}
-                      accessibilityLabel={`${day.fullLabel} end time`}
+                      accessibilityLabel={`${day.fullLabel} daily cap in minutes`}
                     />
                   </View>
 
@@ -723,53 +766,49 @@ export function WeekScheduleStep() {
 
       {enabledDayKeys.length > 0 ? (
         <View style={styles.modeSection}>
-          <View style={styles.modeHeader}>
-            <Text style={styles.sectionTitle}>Mode</Text>
-            {!canUseAdvancedMode ? (
-              <Text style={styles.modeHint}>Advanced unlocks when 2+ days are selected</Text>
-            ) : null}
-          </View>
 
-          <View
-            style={styles.modeSwitchTrack}
-            onLayout={(event) => setSwitchWidth(event.nativeEvent.layout.width)}
-          >
-            <Animated.View style={[styles.modeSwitchIndicator, indicatorStyle]} />
-
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Switch to simple mode"
-              onPress={() => handleModeChange('simple')}
-              style={styles.modeSwitchButton}
+         {canUseAdvancedMode && (
+            <View
+              style={styles.modeSwitchTrack}
+              onLayout={(event) => setSwitchWidth(event.nativeEvent.layout.width)}
             >
-              <Text
-                style={[
-                  styles.modeSwitchLabel,
-                  scheduleMode === 'simple' ? styles.modeSwitchLabelActive : null,
-                ]}
-              >
-                Simple
-              </Text>
-            </Pressable>
+              <Animated.View style={[styles.modeSwitchIndicator, indicatorStyle]} />
 
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Switch to advanced mode"
-              onPress={() => handleModeChange('advanced')}
-              disabled={!canUseAdvancedMode}
-              style={styles.modeSwitchButton}
-            >
-              <Text
-                style={[
-                  styles.modeSwitchLabel,
-                  scheduleMode === 'advanced' ? styles.modeSwitchLabelActive : null,
-                  !canUseAdvancedMode ? styles.modeSwitchLabelDisabled : null,
-                ]}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Switch to simple mode"
+                onPress={() => handleModeChange('simple')}
+                style={styles.modeSwitchButton}
               >
-                Advanced
-              </Text>
-            </Pressable>
-          </View>
+                <Text
+                  style={[
+                    styles.modeSwitchLabel,
+                    scheduleMode === 'simple' ? styles.modeSwitchLabelActive : null,
+                  ]}
+                >
+                  Simple
+                </Text>
+              </Pressable>
+
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Switch to advanced mode"
+                onPress={() => handleModeChange('advanced')}
+                disabled={!canUseAdvancedMode}
+                style={styles.modeSwitchButton}
+              >
+                <Text
+                  style={[
+                    styles.modeSwitchLabel,
+                    scheduleMode === 'advanced' ? styles.modeSwitchLabelActive : null,
+                    !canUseAdvancedMode ? styles.modeSwitchLabelDisabled : null,
+                  ]}
+                >
+                  Advanced
+                </Text>
+              </Pressable>
+            </View>
+          )}
 
           {scheduleMode === 'simple' ? renderSimpleMode() : renderAdvancedMode()}
         </View>
@@ -947,6 +986,10 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.md,
     paddingTop: Spacing.sm,
     gap: Spacing.sm,
+  },
+  dayCardFullField: {
+    gap: Spacing.xs,
+    width: '100%',
   },
   dayTitle: {
     ...Typography.bodySemiBold,

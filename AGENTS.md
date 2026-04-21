@@ -160,4 +160,3 @@ docs: update README with architecture overview
 
 - **commit all**: Commit all changes in KIDSMIND folder with a clear message describing the overall change until no more changes remain. Group related changes into a single commit.
 - **commit**: Only commit current working directory (and its subfolders) changes with a message describing that specific change. Group related changes into a single commit.
-- **pick up**: Pick up where you left off in the codebase, following the architecture and conventions outlined above, and continue working on the next logical task or improvement.

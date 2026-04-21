@@ -44,6 +44,7 @@ import {
   educationLevelToBackendStage,
   isChildProfileAgeInRange,
   parseIsoDateOnly,
+  WEEKDAY_OPTIONS,
 } from '@/src/utils/childProfileWizard';
 import { patchChildRules } from '@/services/childService';
 
@@ -151,7 +152,10 @@ export default function ChildProfileWizard() {
   methodsRef.current = methods;
 
   const childInfo = useWatch({ control: methods.control, name: 'childInfo' });
+  const schedule = useWatch({ control: methods.control, name: 'schedule' });
   const isStepOneValid = useMemo(() => validateStepOne(childInfo), [childInfo]);
+  const hasSelectedDays = WEEKDAY_OPTIONS.some((day) => schedule?.weekSchedule?.[day.key].enabled);
+  const hasSelectedSubjects = (schedule?.allowedSubjects?.length ?? 0) > 0;
 
   useEffect(() => {
     methodsRef.current.reset(defaultValues);
@@ -159,7 +163,10 @@ export default function ChildProfileWizard() {
 
   const showBackButton = isEditMode || step > 1;
   const nextLabel = step === 5 ? (isEditMode ? 'Save Changes' : 'Start Learning') : 'Next';
-  const isNextDisabled = isSubmitting || (step === 1 && !isStepOneValid);
+  const isNextDisabled =
+    isSubmitting ||
+    (step === 1 && !isStepOneValid) ||
+    (step === 3 && (!hasSelectedDays || !hasSelectedSubjects));
 
   function handleBack() {
     if (step > 1) {
