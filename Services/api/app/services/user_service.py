@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from models.child_profile import ChildProfile
 from models.refresh_token_session import RefreshTokenSession
-from models.user import User
+from models.user import User, UserRole
 from utils.manage_pwd import hash_password
 
 
@@ -127,6 +127,21 @@ def update_user_mfa_settings(db: Session, user: User, *, mfa_enabled: bool, mfa_
     db.commit()
     db.refresh(user)
     return changed_at
+
+
+def set_parent_pin(db: Session, user: User, parent_pin: str) -> User:
+    """Persist a parent PIN hash for the current account."""
+    if user.role != UserRole.PARENT:
+        raise ValueError("Only parent accounts can set a PIN")
+
+    if user.parent_pin_hash:
+        raise ValueError("Parent PIN is already configured")
+
+    user.parent_pin_hash = hash_password(parent_pin)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
 
 
 def hard_delete_user_account_by_id(db: Session, user_id: int) -> dict | None:

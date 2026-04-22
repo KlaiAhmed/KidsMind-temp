@@ -9,15 +9,21 @@ Domain: Users
 
 import time
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
 from dependencies.auth import get_current_user
 from dependencies.infrastructure import get_db
 from models.user import User
 from schemas.auth_schema import MessageResponse
-from schemas.user_schema import DeleteAccountResponse, UserFullResponse, UserSummaryResponse
-from services.user_service import revoke_all_user_sessions, soft_delete_user_account
+from schemas.user_schema import (
+    DeleteAccountResponse,
+    ParentPinSetupRequest,
+    ParentPinSetupResponse,
+    UserFullResponse,
+    UserSummaryResponse,
+)
+from services.user_service import revoke_all_user_sessions, set_parent_pin, soft_delete_user_account
 from utils.token_blocklist import blocklist_access_token_jti
 from utils.logger import logger
 
@@ -102,6 +108,35 @@ async def soft_delete_my_account(
     logger.info(f"Soft delete completed for user_id={current_user.id} in {timer:.3f} seconds")
 
     return result
+
+
+@router.post("/me/parent-pin", response_model=ParentPinSetupResponse)
+async def set_my_parent_pin(
+    request: Request,
+    response: Response,
+    payload: ParentPinSetupRequest = Body(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ParentPinSetupResponse:
+    """Set the authenticated parent's PIN hash."""
+    timer = time.perf_counter()
+    logger.info(f"Parent PIN setup requested for user_id={current_user.id}")
+
+    try:
+        updated_user = set_parent_pin(db, current_user, payload.parent_pin)
+    except ValueError as exc:
+        message = str(exc)
+        if message == "Parent PIN is already configured":
+            raise HTTPException(status_code=409, detail="A PIN has already been set for this account.") from exc
+        raise HTTPException(status_code=400, detail=message) from exc
+
+    timer = time.perf_counter() - timer
+    logger.info(f"Parent PIN setup processed in {timer:.3f} seconds for user_id={current_user.id}")
+
+    return ParentPinSetupResponse(
+        message="Parent PIN configured successfully",
+        pin_configured=updated_user.pin_configured,
+    )
 
 
 @router.post("/logout-all", response_model=MessageResponse)

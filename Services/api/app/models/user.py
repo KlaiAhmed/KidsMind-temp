@@ -108,5 +108,9 @@ class User(Base):
     def is_super_admin(self) -> bool:
         return self.role == UserRole.SUPER_ADMIN
 
+    @property
+    def pin_configured(self) -> bool:
+        return bool(self.parent_pin_hash)
+
     def __repr__(self) -> str:
         return f"<User id={self.id} email={self.email} role={self.role}>"

@@ -83,6 +83,7 @@ class MobileLogoutRequest(BaseModel):
 class AuthUser(BaseModel):
     id: int
     email: EmailStr
+    pin_configured: bool = False
 
 
 class MessageResponse(BaseModel):

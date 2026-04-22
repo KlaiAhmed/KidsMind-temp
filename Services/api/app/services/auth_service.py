@@ -455,6 +455,7 @@ def build_user_data(user: User) -> dict:
     return {
         "id": user.id,
         "email": user.email,
+        "pin_configured": user.pin_configured,
     }
 
 

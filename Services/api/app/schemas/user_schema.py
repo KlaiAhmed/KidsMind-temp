@@ -7,11 +7,12 @@ Domain: Users
 """
 
 import enum
+import re
 
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from models.user import UserRole
 
@@ -34,6 +35,7 @@ class UserSummaryResponse(BaseModel):
     role: UserRole
     is_verified: bool
     is_active: bool
+    pin_configured: bool
 
 
 class UserFullResponse(BaseModel):
@@ -59,10 +61,30 @@ class UserFullResponse(BaseModel):
     last_login_at: datetime | None
     failed_login_attempts: int
     locked_until: datetime | None
+    pin_configured: bool
 
     created_at: datetime
     updated_at: datetime
     deleted_at: datetime | None
+
+
+class ParentPinSetupRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    parent_pin: str = Field(alias="parentPin", min_length=4, max_length=4)
+
+    @field_validator("parent_pin")
+    @classmethod
+    def validate_parent_pin_digits(cls, value: str) -> str:
+        normalized = value.strip()
+        if not re.fullmatch(r"\d{4}", normalized):
+            raise ValueError("parent pin must be exactly 4 digits")
+        return normalized
+
+
+class ParentPinSetupResponse(BaseModel):
+    message: str
+    pin_configured: bool
 
 
 class DeleteAccountResponse(BaseModel):

@@ -171,6 +171,7 @@ def _raw_endpoint_rules() -> list[EndpointRule]:
 
         EndpointRule("GET", "/api/v1/users/me/summary", "T1", "users_me_summary", "users_me_summary"),
         EndpointRule("GET", "/api/v1/users/me", "T1", "users_me", "users_me"),
+        EndpointRule("POST", "/api/v1/users/me/parent-pin", "T3", "users_parent_pin", "users_parent_pin"),
         EndpointRule("POST", "/api/v1/users/logout-all", "T3", "users_logout_all", "logout_all"),
 
         EndpointRule("GET", "/api/v1/users", "T1", "admin_users_list", "admin_users_list"),
