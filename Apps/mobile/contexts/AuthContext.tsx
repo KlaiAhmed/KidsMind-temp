@@ -46,6 +46,7 @@ export interface User {
   id: number;
   email: string;
   fullName?: string;
+  pinConfigured: boolean;
 }
 
 export type LoginFormValues = LoginRequest;
@@ -73,6 +74,7 @@ interface AuthContextValue extends SessionAuthState, ChildState {
   setUnauthenticated: () => void;
   setLoading: (isLoading: boolean) => void;
   clearError: () => void;
+  markPinConfigured: () => void;
   saveChildProfile: (input: CreateChildProfileInput) => Promise<ChildProfile>;
   updateChildProfile: (updates: Partial<Omit<ChildProfile, 'id'>>) => void;
   refreshChildData: () => Promise<void>;
@@ -310,6 +312,7 @@ function toUser(authUser: AuthUser): User {
     id: authUser.id,
     email: authUser.email,
     fullName: authUser.fullName,
+    pinConfigured: Boolean(authUser.pin_configured),
   };
 }
 
@@ -374,6 +377,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const clearError = useCallback(() => {
     setAuthError(null);
   }, [setAuthError]);
+
+  const pinConfiguredFromLocal = useRef(false);
+
+  const markPinConfigured = useCallback(() => {
+    if (!sessionUser) {
+      return;
+    }
+
+    pinConfiguredFromLocal.current = true;
+    setUser({
+      ...sessionUser,
+      pin_configured: true,
+    });
+  }, [sessionUser, setUser]);
 
   const refreshMutation = useMutation({
     mutationFn: refreshTokenRequest,
@@ -489,11 +506,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    setUser({
-      id: currentUserSummaryQuery.data.id,
-      email: currentUserSummaryQuery.data.email,
-    });
-  }, [currentUserSummaryQuery.data, setUser]);
+    if (pinConfiguredFromLocal.current) {
+      pinConfiguredFromLocal.current = false;
+      return;
+    }
+
+    const nextPinConfigured = currentUserSummaryQuery.data.pin_configured;
+    if (sessionUser && sessionUser.pin_configured === nextPinConfigured) {
+      return;
+    }
+
+    setUser(
+      sessionUser
+        ? {
+            ...sessionUser,
+            pin_configured: nextPinConfigured,
+          }
+        : {
+            id: currentUserSummaryQuery.data.id,
+            email: currentUserSummaryQuery.data.email,
+            pin_configured: nextPinConfigured,
+          }
+    );
+  }, [currentUserSummaryQuery.data, sessionUser, setUser]);
 
   useEffect(() => {
     if (!currentUserSummaryQuery.isError) {
@@ -720,6 +755,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUnauthenticated,
         setLoading,
         clearError,
+        markPinConfigured,
         saveChildProfile,
         updateChildProfile,
         refreshChildData,

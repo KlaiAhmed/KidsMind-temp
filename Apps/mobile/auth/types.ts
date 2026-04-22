@@ -2,6 +2,7 @@ export interface AuthUser {
   id: number;
   email: string;
   fullName?: string;
+  pin_configured: boolean;
 }
 
 export interface LoginRequest {
@@ -40,6 +41,12 @@ export interface UserSummaryResponse {
   role: string;
   is_verified: boolean;
   is_active: boolean;
+  pin_configured: boolean;
+}
+
+export interface ParentPinSetupResponse {
+  message: string;
+  pin_configured: boolean;
 }
 
 export interface AuthState {

@@ -249,7 +249,35 @@ def _build_t3_policies(*, is_prod: bool, dev_multiplier: int) -> dict[str, DualK
             key_b_kind="user_id",
             lockout_enabled=True,
         ),
+        "users_parent_pin": DualKeyPolicy(
+            name="users_parent_pin",
+            window_name="15m",
+            window_seconds=15 * 60,
+            key_a_limit=resolve_limit(settings.RL_T3_VERIFY_PIN_IP_15M, is_prod=is_prod, dev_multiplier=dev_multiplier),
+            key_b_limit=resolve_limit(settings.RL_T3_VERIFY_PIN_USER_15M, is_prod=is_prod, dev_multiplier=dev_multiplier),
+            key_b_kind="user_id",
+            lockout_enabled=False,
+        ),
     }
+
+
+def _validate_t3_policy_coverage(
+    *,
+    endpoint_rules: tuple[CompiledEndpointRule, ...],
+    t3_policies: dict[str, DualKeyPolicy],
+) -> None:
+    required_operations = {
+        rule.operation
+        for rule in endpoint_rules
+        if rule.tier == "T3"
+    }
+    configured_operations = set(t3_policies.keys())
+    missing_operations = sorted(required_operations - configured_operations)
+    if missing_operations:
+        raise ValueError(
+            "Missing T3 policy definitions for operations: "
+            + ", ".join(missing_operations)
+        )
 
 
 def build_resolved_rate_limit_policy() -> ResolvedRateLimitPolicy:
@@ -259,6 +287,7 @@ def build_resolved_rate_limit_policy() -> ResolvedRateLimitPolicy:
     endpoint_rules = _compile_endpoint_rules(_raw_endpoint_rules())
 
     t3_policies = _build_t3_policies(is_prod=is_prod, dev_multiplier=dev_multiplier)
+    _validate_t3_policy_coverage(endpoint_rules=endpoint_rules, t3_policies=t3_policies)
 
     t5_policies = {
         "chat_text": T5EndpointPolicy(
