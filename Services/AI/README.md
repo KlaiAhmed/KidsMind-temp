@@ -4,7 +4,7 @@
 
 - Service Name: ai-service
 - Role: FastAPI microservice for child-safe educational chat (ages 3-15). Called by core-api.
-- Primary Port (host): ${AI_PORT}(default:8001) 
+- Host Port: not published by default; opt-in localhost binding via `docker-compose.debug.yml` -> `127.0.0.1:${AI_PORT}:8000`
 - Docker Network Port (container): 8000
 - Compose address from other services: http://ai-service:8000
 - API Prefix: /v1/ai
@@ -24,7 +24,8 @@
 ### With Docker Compose
 
 1. Fill root .env and services/ai/app/.env.
-2. Start service and Redis:
+2. Keep `COMPOSE_PROFILES=local-upstreams` when running the local AI container.
+3. Start service and Redis:
    - docker compose up ai-service cache
 
 ## 3. Service Dependencies & Topology
