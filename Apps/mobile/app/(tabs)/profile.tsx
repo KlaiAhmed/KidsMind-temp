@@ -1,6 +1,5 @@
-// Apps/mobile/app/(tabs)/profile.tsx
-import ChildProfileHub from '@/screens/ChildProfileHub';
+import { ParentalControlsScreen } from '@/src/screens/parent';
 
 export default function ProfileTabScreen() {
-  return <ChildProfileHub />;
+  return <ParentalControlsScreen />;
 }

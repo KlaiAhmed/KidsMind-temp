@@ -1,5 +1,5 @@
-import SubjectTopicBrowser from '@/screens/SubjectTopicBrowser';
+import { ChildProgressScreen } from '@/src/screens/parent';
 
 export default function TabTwoScreen() {
-  return <SubjectTopicBrowser />;
+  return <ChildProgressScreen />;
 }

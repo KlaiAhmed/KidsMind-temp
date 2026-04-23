@@ -2,7 +2,9 @@ import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
 const REFRESH_TOKEN_KEY = 'kidsmind.refresh_token';
+const ONBOARDING_KEY = 'kidsmind.onboarding';
 let inMemoryRefreshToken: string | null = null;
+let inMemoryOnboarding: string | null = null;
 
 function hasSecureStoreMethods(): boolean {
   return (
@@ -97,4 +99,71 @@ export async function clearRefreshToken(): Promise<void> {
   }
 
   await clearFallbackToken();
+}
+
+export async function saveOnboardingFlag(hasChildProfile: boolean): Promise<void> {
+  const value = hasChildProfile ? 'true' : 'false';
+  if (hasSecureStoreMethods()) {
+    try {
+      await SecureStore.setItemAsync(ONBOARDING_KEY, value);
+      inMemoryOnboarding = value;
+      return;
+    } catch {
+      // Fallback
+    }
+  }
+  if (Platform.OS === 'web') {
+    const storage = getWebLocalStorage();
+    if (storage) {
+      storage.setItem(ONBOARDING_KEY, value);
+    }
+  }
+  inMemoryOnboarding = value;
+}
+
+export async function getOnboardingFlag(): Promise<boolean | null> {
+  if (hasSecureStoreMethods()) {
+    try {
+      const value = await SecureStore.getItemAsync(ONBOARDING_KEY);
+      if (value !== null) {
+        inMemoryOnboarding = value;
+        return value === 'true';
+      }
+    } catch {
+      // Fallback
+    }
+  }
+  if (Platform.OS === 'web') {
+    const storage = getWebLocalStorage();
+    if (storage) {
+      const value = storage.getItem(ONBOARDING_KEY);
+      if (value !== null) {
+        inMemoryOnboarding = value;
+        return value === 'true';
+      }
+    }
+  }
+  if (inMemoryOnboarding !== null) {
+    return inMemoryOnboarding === 'true';
+  }
+  return null;
+}
+
+export async function clearOnboardingFlag(): Promise<void> {
+  if (hasSecureStoreMethods()) {
+    try {
+      await SecureStore.deleteItemAsync(ONBOARDING_KEY);
+      inMemoryOnboarding = null;
+      return;
+    } catch {
+      // Fallback
+    }
+  }
+  if (Platform.OS === 'web') {
+    const storage = getWebLocalStorage();
+    if (storage) {
+      storage.removeItem(ONBOARDING_KEY);
+    }
+  }
+  inMemoryOnboarding = null;
 }

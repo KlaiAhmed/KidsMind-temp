@@ -7,9 +7,15 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Colors } from '@/constants/theme';
 
 export default function TabLayout() {
-  const { isLoading, isAuthenticated, childProfile } = useAuth();
+  const { isLoading, isAuthenticated, childProfileStatus, childProfile } = useAuth();
 
-  if (isLoading) {
+  if (
+    isLoading ||
+    (isAuthenticated && (
+      childProfileStatus === 'unknown' ||
+      (childProfileStatus === 'exists' && !childProfile)
+    ))
+  ) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={Colors.primary} />
@@ -21,7 +27,7 @@ export default function TabLayout() {
     return <Redirect href="/splash" />;
   }
 
-  if (!childProfile) {
+  if (childProfileStatus === 'missing') {
     return <Redirect href="/(auth)/child-profile-wizard" />;
   }
 
@@ -31,7 +37,7 @@ export default function TabLayout() {
         <BottomNavContainer
           {...props}
           mode="parent"
-          ageGroup={childProfile.ageGroup}
+          ageGroup={childProfile!.ageGroup}
         />
       )}
       screenOptions={{

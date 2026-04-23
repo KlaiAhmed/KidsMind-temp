@@ -5,10 +5,16 @@ import { Colors } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function AuthLayout() {
-  const { isLoading, isAuthenticated, childProfile, user } = useAuth();
+  const { isLoading, isAuthenticated, childProfileStatus, childProfile, user } = useAuth();
   const segments = useSegments();
 
-  if (isLoading) {
+  if (
+    isLoading ||
+    (isAuthenticated && (
+      childProfileStatus === 'unknown' ||
+      (childProfileStatus === 'exists' && !childProfile)
+    ))
+  ) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={Colors.primary} />
@@ -25,11 +31,11 @@ export default function AuthLayout() {
       return <Redirect href="/(auth)/setup-pin" />;
     }
 
-    if (hasPinConfigured && !childProfile && !inChildProfileWizard) {
+    if (hasPinConfigured && childProfileStatus === 'missing' && !inChildProfileWizard) {
       return <Redirect href="/(auth)/child-profile-wizard" />;
     }
 
-    if (childProfile) {
+    if (childProfileStatus === 'exists') {
       return <Redirect href="/(tabs)" />;
     }
   }

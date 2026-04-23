@@ -1,5 +1,5 @@
-import ChildHomeDashboard from '@/screens/ChildHomeDashboard';
+import { ParentOverviewScreen } from '@/src/screens/parent';
 
 export default function HomeScreen() {
-  return <ChildHomeDashboard />;
+  return <ParentOverviewScreen />;
 }

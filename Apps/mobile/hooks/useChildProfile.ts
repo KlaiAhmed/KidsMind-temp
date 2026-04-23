@@ -7,6 +7,7 @@ const DEFAULT_AVATAR_ID = 'avatar-1';
 export function useChildProfile() {
   const {
     childProfile,
+    childProfileStatus,
     avatars,
     childDataLoading,
     childDataError,
@@ -15,7 +16,7 @@ export function useChildProfile() {
     refreshChildData,
   } = useAuth();
 
-  const hasCompletedProfile = Boolean(childProfile);
+  const hasCompletedProfile = childProfileStatus === 'exists';
 
   function getAvatarById(avatarId: string): AvatarOption {
     return avatars.find((avatar) => avatar.id === avatarId) ?? avatars[0];

@@ -113,9 +113,10 @@ export function DateOfBirthInput({ value, onChange, onValidChange, externalError
   onValidChangeRef.current = onValidChange;
 
   const prevValidDateRef = useRef<Date | null>(null);
+  const { day, month, year } = value;
   const validation = useMemo(
-    () => validateDateParts(value),
-    [value.day, value.month, value.year],
+    () => validateDateParts({ day, month, year }),
+    [day, month, year],
   );
   const validDateTimestamp = validation.validDate ? validation.validDate.getTime() : null;
 
