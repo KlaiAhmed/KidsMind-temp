@@ -1,31 +1,38 @@
 import type { ComponentProps } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
   Switch,
   Text,
   View,
-  useWindowDimensions,
-  type ImageSourcePropType,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
+import { useMutation } from '@tanstack/react-query';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 
 import { LabeledToggleRow } from '@/components/ui/LabeledToggleRow';
-import { Colors, Gradients, Radii, Shadows, Spacing, Typography } from '@/constants/theme';
-import { useAuth } from '@/contexts/AuthContext';
-import { useChildProfile } from '@/hooks/useChildProfile';
-import type { ChildProfile } from '@/types/child';
+import { Colors, Radii, Shadows, Spacing, Typography } from '@/constants/theme';
+import { toApiErrorMessage, useAuth } from '@/contexts/AuthContext';
+import { patchChildRules } from '@/services/childService';
+import { ParentChildSwitcher } from '@/src/components/parent/ParentChildSwitcher';
+import { useParentDashboardChild } from '@/src/hooks/useParentDashboardChild';
+import {
+  computeEndTimeFromStart,
+  deriveTimeWindowFromWeekSchedule,
+  SUBJECT_OPTIONS,
+  SUBJECT_LABEL_MAP,
+} from '@/src/utils/childProfileWizard';
+import type { SubjectKey, WeekSchedule, WeekdayKey } from '@/types/child';
 
 type ControlsScreenState = 'loading' | 'ready' | 'error' | 'empty';
 
 interface SubjectToggleItem {
-  id: string;
+  id: SubjectKey;
   label: string;
   enabled: boolean;
 }
@@ -35,27 +42,16 @@ interface AlertPreference {
   title: string;
   description: string;
   iconName: 'clock-outline' | 'flag-outline';
-  enabled: boolean;
 }
 
-interface ControlChildData {
-  id: string;
-  name: string;
-  ageLabel: string;
-  gradeLabel: string;
-  avatarSource: ImageSourcePropType;
+interface ControlsSnapshot {
   dailyAllowanceMinutes: number;
-  activeWindowStart: string;
-  activeWindowEnd: string;
-  pauseAccessEnabled: boolean;
+  weekSchedule: WeekSchedule;
   curriculum: SubjectToggleItem[];
   homeworkModeEnabled: boolean;
-  safetyLevelLabel: string;
-  safetySubtitle: string;
   micAccessEnabled: boolean;
   audioStorageEnabled: boolean;
-  alertPreferences: AlertPreference[];
-  auditLoggedAt: string;
+  conversationHistoryEnabled: boolean;
 }
 
 export interface ParentalControlsScreenProps {
@@ -63,88 +59,28 @@ export interface ParentalControlsScreenProps {
   errorMessage?: string;
 }
 
-const ADDITIONAL_CHILDREN = [
+const DAILY_ALLOWANCE_OPTIONS = [30, 45, 60, 90, 120, 150, 180];
+
+const ALERT_PREFERENCES: AlertPreference[] = [
   {
-    id: 'child-maya',
-    name: 'Maya',
-    ageLabel: 'Age 10',
-    gradeLabel: '5th Grade',
-    avatarId: 'avatar-2',
-    dailyAllowanceMinutes: 120,
-    activeWindowStart: '08:00',
-    activeWindowEnd: '20:00',
-    pauseAccessEnabled: false,
-    curriculum: [
-      { id: 'maths', label: 'Maths', enabled: true },
-      { id: 'french', label: 'French', enabled: true },
-      { id: 'science', label: 'Science', enabled: false },
-    ],
-    homeworkModeEnabled: true,
-    safetyLevelLabel: 'Strict',
-    safetySubtitle: 'Content is strictly filtered for Maya age 10',
-    micAccessEnabled: true,
-    audioStorageEnabled: false,
-    alertPreferences: [
-      {
-        id: 'limit',
-        title: 'Limit alerts',
-        description: 'Get notified when Maya is near her daily limit.',
-        iconName: 'clock-outline',
-        enabled: true,
-      },
-      {
-        id: 'flagged',
-        title: 'Flagged content',
-        description: 'Immediate alert if filtered keywords are used.',
-        iconName: 'flag-outline',
-        enabled: true,
-      },
-    ],
-    auditLoggedAt: 'Today, 6:21 PM',
+    id: 'limit',
+    title: 'Limit alerts',
+    description: 'Notification preferences are not exposed by the current API yet.',
+    iconName: 'clock-outline',
   },
   {
-    id: 'child-sarah',
-    name: 'Sarah',
-    ageLabel: 'Age 8',
-    gradeLabel: '2nd Grade',
-    avatarId: 'avatar-4',
-    dailyAllowanceMinutes: 60,
-    activeWindowStart: '09:00',
-    activeWindowEnd: '18:00',
-    pauseAccessEnabled: false,
-    curriculum: [
-      { id: 'maths', label: 'Maths', enabled: true },
-      { id: 'french', label: 'French', enabled: false },
-      { id: 'science', label: 'Science', enabled: true },
-    ],
-    homeworkModeEnabled: false,
-    safetyLevelLabel: 'Strict',
-    safetySubtitle: 'Content is strictly filtered for Sarah age 8',
-    micAccessEnabled: true,
-    audioStorageEnabled: false,
-    alertPreferences: [
-      {
-        id: 'limit',
-        title: 'Limit alerts',
-        description: 'Get notified when Sarah is near her daily limit.',
-        iconName: 'clock-outline',
-        enabled: true,
-      },
-      {
-        id: 'flagged',
-        title: 'Flagged content',
-        description: 'Immediate alert if filtered keywords are used.',
-        iconName: 'flag-outline',
-        enabled: true,
-      },
-    ],
-    auditLoggedAt: 'Today, 4:05 PM',
+    id: 'flagged',
+    title: 'Flagged content',
+    description: 'Safety alert subscriptions will light up once backend support is available.',
+    iconName: 'flag-outline',
   },
-] as const;
+];
 
-const DAILY_ALLOWANCE_OPTIONS = [45, 60, 90, 120, 150, 180];
+function minutesToLabel(totalMinutes: number | null | undefined): string {
+  if (typeof totalMinutes !== 'number' || totalMinutes <= 0) {
+    return 'Not set';
+  }
 
-function minutesToLabel(totalMinutes: number): string {
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
 
@@ -168,60 +104,98 @@ function timeToOffset(time: string): number {
   return (hoursValue + minutesValue / 60) / 24;
 }
 
-function buildChildrenData(params: {
-  childProfile: ChildProfile | null;
-  getAvatarSource: (avatarId: string) => ImageSourcePropType;
-}): ControlChildData[] {
-  const activeChildName = params.childProfile?.nickname ?? params.childProfile?.name ?? 'Leo';
-  const activeChildAge = params.childProfile?.age ?? 9;
-  const activeChildRules = params.childProfile?.rules;
-
-  const primaryChild: ControlChildData = {
-    id: params.childProfile?.id ?? 'child-leo',
-    name: activeChildName,
-    ageLabel: `Age ${activeChildAge}`,
-    gradeLabel: params.childProfile?.gradeLevel ?? '3rd Grade',
-    avatarSource: params.getAvatarSource(params.childProfile?.avatarId ?? 'avatar-1'),
-    dailyAllowanceMinutes: activeChildRules?.dailyLimitMinutes ?? 90,
-    activeWindowStart: activeChildRules?.timeWindowStart ?? '08:00',
-    activeWindowEnd: activeChildRules?.timeWindowEnd ?? '20:00',
-    pauseAccessEnabled: false,
-    curriculum: [
-      { id: 'maths', label: 'Maths', enabled: true },
-      { id: 'french', label: 'French', enabled: true },
-      { id: 'science', label: 'Science', enabled: false },
-    ],
-    homeworkModeEnabled: activeChildRules?.homeworkModeEnabled ?? true,
-    safetyLevelLabel: 'Strict',
-    safetySubtitle: `Content is strictly filtered for ${activeChildName} age ${activeChildAge}`,
-    micAccessEnabled: activeChildRules?.voiceModeEnabled ?? true,
-    audioStorageEnabled: activeChildRules?.audioStorageEnabled ?? false,
-    alertPreferences: [
-      {
-        id: 'limit',
-        title: 'Limit alerts',
-        description: `Get notified when ${activeChildName} is near the daily limit.`,
-        iconName: 'clock-outline',
-        enabled: true,
-      },
-      {
-        id: 'flagged',
-        title: 'Flagged content',
-        description: 'Immediate alert if filtered keywords are used.',
-        iconName: 'flag-outline',
-        enabled: true,
-      },
-    ],
-    auditLoggedAt: 'Today, 7:08 PM',
+function createEmptyWeekSchedule(): WeekSchedule {
+  return {
+    monday: { enabled: false, subjects: [], durationMinutes: null, startTime: null, endTime: null },
+    tuesday: { enabled: false, subjects: [], durationMinutes: null, startTime: null, endTime: null },
+    wednesday: { enabled: false, subjects: [], durationMinutes: null, startTime: null, endTime: null },
+    thursday: { enabled: false, subjects: [], durationMinutes: null, startTime: null, endTime: null },
+    friday: { enabled: false, subjects: [], durationMinutes: null, startTime: null, endTime: null },
+    saturday: { enabled: false, subjects: [], durationMinutes: null, startTime: null, endTime: null },
+    sunday: { enabled: false, subjects: [], durationMinutes: null, startTime: null, endTime: null },
   };
+}
 
-  return [
-    primaryChild,
-    ...ADDITIONAL_CHILDREN.map((child) => ({
-      ...child,
-      avatarSource: params.getAvatarSource(child.avatarId),
-    })),
-  ];
+function buildCurriculum(subjectIds: SubjectKey[]): SubjectToggleItem[] {
+  return SUBJECT_OPTIONS.map((subject) => ({
+    id: subject.value,
+    label: subject.label,
+    enabled: subjectIds.includes(subject.value),
+  }));
+}
+
+function syncWeekScheduleWithAllowedSubjects(
+  weekSchedule: WeekSchedule,
+  allowedSubjects: SubjectKey[],
+): WeekSchedule {
+  const nextWeekSchedule = { ...weekSchedule };
+
+  (Object.keys(nextWeekSchedule) as WeekdayKey[]).forEach((dayKey) => {
+    const day = nextWeekSchedule[dayKey];
+    nextWeekSchedule[dayKey] = {
+      ...day,
+      subjects: day.subjects.filter((subject) => allowedSubjects.includes(subject)),
+    };
+  });
+
+  return nextWeekSchedule;
+}
+
+function applyDailyAllowanceToWeekSchedule(
+  weekSchedule: WeekSchedule,
+  dailyAllowanceMinutes: number,
+): WeekSchedule {
+  const nextWeekSchedule = { ...weekSchedule };
+
+  (Object.keys(nextWeekSchedule) as WeekdayKey[]).forEach((dayKey) => {
+    const day = nextWeekSchedule[dayKey];
+    if (!day.enabled) {
+      return;
+    }
+
+    const nextEndTime = day.startTime
+      ? computeEndTimeFromStart(day.startTime, dailyAllowanceMinutes) ?? day.endTime
+      : day.endTime;
+
+    nextWeekSchedule[dayKey] = {
+      ...day,
+      durationMinutes: dailyAllowanceMinutes,
+      endTime: nextEndTime,
+    };
+  });
+
+  return nextWeekSchedule;
+}
+
+function buildRulesPayload(
+  snapshot: ControlsSnapshot,
+  defaultLanguage: string,
+) {
+  const allowedSubjects = snapshot.curriculum
+    .filter((subject) => subject.enabled)
+    .map((subject) => subject.id);
+  const weekSchedule = syncWeekScheduleWithAllowedSubjects(
+    applyDailyAllowanceToWeekSchedule(snapshot.weekSchedule, snapshot.dailyAllowanceMinutes),
+    allowedSubjects,
+  );
+  const timeWindow = deriveTimeWindowFromWeekSchedule(weekSchedule);
+
+  return {
+    defaultLanguage,
+    dailyLimitMinutes: snapshot.dailyAllowanceMinutes,
+    allowedSubjects,
+    blockedSubjects: SUBJECT_OPTIONS.map((subject) => subject.value).filter(
+      (subject) => !allowedSubjects.includes(subject),
+    ),
+    weekSchedule,
+    timeWindowStart: timeWindow.timeWindowStart,
+    timeWindowEnd: timeWindow.timeWindowEnd,
+    homeworkModeEnabled: snapshot.homeworkModeEnabled,
+    voiceModeEnabled: snapshot.micAccessEnabled,
+    audioStorageEnabled: snapshot.audioStorageEnabled,
+    conversationHistoryEnabled: snapshot.conversationHistoryEnabled,
+    contentSafetyLevel: 'strict' as const,
+  };
 }
 
 function SectionHeader({
@@ -233,7 +207,7 @@ function SectionHeader({
 }) {
   return (
     <View style={styles.sectionHeader}>
-      <MaterialCommunityIcons accessibilityLabel={title} color={Colors.primary} name={iconName} size={18} />
+      <MaterialCommunityIcons color={Colors.primary} name={iconName} size={18} />
       <Text style={styles.sectionHeaderLabel}>{title}</Text>
     </View>
   );
@@ -243,16 +217,18 @@ function SteppedSlider({
   options,
   value,
   onChange,
+  disabled = false,
 }: {
   options: number[];
   value: number;
   onChange: (nextValue: number) => void;
+  disabled?: boolean;
 }) {
   const activeIndex = Math.max(0, options.findIndex((option) => option === value));
   const fillPercent = options.length > 1 ? activeIndex / (options.length - 1) : 0;
 
   return (
-    <View style={styles.sliderContainer}>
+    <View style={[styles.sliderContainer, disabled ? styles.disabledSection : null]}>
       <View style={styles.sliderTrackBase} />
       <View style={[styles.sliderFill, { width: `${fillPercent * 100}%` }]} />
       <View style={[styles.sliderThumb, { left: `${fillPercent * 100}%` }]} />
@@ -263,11 +239,9 @@ function SteppedSlider({
             key={option}
             accessibilityRole="adjustable"
             accessibilityLabel={`Set allowance to ${minutesToLabel(option)}`}
+            disabled={disabled}
             onPress={() => onChange(option)}
-            style={({ pressed }) => [
-              styles.sliderTapTarget,
-              pressed ? styles.sliderTapTargetPressed : null,
-            ]}
+            style={({ pressed }) => [styles.sliderTapTarget, pressed ? styles.pressed : null]}
           >
             <View style={[styles.sliderDot, index <= activeIndex ? styles.sliderDotActive : null]} />
           </Pressable>
@@ -282,105 +256,175 @@ export default function ParentalControlsScreen({
   errorMessage = 'Controls could not be loaded right now.',
 }: ParentalControlsScreenProps) {
   const router = useRouter();
-  const { width } = useWindowDimensions();
-  const { childProfile } = useAuth();
-  const { getAvatarById } = useChildProfile();
   const params = useLocalSearchParams<{ childId?: string }>();
-
-  const [viewState, setViewState] = useState<ControlsScreenState>(
-    initialState ?? (childProfile ? 'ready' : 'empty')
+  const {
+    childDataLoading,
+    updateChildProfile,
+    deleteChildProfile,
+  } = useAuth();
+  const { children, activeChild, selectedChildId, selectChild, getChildAvatarSource } = useParentDashboardChild(
+    typeof params.childId === 'string' ? params.childId : undefined,
   );
 
-  const children = useMemo(
-    () =>
-      buildChildrenData({
-        childProfile,
-        getAvatarSource: (avatarId) => getAvatarById(avatarId).asset,
-      }),
-    [childProfile, getAvatarById]
-  );
-
-  const activeChild =
-    children.find((child) => child.id === params.childId) ??
-    children[0];
-
-  const [dailyAllowanceMinutes, setDailyAllowanceMinutes] = useState(activeChild?.dailyAllowanceMinutes ?? 90);
-  const [pauseAccessEnabled, setPauseAccessEnabled] = useState(activeChild?.pauseAccessEnabled ?? false);
-  const [curriculum, setCurriculum] = useState(activeChild?.curriculum ?? []);
-  const [homeworkModeEnabled, setHomeworkModeEnabled] = useState(activeChild?.homeworkModeEnabled ?? true);
-  const [micAccessEnabled, setMicAccessEnabled] = useState(activeChild?.micAccessEnabled ?? true);
-  const [audioStorageEnabled, setAudioStorageEnabled] = useState(activeChild?.audioStorageEnabled ?? false);
-  const [alertPreferences, setAlertPreferences] = useState(activeChild?.alertPreferences ?? []);
-
-  const isWideLayout = width >= 720;
-  const windowStart = timeToOffset(activeChild?.activeWindowStart ?? '08:00');
-  const windowEnd = timeToOffset(activeChild?.activeWindowEnd ?? '20:00');
+  const [dailyAllowanceMinutes, setDailyAllowanceMinutes] = useState(60);
+  const [weekSchedule, setWeekSchedule] = useState<WeekSchedule>(createEmptyWeekSchedule());
+  const [curriculum, setCurriculum] = useState<SubjectToggleItem[]>([]);
+  const [homeworkModeEnabled, setHomeworkModeEnabled] = useState(true);
+  const [micAccessEnabled, setMicAccessEnabled] = useState(true);
+  const [audioStorageEnabled, setAudioStorageEnabled] = useState(false);
+  const [conversationHistoryEnabled, setConversationHistoryEnabled] = useState(true);
 
   useEffect(() => {
     if (!activeChild) {
       return;
     }
 
-    setDailyAllowanceMinutes(activeChild.dailyAllowanceMinutes);
-    setPauseAccessEnabled(activeChild.pauseAccessEnabled);
-    setCurriculum(activeChild.curriculum);
-    setHomeworkModeEnabled(activeChild.homeworkModeEnabled);
-    setMicAccessEnabled(activeChild.micAccessEnabled);
-    setAudioStorageEnabled(activeChild.audioStorageEnabled);
-    setAlertPreferences(activeChild.alertPreferences);
+    setDailyAllowanceMinutes(activeChild.rules?.dailyLimitMinutes ?? 60);
+    setWeekSchedule(activeChild.rules?.weekSchedule ?? createEmptyWeekSchedule());
+    setCurriculum(buildCurriculum(activeChild.subjectIds));
+    setHomeworkModeEnabled(activeChild.rules?.homeworkModeEnabled ?? true);
+    setMicAccessEnabled(activeChild.rules?.voiceModeEnabled ?? true);
+    setAudioStorageEnabled(activeChild.rules?.audioStorageEnabled ?? false);
+    setConversationHistoryEnabled(activeChild.rules?.conversationHistoryEnabled ?? true);
   }, [activeChild]);
 
-  function toggleSubject(subjectId: string) {
-    setCurriculum((current) =>
-      current.map((subject) =>
-        subject.id === subjectId ? { ...subject, enabled: !subject.enabled } : subject
-      )
+  const enabledDaysCount = useMemo(
+    () => Object.values(weekSchedule).filter((day) => day.enabled).length,
+    [weekSchedule],
+  );
+  const derivedWindow = deriveTimeWindowFromWeekSchedule(weekSchedule);
+  const hasScheduleConfigured = enabledDaysCount > 0;
+
+  const rulesMutation = useMutation({
+    mutationFn: async (snapshot: ControlsSnapshot) =>
+      patchChildRules(
+        activeChild!.id,
+        buildRulesPayload(
+          snapshot,
+          activeChild?.rules?.defaultLanguage ?? activeChild?.languages?.[0] ?? 'en',
+        ),
+      ),
+    onSuccess: (nextRules) => {
+      updateChildProfile({
+        rules: nextRules,
+        subjectIds: nextRules.allowedSubjects,
+      });
+    },
+  });
+
+  function buildSnapshot(overrides: Partial<ControlsSnapshot>): ControlsSnapshot {
+    return {
+      dailyAllowanceMinutes,
+      weekSchedule,
+      curriculum,
+      homeworkModeEnabled,
+      micAccessEnabled,
+      audioStorageEnabled,
+      conversationHistoryEnabled,
+      ...overrides,
+    };
+  }
+
+  function persistSnapshot(snapshot: ControlsSnapshot) {
+    rulesMutation.mutate(snapshot);
+  }
+
+  function handleChildSelect(childId: string) {
+    selectChild(childId);
+    void router.replace(`/(tabs)/profile?childId=${encodeURIComponent(childId)}` as never);
+  }
+
+  function handleDailyAllowanceChange(nextValue: number) {
+    const nextWeekSchedule = applyDailyAllowanceToWeekSchedule(weekSchedule, nextValue);
+    setDailyAllowanceMinutes(nextValue);
+    setWeekSchedule(nextWeekSchedule);
+    persistSnapshot(buildSnapshot({
+      dailyAllowanceMinutes: nextValue,
+      weekSchedule: nextWeekSchedule,
+    }));
+  }
+
+  function toggleSubject(subjectId: SubjectKey) {
+    const nextCurriculum = curriculum.map((subject) =>
+      subject.id === subjectId ? { ...subject, enabled: !subject.enabled } : subject,
+    );
+    const allowedSubjects = nextCurriculum.filter((subject) => subject.enabled).map((subject) => subject.id);
+    const nextWeekSchedule = syncWeekScheduleWithAllowedSubjects(weekSchedule, allowedSubjects);
+
+    setCurriculum(nextCurriculum);
+    setWeekSchedule(nextWeekSchedule);
+    persistSnapshot(buildSnapshot({
+      curriculum: nextCurriculum,
+      weekSchedule: nextWeekSchedule,
+    }));
+  }
+
+  function updateToggle(
+    key: 'homeworkModeEnabled' | 'micAccessEnabled' | 'audioStorageEnabled' | 'conversationHistoryEnabled',
+    nextValue: boolean,
+  ) {
+    if (key === 'homeworkModeEnabled') {
+      setHomeworkModeEnabled(nextValue);
+    }
+
+    if (key === 'micAccessEnabled') {
+      setMicAccessEnabled(nextValue);
+    }
+
+    if (key === 'audioStorageEnabled') {
+      setAudioStorageEnabled(nextValue);
+    }
+
+    if (key === 'conversationHistoryEnabled') {
+      setConversationHistoryEnabled(nextValue);
+    }
+
+    persistSnapshot(buildSnapshot({ [key]: nextValue }));
+  }
+
+  function confirmDeleteProfile() {
+    if (!activeChild) {
+      return;
+    }
+
+    Alert.alert(
+      `Delete ${activeChild.nickname ?? activeChild.name}?`,
+      'This removes the child profile using the current API. Conversation export and audit logs are not available yet.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteChildProfile(activeChild.id);
+              void router.replace('/(tabs)' as never);
+            } catch {
+              Alert.alert('Unable to delete profile', 'Please try again in a moment.');
+            }
+          },
+        },
+      ],
     );
   }
 
-  function toggleAlert(alertId: string) {
-    setAlertPreferences((current) =>
-      current.map((alert) =>
-        alert.id === alertId ? { ...alert, enabled: !alert.enabled } : alert
-      )
-    );
-  }
-
-  if (viewState === 'error') {
+  if (initialState === 'loading' || (childDataLoading && children.length === 0)) {
     return (
       <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
-        <View style={styles.feedbackState}>
-          <MaterialCommunityIcons
-            accessibilityLabel="Controls unavailable"
-            color={Colors.errorText}
-            name="alert-circle-outline"
-            size={34}
-          />
-          <Text style={styles.feedbackTitle}>Parent controls paused</Text>
-          <Text style={styles.feedbackBody}>{errorMessage}</Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Retry loading parental controls"
-            onPress={() => setViewState('ready')}
-            style={({ pressed }) => [styles.retryButton, pressed ? styles.retryButtonPressed : null]}
-          >
-            <Text style={styles.retryLabel}>Retry</Text>
-          </Pressable>
-        </View>
+        <ScrollView contentContainerStyle={styles.loadingContent} showsVerticalScrollIndicator={false}>
+          <View style={styles.loadingCard} />
+          <View style={styles.loadingCard} />
+          <View style={styles.loadingCard} />
+        </ScrollView>
       </SafeAreaView>
     );
   }
 
-  if (viewState === 'empty' || !activeChild) {
+  if (!children.length || !activeChild) {
     return (
       <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
         <View style={styles.feedbackState}>
-          <MaterialCommunityIcons
-            accessibilityLabel="No child selected"
-            color={Colors.primary}
-            name="account-child-circle"
-            size={40}
-          />
+          <MaterialCommunityIcons color={Colors.primary} name="account-child-circle" size={40} />
           <Text style={styles.feedbackTitle}>Choose a child to manage settings</Text>
           <Text style={styles.feedbackBody}>
             Add or select a child profile from the overview dashboard to start managing safety boundaries.
@@ -389,7 +433,7 @@ export default function ParentalControlsScreen({
             accessibilityRole="button"
             accessibilityLabel="Back to overview"
             onPress={() => router.push('/(tabs)' as never)}
-            style={({ pressed }) => [styles.retryButton, pressed ? styles.retryButtonPressed : null]}
+            style={({ pressed }) => [styles.retryButton, pressed ? styles.pressed : null]}
           >
             <Text style={styles.retryLabel}>Back to Overview</Text>
           </Pressable>
@@ -398,15 +442,14 @@ export default function ParentalControlsScreen({
     );
   }
 
-  if (viewState === 'loading') {
+  if (initialState === 'error') {
     return (
       <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
-        <ScrollView contentContainerStyle={styles.loadingContent} showsVerticalScrollIndicator={false}>
-          <View style={styles.loadingCard} />
-          <View style={styles.loadingCard} />
-          <View style={styles.loadingCard} />
-          <View style={styles.loadingCard} />
-        </ScrollView>
+        <View style={styles.feedbackState}>
+          <MaterialCommunityIcons color={Colors.errorText} name="alert-circle-outline" size={34} />
+          <Text style={styles.feedbackTitle}>Parent controls paused</Text>
+          <Text style={styles.feedbackBody}>{errorMessage}</Text>
+        </View>
       </SafeAreaView>
     );
   }
@@ -416,39 +459,32 @@ export default function ParentalControlsScreen({
       <ScrollView contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
         <View style={styles.topRow}>
           <Text style={styles.parentHubTitle}>Parent Hub</Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Open parental controls"
-            onPress={() => router.push(`/(tabs)/profile?childId=${encodeURIComponent(activeChild.id)}` as never)}
-            style={({ pressed }) => [styles.iconButton, pressed ? styles.iconButtonPressed : null]}
-          >
-            <MaterialCommunityIcons accessibilityLabel="Settings" color={Colors.text} name="cog-outline" size={20} />
-          </Pressable>
+          {rulesMutation.isPending ? <MaterialCommunityIcons color={Colors.primary} name="progress-clock" size={20} /> : null}
         </View>
 
         <View style={styles.heroCard}>
           <View style={styles.heroCopy}>
-            <Text style={styles.screenTitle}>Settings for {firstName(activeChild.name)}</Text>
+            <Text style={styles.screenTitle}>Settings for {firstName(activeChild.nickname ?? activeChild.name)}</Text>
             <Text style={styles.heroSubtitle}>Manage learning preferences and safety boundaries.</Text>
-            <Text style={styles.heroMeta}>
-              {activeChild.gradeLabel} | {activeChild.ageLabel}
-            </Text>
+            <Text style={styles.heroMeta}>{activeChild.gradeLevel} | Age {activeChild.age}</Text>
           </View>
 
-          <View style={styles.heroAvatarWrap}>
-            <LinearGradient
-              colors={[...Gradients.indigoDepth.colors]}
-              end={Gradients.indigoDepth.end}
-              start={Gradients.indigoDepth.start}
-              style={styles.heroAvatarShell}
-            >
-              <Image contentFit="cover" source={activeChild.avatarSource} style={styles.heroAvatar} />
-            </LinearGradient>
-            <View style={styles.avatarBadge}>
-              <MaterialCommunityIcons accessibilityLabel="Star badge" color={Colors.white} name="star-four-points" size={14} />
-            </View>
-          </View>
+          <Image contentFit="cover" source={getChildAvatarSource(activeChild)} style={styles.heroAvatar} />
         </View>
+
+        <ParentChildSwitcher
+          activeChildId={selectedChildId}
+          profiles={children}
+          getAvatarSource={getChildAvatarSource}
+          onSelectChild={handleChildSelect}
+        />
+
+        {rulesMutation.isError ? (
+          <View style={styles.errorCard}>
+            <MaterialCommunityIcons color={Colors.errorText} name="alert-circle-outline" size={18} />
+            <Text style={styles.errorCardText}>{toApiErrorMessage(rulesMutation.error)}</Text>
+          </View>
+        ) : null}
 
         <View style={styles.sectionBlock}>
           <SectionHeader iconName="clock-outline" title="Time Limits" />
@@ -459,161 +495,131 @@ export default function ParentalControlsScreen({
               <Text style={styles.allowanceValue}>{minutesToLabel(dailyAllowanceMinutes)}</Text>
             </View>
 
-            <SteppedSlider options={DAILY_ALLOWANCE_OPTIONS} onChange={setDailyAllowanceMinutes} value={dailyAllowanceMinutes} />
+            <SteppedSlider
+              disabled={!hasScheduleConfigured || rulesMutation.isPending}
+              options={DAILY_ALLOWANCE_OPTIONS}
+              onChange={handleDailyAllowanceChange}
+              value={dailyAllowanceMinutes}
+            />
 
             <Text style={styles.overline}>Active Window</Text>
             <View style={styles.windowTrack}>
               <View style={styles.windowTrackBase} />
-              <View
-                style={[
-                  styles.windowHighlight,
-                  {
-                    left: `${windowStart * 100}%`,
-                    width: `${Math.max((windowEnd - windowStart) * 100, 12)}%`,
-                  },
-                ]}
-              />
+              {derivedWindow.timeWindowStart && derivedWindow.timeWindowEnd ? (
+                <View
+                  style={[
+                    styles.windowHighlight,
+                    {
+                      left: `${timeToOffset(derivedWindow.timeWindowStart) * 100}%`,
+                      width: `${Math.max((timeToOffset(derivedWindow.timeWindowEnd) - timeToOffset(derivedWindow.timeWindowStart)) * 100, 12)}%`,
+                    },
+                  ]}
+                />
+              ) : null}
               <Text style={styles.windowLabel}>
-                {activeChild.activeWindowStart} - {activeChild.activeWindowEnd}
+                {derivedWindow.timeWindowStart && derivedWindow.timeWindowEnd
+                  ? `${derivedWindow.timeWindowStart} - ${derivedWindow.timeWindowEnd}`
+                  : 'No scheduled access window yet'}
               </Text>
             </View>
-            <View style={styles.windowTicks}>
-              <Text style={styles.windowTickLabel}>12AM</Text>
-              <Text style={styles.windowTickLabel}>6AM</Text>
-              <Text style={styles.windowTickLabel}>12PM</Text>
-              <Text style={styles.windowTickLabel}>6PM</Text>
-              <Text style={styles.windowTickLabel}>12AM</Text>
-            </View>
 
-            <View style={styles.pauseRow}>
-              <View style={styles.pauseCopy}>
-                <View style={styles.pauseHeader}>
-                  <MaterialCommunityIcons accessibilityLabel="Pause access" color={Colors.primary} name="pause-circle-outline" size={18} />
-                  <Text style={styles.pauseTitle}>Pause access</Text>
-                </View>
-                <Text style={styles.pauseBody}>
-                  Lock {firstName(activeChild.name)}
-                  {"'s"} device immediately
-                </Text>
-              </View>
-              <Switch
-                accessibilityLabel={`Pause access for ${firstName(activeChild.name)}`}
-                accessibilityRole="switch"
-                onValueChange={setPauseAccessEnabled}
-                thumbColor={Colors.white}
-                trackColor={{ false: Colors.surfaceContainerHigh, true: Colors.primary }}
-                value={pauseAccessEnabled}
-              />
-            </View>
+            {!hasScheduleConfigured ? (
+              <Text style={styles.helperText}>
+                No weekly schedule is saved yet. Edit the child profile to create one before changing time limits here.
+              </Text>
+            ) : null}
+
+            <LabeledToggleRow
+              accessibilityLabel="Pause access"
+              description="Immediate pause is not supported by the current API yet."
+              disabled
+              label="Pause access"
+              onValueChange={() => undefined}
+              value={false}
+            />
           </View>
         </View>
 
         <View style={styles.sectionBlock}>
           <SectionHeader iconName="school-outline" title="Learning & Content" />
 
-          <View style={[styles.splitRow, !isWideLayout ? styles.splitRowStacked : null]}>
-            <View style={[styles.surfaceCard, styles.flexCard]}>
-              <Text style={styles.overline}>Curriculum</Text>
-              <View style={styles.curriculumList}>
-                {curriculum.map((subject) => (
-                  <View key={subject.id} style={styles.curriculumRow}>
-                    <Text style={styles.curriculumLabel}>{subject.label}</Text>
-                    <Switch
-                      accessibilityLabel={`${subject.label} subject toggle`}
-                      accessibilityRole="switch"
-                      onValueChange={() => toggleSubject(subject.id)}
-                      thumbColor={Colors.white}
-                      trackColor={{ false: Colors.surfaceContainerHigh, true: Colors.primary }}
-                      value={subject.enabled}
-                    />
-                  </View>
-                ))}
-              </View>
-            </View>
-
-            <LinearGradient
-              colors={[...Gradients.indigoDepth.colors]}
-              end={Gradients.indigoDepth.end}
-              start={Gradients.indigoDepth.start}
-              style={[styles.homeworkCard, styles.flexCard]}
-            >
-              <View style={styles.homeworkHeader}>
-                <Text style={styles.homeworkTitle}>Homework mode</Text>
-                <MaterialCommunityIcons accessibilityLabel="Homework mode" color={Colors.white} name="lightning-bolt-outline" size={22} />
-              </View>
-              <Text style={styles.homeworkBody}>
-                Prioritize educational activities over games.
-              </Text>
-              <Switch
-                accessibilityLabel="Homework mode"
-                accessibilityRole="switch"
-                onValueChange={setHomeworkModeEnabled}
-                thumbColor={Colors.primary}
-                trackColor={{ false: Colors.primaryFixed, true: Colors.white }}
-                value={homeworkModeEnabled}
-              />
-            </LinearGradient>
-          </View>
-
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Safety level for ${firstName(activeChild.name)}`}
-            style={({ pressed }) => [styles.surfaceCard, pressed ? styles.surfacePressed : null]}
-          >
-            <View style={styles.inlineRow}>
-              <View style={styles.inlineCopy}>
-                <View style={styles.inlineTitleRow}>
-                  <MaterialCommunityIcons accessibilityLabel="Safety level" color={Colors.primary} name="shield-check-outline" size={18} />
-                  <Text style={styles.inlineTitle}>Safety level</Text>
+          <View style={styles.surfaceCard}>
+            <Text style={styles.overline}>Enabled Subjects</Text>
+            <View style={styles.curriculumList}>
+              {curriculum.map((subject) => (
+                <View key={subject.id} style={styles.curriculumRow}>
+                  <Text style={styles.curriculumLabel}>{subject.label}</Text>
+                  <Switch
+                    accessibilityLabel={`${subject.label} subject toggle`}
+                    disabled={rulesMutation.isPending}
+                    onValueChange={() => toggleSubject(subject.id)}
+                    thumbColor={Colors.white}
+                    trackColor={{ false: Colors.surfaceContainerHigh, true: Colors.primary }}
+                    value={subject.enabled}
+                  />
                 </View>
-                <Text style={styles.inlineBody}>{activeChild.safetySubtitle}</Text>
-              </View>
-              <View style={styles.chip}>
-                <Text style={styles.chipLabel}>{activeChild.safetyLevelLabel}</Text>
-              </View>
+              ))}
             </View>
-          </Pressable>
+
+            <LabeledToggleRow
+              accessibilityLabel="Homework mode"
+              description="Prioritize educational activities over open exploration."
+              disabled={rulesMutation.isPending}
+              label="Homework mode"
+              onValueChange={(nextValue) => updateToggle('homeworkModeEnabled', nextValue)}
+              value={homeworkModeEnabled}
+            />
+
+            <Pressable accessibilityRole="button" disabled style={[styles.inlineNoticeCard, styles.disabledSection]}>
+              <View style={styles.inlineTitleRow}>
+                <MaterialCommunityIcons color={Colors.primary} name="shield-check-outline" size={18} />
+                <Text style={styles.inlineTitle}>Safety level</Text>
+              </View>
+              <Text style={styles.inlineBody}>
+                Strict filtering is displayed for now. The API does not expose adjustable safety levels yet.
+              </Text>
+            </Pressable>
+          </View>
         </View>
 
         <View style={styles.sectionBlock}>
-          <SectionHeader iconName="microphone-outline" title="Voice & Assistant" />
+          <SectionHeader iconName="microphone-outline" title="Voice & History" />
           <LabeledToggleRow
             accessibilityLabel="Mic access"
             description="Allow spoken questions and voice replies during learning sessions."
+            disabled={rulesMutation.isPending}
             label="Mic access"
-            onValueChange={setMicAccessEnabled}
+            onValueChange={(nextValue) => updateToggle('micAccessEnabled', nextValue)}
             value={micAccessEnabled}
           />
           <LabeledToggleRow
             accessibilityLabel="Audio storage"
-            description="Store voice clips for quality review and support follow-up."
+            description="Store voice clips for support follow-up."
+            disabled={rulesMutation.isPending}
             label="Audio storage"
-            onValueChange={setAudioStorageEnabled}
+            onValueChange={(nextValue) => updateToggle('audioStorageEnabled', nextValue)}
             value={audioStorageEnabled}
+          />
+          <LabeledToggleRow
+            accessibilityLabel="Conversation history"
+            description="Keep completed chat sessions available for parent review."
+            disabled={rulesMutation.isPending}
+            label="Conversation history"
+            onValueChange={(nextValue) => updateToggle('conversationHistoryEnabled', nextValue)}
+            value={conversationHistoryEnabled}
           />
         </View>
 
         <View style={styles.sectionBlock}>
           <SectionHeader iconName="bell-outline" title="Alerts" />
 
-          <View style={[styles.splitRow, !isWideLayout ? styles.splitRowStacked : null]}>
-            {alertPreferences.map((alert) => (
-              <Pressable
-                key={alert.id}
-                accessibilityRole="switch"
-                accessibilityLabel={alert.title}
-                accessibilityState={{ checked: alert.enabled }}
-                onPress={() => toggleAlert(alert.id)}
-                style={({ pressed }) => [
-                  styles.alertCard,
-                  alert.enabled ? styles.alertCardEnabled : null,
-                  pressed ? styles.surfacePressed : null,
-                ]}
-              >
-                <MaterialCommunityIcons accessibilityLabel={alert.title} color={alert.enabled ? Colors.primary : Colors.textSecondary} name={alert.iconName} size={22} />
+          <View style={styles.alertRow}>
+            {ALERT_PREFERENCES.map((alert) => (
+              <View key={alert.id} style={[styles.alertCard, styles.disabledSection]}>
+                <MaterialCommunityIcons color={Colors.textSecondary} name={alert.iconName} size={22} />
                 <Text style={styles.alertTitle}>{alert.title}</Text>
                 <Text style={styles.alertBody}>{alert.description}</Text>
-              </Pressable>
+              </View>
             ))}
           </View>
         </View>
@@ -624,47 +630,56 @@ export default function ParentalControlsScreen({
           <View style={styles.surfaceCard}>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Delete history"
-              style={({ pressed }) => [styles.linkRow, pressed ? styles.surfacePressed : null]}
+              accessibilityLabel="Review conversation history"
+              onPress={() => router.push(`/(tabs)/chat?childId=${encodeURIComponent(activeChild.id)}` as never)}
+              style={({ pressed }) => [styles.linkRow, pressed ? styles.pressed : null]}
             >
               <View style={styles.inlineTitleRow}>
-                <MaterialCommunityIcons accessibilityLabel="Delete history" color={Colors.text} name="history" size={18} />
-                <Text style={styles.inlineTitle}>Delete history</Text>
+                <MaterialCommunityIcons color={Colors.text} name="history" size={18} />
+                <Text style={styles.inlineTitle}>Review conversation history</Text>
               </View>
-              <MaterialCommunityIcons accessibilityLabel="Go to delete history" color={Colors.textSecondary} name="chevron-right" size={20} />
+              <MaterialCommunityIcons color={Colors.textSecondary} name="chevron-right" size={20} />
             </Pressable>
 
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Export data"
-              style={({ pressed }) => [styles.linkRow, pressed ? styles.surfacePressed : null]}
-            >
+            <View style={[styles.linkRow, styles.disabledSection]}>
               <View style={styles.inlineTitleRow}>
-                <MaterialCommunityIcons accessibilityLabel="Export data" color={Colors.text} name="export-variant" size={18} />
+                <MaterialCommunityIcons color={Colors.textSecondary} name="trash-can-outline" size={18} />
+                <Text style={styles.inlineTitle}>Delete all history</Text>
+              </View>
+              <Text style={styles.disabledText}>Unavailable</Text>
+            </View>
+
+            <View style={[styles.linkRow, styles.disabledSection]}>
+              <View style={styles.inlineTitleRow}>
+                <MaterialCommunityIcons color={Colors.textSecondary} name="export-variant" size={18} />
                 <Text style={styles.inlineTitle}>Export data</Text>
               </View>
-              <MaterialCommunityIcons accessibilityLabel="Go to export data" color={Colors.textSecondary} name="chevron-right" size={20} />
-            </Pressable>
+              <Text style={styles.disabledText}>Unavailable</Text>
+            </View>
 
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Delete profile"
-              style={({ pressed }) => [styles.linkRow, pressed ? styles.surfacePressed : null]}
+              accessibilityLabel="Delete child profile"
+              onPress={confirmDeleteProfile}
+              style={({ pressed }) => [styles.linkRow, pressed ? styles.pressed : null]}
             >
               <View style={styles.inlineTitleRow}>
-                <MaterialCommunityIcons accessibilityLabel="Delete profile" color={Colors.errorText} name="trash-can-outline" size={18} />
+                <MaterialCommunityIcons color={Colors.errorText} name="trash-can-outline" size={18} />
                 <Text style={styles.destructiveLabel}>Delete profile</Text>
               </View>
-              <MaterialCommunityIcons accessibilityLabel="Go to delete profile" color={Colors.errorText} name="chevron-right" size={20} />
+              <MaterialCommunityIcons color={Colors.errorText} name="chevron-right" size={20} />
             </Pressable>
           </View>
 
           <View style={styles.auditCard}>
-            <View style={styles.auditBadge}>
-              <Text style={styles.auditBadgeLabel}>Audit Logged: {activeChild.auditLoggedAt}</Text>
-            </View>
+            <Text style={styles.auditBadgeLabel}>Audit log unavailable</Text>
             <Text style={styles.auditBody}>
-              All changes to Parental Controls are logged for your review in the Security Hub.
+              Changes above are persisted only through supported child-rules endpoints. A dedicated controls audit trail is not exposed by the API yet.
+            </Text>
+            <Text style={styles.auditBody}>
+              Current subjects: {activeChild.subjectIds.length > 0
+                ? activeChild.subjectIds.map((subjectId) => SUBJECT_LABEL_MAP[subjectId]).join(', ')
+                : 'None selected'}
             </Text>
           </View>
         </View>
@@ -694,24 +709,17 @@ const styles = StyleSheet.create({
     ...Typography.captionMedium,
     color: Colors.textSecondary,
   },
-  iconButton: {
-    width: 44,
-    height: 44,
-    borderRadius: Radii.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: Colors.surfaceContainerLowest,
-    borderWidth: 1,
-    borderColor: Colors.outline,
-  },
-  iconButtonPressed: {
-    transform: [{ scale: 0.97 }],
-  },
   heroCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: Spacing.md,
+    borderRadius: Radii.xl,
+    borderWidth: 1,
+    borderColor: Colors.outline,
+    backgroundColor: Colors.surfaceContainerLowest,
+    padding: Spacing.md,
+    ...Shadows.card,
   },
   heroCopy: {
     flex: 1,
@@ -729,34 +737,11 @@ const styles = StyleSheet.create({
     ...Typography.captionMedium,
     color: Colors.primary,
   },
-  heroAvatarWrap: {
-    position: 'relative',
-  },
-  heroAvatarShell: {
-    width: 92,
-    height: 92,
-    borderRadius: Radii.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   heroAvatar: {
-    width: 82,
-    height: 82,
+    width: 84,
+    height: 84,
     borderRadius: Radii.full,
-    backgroundColor: Colors.surfaceContainerLowest,
-  },
-  avatarBadge: {
-    position: 'absolute',
-    right: -2,
-    top: -2,
-    width: 28,
-    height: 28,
-    borderRadius: Radii.full,
-    backgroundColor: Colors.accentPurple,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: Colors.surface,
+    backgroundColor: Colors.surfaceContainerHigh,
   },
   sectionBlock: {
     gap: Spacing.md,
@@ -778,9 +763,6 @@ const styles = StyleSheet.create({
     padding: Spacing.md,
     gap: Spacing.md,
     ...Shadows.card,
-  },
-  surfacePressed: {
-    transform: [{ scale: 0.99 }],
   },
   allowanceRow: {
     flexDirection: 'row',
@@ -821,11 +803,6 @@ const styles = StyleSheet.create({
     borderWidth: 4,
     borderColor: Colors.surfaceContainerLowest,
     transform: [{ translateX: -11 }],
-    shadowColor: Colors.primary,
-    shadowOpacity: 0.18,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 8,
-    elevation: 4,
   },
   sliderTapTargets: {
     position: 'absolute',
@@ -840,9 +817,6 @@ const styles = StyleSheet.create({
     height: 28,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  sliderTapTargetPressed: {
-    transform: [{ scale: 0.95 }],
   },
   sliderDot: {
     width: 8,
@@ -881,48 +855,9 @@ const styles = StyleSheet.create({
     color: Colors.text,
     textAlign: 'center',
   },
-  windowTicks: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: Spacing.sm,
-  },
-  windowTickLabel: {
-    ...Typography.caption,
-    color: Colors.textTertiary,
-  },
-  pauseRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: Spacing.md,
-    paddingTop: Spacing.xs,
-  },
-  pauseCopy: {
-    flex: 1,
-    gap: Spacing.xs,
-  },
-  pauseHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-  },
-  pauseTitle: {
-    ...Typography.bodySemiBold,
-    color: Colors.text,
-  },
-  pauseBody: {
+  helperText: {
     ...Typography.caption,
     color: Colors.textSecondary,
-  },
-  splitRow: {
-    flexDirection: 'row',
-    gap: Spacing.md,
-  },
-  splitRowStacked: {
-    flexDirection: 'column',
-  },
-  flexCard: {
-    flex: 1,
   },
   curriculumList: {
     gap: Spacing.sm,
@@ -937,36 +872,15 @@ const styles = StyleSheet.create({
     ...Typography.bodySemiBold,
     color: Colors.text,
   },
-  homeworkCard: {
-    borderRadius: Radii.xl,
+  inlineNoticeCard: {
+    borderRadius: Radii.lg,
+    borderWidth: 1,
+    borderColor: Colors.outline,
     padding: Spacing.md,
-    gap: Spacing.md,
-    justifyContent: 'space-between',
-    minHeight: 196,
-  },
-  homeworkHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: Spacing.sm,
-  },
-  homeworkTitle: {
-    ...Typography.bodySemiBold,
-    color: Colors.white,
-  },
-  homeworkBody: {
-    ...Typography.body,
-    color: Colors.primaryFixed,
-  },
-  inlineRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: Spacing.sm,
-  },
-  inlineCopy: {
-    flex: 1,
     gap: Spacing.xs,
+  },
+  disabledSection: {
+    opacity: 0.6,
   },
   inlineTitleRow: {
     flexDirection: 'row',
@@ -981,15 +895,9 @@ const styles = StyleSheet.create({
     ...Typography.caption,
     color: Colors.textSecondary,
   },
-  chip: {
-    borderRadius: Radii.full,
-    backgroundColor: Colors.primaryFixed,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
-  },
-  chipLabel: {
-    ...Typography.captionMedium,
-    color: Colors.primary,
+  alertRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
   },
   alertCard: {
     flex: 1,
@@ -1001,10 +909,6 @@ const styles = StyleSheet.create({
     padding: Spacing.md,
     gap: Spacing.sm,
   },
-  alertCardEnabled: {
-    borderColor: Colors.primaryFixed,
-    backgroundColor: Colors.surfaceContainerLow,
-  },
   alertTitle: {
     ...Typography.bodySemiBold,
     color: Colors.text,
@@ -1012,6 +916,19 @@ const styles = StyleSheet.create({
   alertBody: {
     ...Typography.caption,
     color: Colors.textSecondary,
+  },
+  errorCard: {
+    borderRadius: Radii.lg,
+    backgroundColor: Colors.errorContainer,
+    padding: Spacing.md,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.sm,
+  },
+  errorCardText: {
+    ...Typography.caption,
+    color: Colors.errorText,
+    flex: 1,
   },
   linkRow: {
     flexDirection: 'row',
@@ -1024,20 +941,16 @@ const styles = StyleSheet.create({
     ...Typography.bodySemiBold,
     color: Colors.errorText,
   },
+  disabledText: {
+    ...Typography.captionMedium,
+    color: Colors.textSecondary,
+  },
   auditCard: {
     gap: Spacing.sm,
-  },
-  auditBadge: {
-    alignSelf: 'flex-start',
-    borderRadius: Radii.full,
-    backgroundColor: Colors.primaryFixed,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
   },
   auditBadgeLabel: {
     ...Typography.label,
     color: Colors.primary,
-    letterSpacing: 0.3,
   },
   auditBody: {
     ...Typography.caption,
@@ -1070,9 +983,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: Spacing.lg,
   },
-  retryButtonPressed: {
-    transform: [{ scale: 0.98 }],
-  },
   retryLabel: {
     ...Typography.bodySemiBold,
     color: Colors.primary,
@@ -1086,5 +996,8 @@ const styles = StyleSheet.create({
     height: 180,
     borderRadius: Radii.xl,
     backgroundColor: Colors.surfaceContainerHigh,
+  },
+  pressed: {
+    transform: [{ scale: 0.99 }],
   },
 });

@@ -1,6 +1,7 @@
 export interface AuthUser {
   id: number;
   email: string;
+  username?: string;
   fullName?: string;
   pin_configured: boolean;
 }

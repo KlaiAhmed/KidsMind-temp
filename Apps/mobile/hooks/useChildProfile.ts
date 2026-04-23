@@ -6,20 +6,25 @@ const DEFAULT_AVATAR_ID = 'avatar-1';
 
 export function useChildProfile() {
   const {
+    childProfiles,
+    selectedChildId,
     childProfile,
     childProfileStatus,
     avatars,
     childDataLoading,
     childDataError,
+    selectChild,
     saveChildProfile,
+    deleteChildProfile,
     updateChildProfile,
     refreshChildData,
   } = useAuth();
 
   const hasCompletedProfile = childProfileStatus === 'exists';
 
-  function getAvatarById(avatarId: string): AvatarOption {
-    return avatars.find((avatar) => avatar.id === avatarId) ?? avatars[0];
+  function getAvatarById(avatarId: string | null | undefined): AvatarOption {
+    const normalizedAvatarId = avatarId?.trim();
+    return avatars.find((avatar) => avatar.id === normalizedAvatarId) ?? avatars[0];
   }
 
   const defaultAvatarId = avatars[0]?.id ?? DEFAULT_AVATAR_ID;
@@ -40,15 +45,19 @@ export function useChildProfile() {
 
   return {
     profile: childProfile,
+    profiles: childProfiles,
+    selectedChildId,
     avatars,
     defaultAvatarId,
     hasCompletedProfile,
     isLoading: childDataLoading,
     error: childDataError,
     getAvatarById,
+    selectProfile: selectChild,
     refreshProfileFromApi,
     updateProfile: updateChildProfile,
     refreshChildData,
     saveChildProfile,
+    deleteChildProfile,
   };
 }

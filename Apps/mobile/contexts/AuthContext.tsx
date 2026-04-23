@@ -33,6 +33,7 @@ import {
 } from '@/services/authApi';
 import {
   createChildProfile,
+  deleteChildProfile as deleteChildProfileRequest,
   listChildProfiles,
   patchChildProfile,
 } from '@/services/childService';
@@ -51,6 +52,7 @@ import type {
 export interface User {
   id: number;
   email: string;
+  username?: string;
   fullName?: string;
   pinConfigured: boolean;
 }
@@ -65,6 +67,8 @@ export type ChildProfileStatus = 'unknown' | 'exists' | 'missing';
 export type RegisterFormValues = RegisterRequest;
 
 interface ChildState {
+  childProfiles: ChildProfile[];
+  selectedChildId: string | null;
   childProfile: ChildProfile | null;
   childDataLoading: boolean;
   childDataError: string | null;
@@ -87,9 +91,14 @@ interface AuthContextValue extends SessionAuthState, ChildState {
   setLoading: (isLoading: boolean) => void;
   clearError: () => void;
   markPinConfigured: () => void;
-  saveChildProfile: (input: CreateChildProfileInput) => Promise<ChildProfile>;
+  selectChild: (childId: string) => void;
+  saveChildProfile: (
+    input: CreateChildProfileInput,
+    options?: { childId?: string | null },
+  ) => Promise<ChildProfile>;
+  deleteChildProfile: (childId: string) => Promise<void>;
   updateChildProfile: (updates: Partial<Omit<ChildProfile, 'id'>>) => void;
-  refreshChildData: () => Promise<void>;
+  refreshChildData: (preferredChildId?: string | null) => Promise<void>;
   markSubjectAccess: (subjectId: string) => void;
   completeTopic: (topicId: string) => void;
 }
@@ -323,9 +332,36 @@ function toUser(authUser: AuthUser): User {
   return {
     id: authUser.id,
     email: authUser.email,
+    username: authUser.username,
     fullName: authUser.fullName,
     pinConfigured: Boolean(authUser.pin_configured),
   };
+}
+
+function resolveSelectedChildId(
+  profiles: ChildProfile[],
+  preferredChildId?: string | null,
+): string | null {
+  if (profiles.length === 0) {
+    return null;
+  }
+
+  if (preferredChildId && profiles.some((profile) => profile.id === preferredChildId)) {
+    return preferredChildId;
+  }
+
+  return profiles[0]?.id ?? null;
+}
+
+function getSelectedChildProfile(
+  profiles: ChildProfile[],
+  selectedChildId: string | null,
+): ChildProfile | null {
+  if (!selectedChildId) {
+    return profiles[0] ?? null;
+  }
+
+  return profiles.find((profile) => profile.id === selectedChildId) ?? profiles[0] ?? null;
 }
 
 export function toApiErrorMessage(error: unknown): string {
@@ -360,6 +396,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   } = useAuthStore();
 
   const [childState, setChildState] = useState<ChildState>({
+    childProfiles: [],
+    selectedChildId: null,
     childProfile: null,
     childDataLoading: false,
     childDataError: null,
@@ -370,7 +408,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
 
   const [childProfileStatus, setChildProfileStatus] = useState<ChildProfileStatus>('unknown');
-  const [bootstrapTimeoutReached, setBootstrapTimeoutReached] = useState(false);
+  const [, setBootstrapTimeoutReached] = useState(false);
 
   const setLoading = useCallback((nextLoading: boolean) => {
     setStoreLoading(nextLoading);
@@ -380,15 +418,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAuthenticatedFromTokenResponse(payload);
   }, [setAuthenticatedFromTokenResponse]);
 
-  const applyResolvedChildProfiles = useCallback((profiles: ChildProfile[]) => {
-    const nextProfile = profiles[0] ?? null;
-    const nextStatus: ChildProfileStatus = nextProfile ? 'exists' : 'missing';
+  const applyResolvedChildProfiles = useCallback((
+    profiles: ChildProfile[],
+    preferredChildId?: string | null,
+  ) => {
+    const nextStatus: ChildProfileStatus = profiles.length > 0 ? 'exists' : 'missing';
 
-    setChildState((current) => ({
-      ...current,
-      childProfile: nextProfile,
-      childDataError: null,
-    }));
+    setChildState((current) => {
+      const nextSelectedChildId = resolveSelectedChildId(
+        profiles,
+        preferredChildId ?? current.selectedChildId,
+      );
+      const nextProfile = getSelectedChildProfile(profiles, nextSelectedChildId);
+
+      return {
+        ...current,
+        childProfiles: profiles,
+        selectedChildId: nextSelectedChildId,
+        childProfile: nextProfile,
+        childDataError: null,
+      };
+    });
     setChildProfileStatus(nextStatus);
 
     return nextStatus;
@@ -398,11 +448,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clearAuth();
     setChildState((current) => ({
       ...current,
+      childProfiles: [],
+      selectedChildId: null,
       childProfile: null,
+      childDataLoading: false,
       childDataError: null,
     }));
     setChildProfileStatus('unknown');
   }, [clearAuth]);
+
+  const selectChild = useCallback((childId: string) => {
+    const normalizedChildId = childId.trim();
+    if (!normalizedChildId) {
+      return;
+    }
+
+    setChildState((current) => {
+      const nextProfile = current.childProfiles.find((profile) => profile.id === normalizedChildId);
+      if (!nextProfile) {
+        return current;
+      }
+
+      return {
+        ...current,
+        selectedChildId: normalizedChildId,
+        childProfile: nextProfile,
+      };
+    });
+  }, []);
 
   const clearError = useCallback(() => {
     setAuthError(null);
@@ -560,14 +633,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             ...current,
             childDataError: 'Unable to refresh progress right now.',
           }));
-          setChildProfileStatus(childState.childProfile?.id ? 'exists' : 'missing');
+          setChildProfileStatus((current) => (current === 'exists' ? 'exists' : 'missing'));
         }
       }
     }
 
     void hydrateChildProfiles();
     return () => { cancelled = true; };
-  }, [applyResolvedChildProfiles, childState.childProfile?.id, isAuthenticated]);
+  }, [applyResolvedChildProfiles, isAuthenticated]);
 
   useEffect(() => {
     if (!bootstrapSessionQuery.isError) {
@@ -609,11 +682,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       sessionUser
         ? {
             ...sessionUser,
+            username: currentUserSummaryQuery.data.username,
             pin_configured: nextPinConfigured,
           }
         : {
             id: currentUserSummaryQuery.data.id,
             email: currentUserSummaryQuery.data.email,
+            username: currentUserSummaryQuery.data.username,
             pin_configured: nextPinConfigured,
           }
     );
@@ -655,6 +730,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAuthenticated(authPayload);
       setAuthError(null);
       void queryClient.invalidateQueries({ queryKey: ['auth', 'current-user-summary'] });
+      setChildState((current) => ({
+        ...current,
+        childProfiles: [],
+        selectedChildId: null,
+        childProfile: null,
+        childDataError: null,
+      }));
       setChildProfileStatus('missing');
       await saveOnboardingFlag(false);
     },
@@ -697,17 +779,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loading = loginMutation.isPending || registerMutation.isPending;
   const error = authError;
 
-  const saveChildProfile = useCallback(async (input: CreateChildProfileInput) => {
+  const saveChildProfile = useCallback(async (
+    input: CreateChildProfileInput,
+    options?: { childId?: string | null },
+  ) => {
     try {
-      const profile = childState.childProfile?.id
-        ? await patchChildProfile(childState.childProfile.id, input)
+      const targetChildId = options?.childId?.trim();
+      const profile = targetChildId
+        ? await patchChildProfile(targetChildId, input)
         : await createChildProfile(input);
 
-      setChildState((current) => ({
-        ...current,
-        childProfile: profile,
-        childDataError: null,
-      }));
+      setChildState((current) => {
+        const hasExistingProfile = current.childProfiles.some(
+          (existingProfile) => existingProfile.id === profile.id,
+        );
+        const nextProfiles = targetChildId && hasExistingProfile
+          ? current.childProfiles.map((existingProfile) =>
+              existingProfile.id === profile.id ? profile : existingProfile,
+            )
+          : [profile, ...current.childProfiles.filter((existingProfile) => existingProfile.id !== profile.id)];
+
+        return {
+          ...current,
+          childProfiles: nextProfiles,
+          selectedChildId: profile.id,
+          childProfile: profile,
+          childDataError: null,
+        };
+      });
       setChildProfileStatus('exists');
       await saveOnboardingFlag(true);
       return profile;
@@ -719,7 +818,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }));
       throw err;
     }
-  }, [childState.childProfile?.id]);
+  }, []);
 
   const updateChildProfile = useCallback((updates: Partial<Omit<ChildProfile, 'id'>>) => {
     setChildState((current) => {
@@ -727,17 +826,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return current;
       }
 
+      const nextProfile = {
+        ...current.childProfile,
+        ...updates,
+      };
+
       return {
         ...current,
-        childProfile: {
-          ...current.childProfile,
-          ...updates,
-        },
+        childProfiles: current.childProfiles.map((profile) =>
+          profile.id === current.childProfile.id ? nextProfile : profile,
+        ),
+        childProfile: nextProfile,
       };
     });
   }, []);
 
-  const refreshChildData = useCallback(async () => {
+  const refreshChildData = useCallback(async (preferredChildId?: string | null) => {
     setChildState((current) => ({
       ...current,
       childDataLoading: true,
@@ -746,7 +850,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     try {
       const profiles = await listChildProfiles();
-      const nextStatus = applyResolvedChildProfiles(profiles);
+      const nextStatus = applyResolvedChildProfiles(profiles, preferredChildId);
       await saveOnboardingFlag(nextStatus === 'exists');
       setChildState((current) => ({
         ...current,
@@ -760,6 +864,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }));
     }
   }, [applyResolvedChildProfiles]);
+
+  const deleteChildProfile = useCallback(async (childId: string) => {
+    try {
+      await deleteChildProfileRequest(childId);
+
+      let nextStatus: ChildProfileStatus = 'missing';
+      setChildState((current) => {
+        const nextProfiles = current.childProfiles.filter((profile) => profile.id !== childId);
+        const nextSelectedChildId = resolveSelectedChildId(
+          nextProfiles,
+          current.selectedChildId === childId ? null : current.selectedChildId,
+        );
+        const nextProfile = getSelectedChildProfile(nextProfiles, nextSelectedChildId);
+        nextStatus = nextProfiles.length > 0 ? 'exists' : 'missing';
+
+        return {
+          ...current,
+          childProfiles: nextProfiles,
+          selectedChildId: nextSelectedChildId,
+          childProfile: nextProfile,
+          childDataError: null,
+        };
+      });
+
+      setChildProfileStatus(nextStatus);
+      await saveOnboardingFlag(nextStatus === 'exists');
+    } catch (err) {
+      const message = toApiErrorMessage(err);
+      setChildState((current) => ({
+        ...current,
+        childDataError: message,
+      }));
+      throw err;
+    }
+  }, []);
 
   const markSubjectAccess = useCallback((subjectId: string) => {
     setChildState((current) => ({
@@ -834,6 +973,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         ...current,
         topics: updatedTopics,
         subjects: updatedSubjects,
+        childProfiles: updatedChildProfile
+          ? current.childProfiles.map((profile) =>
+              profile.id === updatedChildProfile.id ? updatedChildProfile : profile,
+            )
+          : current.childProfiles,
         childProfile: updatedChildProfile,
         recentActivity: [nextActivity, ...current.recentActivity].slice(0, 10),
       };
@@ -859,7 +1003,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading,
         clearError,
         markPinConfigured,
+        selectChild,
         saveChildProfile,
+        deleteChildProfile,
         updateChildProfile,
         refreshChildData,
         markSubjectAccess,

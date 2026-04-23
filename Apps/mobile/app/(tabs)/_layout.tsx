@@ -57,13 +57,13 @@ export default function TabLayout() {
       <Tabs.Screen
         name="chat"
         options={{
-          title: 'Insights',
+          title: 'History',
         }}
       />
       <Tabs.Screen
         name="explore"
         options={{
-          title: 'Curriculum',
+          title: 'Progress',
         }}
       />
       <Tabs.Screen

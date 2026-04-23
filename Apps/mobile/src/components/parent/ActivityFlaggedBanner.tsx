@@ -37,7 +37,7 @@ export function ActivityFlaggedBanner({
 
         <Text style={styles.description}>
           Content flagged in <Text style={styles.childName}>{childName}</Text>
-          {"'s"} chat session yesterday at {timestampLabel}.
+          {"'s"} recent chat history at {timestampLabel}.
         </Text>
       </View>
 

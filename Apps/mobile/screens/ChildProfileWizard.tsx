@@ -435,7 +435,7 @@ export default function ChildProfileWizard() {
     setIsSubmitting(true);
 
     try {
-      const hasExistingProfile = Boolean(profile?.id);
+      const hasExistingProfile = isEditMode && Boolean(profile?.id);
       const blockedSubjects = deriveBlockedSubjects(values.schedule.allowedSubjects);
       const { timeWindowStart, timeWindowEnd } = deriveTimeWindowFromWeekSchedule(
         values.schedule.weekSchedule,
@@ -462,6 +462,8 @@ export default function ChildProfileWizard() {
         },
         allowedSubjects: values.schedule.allowedSubjects,
         weekSchedule: values.schedule.weekSchedule,
+      }, {
+        childId: hasExistingProfile ? profile?.id : null,
       });
 
       if (hasExistingProfile) {

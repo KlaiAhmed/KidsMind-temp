@@ -6,7 +6,7 @@ import type { AgeGroup } from '@/types/child';
 type IconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 
 export type BottomNavMode = 'parent' | 'child';
-export type BottomNavSlot = 'overview' | 'insights' | 'curriculum' | 'controls';
+export type BottomNavSlot = 'overview' | 'history' | 'progress' | 'controls';
 export type BottomNavRouteName = 'index' | 'chat' | 'explore' | 'profile';
 
 export interface BottomNavIconPair {
@@ -28,7 +28,7 @@ type BottomNavItemSeed = Omit<BottomNavItemConfig, 'slot' | 'disabled' | 'inacti
   iconSetByAgeGroup?: Partial<Record<AgeGroup, BottomNavIconPair>>;
 };
 
-const TAB_ORDER: BottomNavSlot[] = ['overview', 'insights', 'curriculum', 'controls'];
+const TAB_ORDER: BottomNavSlot[] = ['overview', 'history', 'progress', 'controls'];
 
 const NAV_CONFIG_BY_MODE: Record<BottomNavMode, Record<BottomNavSlot, BottomNavItemSeed>> = {
   parent: {
@@ -37,14 +37,14 @@ const NAV_CONFIG_BY_MODE: Record<BottomNavMode, Record<BottomNavSlot, BottomNavI
       label: 'Overview',
       iconSet: { inactive: 'home-outline', active: 'home' },
     },
-    insights: {
+    history: {
       routeName: 'chat',
-      label: 'Insights',
+      label: 'History',
       iconSet: { inactive: 'chart-box-outline', active: 'chart-box' },
     },
-    curriculum: {
+    progress: {
       routeName: 'explore',
-      label: 'Curriculum',
+      label: 'Progress',
       iconSet: { inactive: 'book-open-outline', active: 'book-open' },
     },
     controls: {
@@ -62,7 +62,7 @@ const NAV_CONFIG_BY_MODE: Record<BottomNavMode, Record<BottomNavSlot, BottomNavI
         '3-6': { inactive: 'rocket-outline', active: 'rocket' },
       },
     },
-    insights: {
+    history: {
       routeName: 'chat',
       label: 'Coach',
       iconSet: { inactive: 'lightbulb-outline', active: 'lightbulb' },
@@ -70,7 +70,7 @@ const NAV_CONFIG_BY_MODE: Record<BottomNavMode, Record<BottomNavSlot, BottomNavI
         '3-6': { inactive: 'star-outline', active: 'star' },
       },
     },
-    curriculum: {
+    progress: {
       routeName: 'explore',
       label: 'Learn',
       iconSet: { inactive: 'book-open-outline', active: 'book-open' },

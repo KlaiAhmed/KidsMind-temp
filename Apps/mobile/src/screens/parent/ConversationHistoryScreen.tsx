@@ -1,177 +1,119 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
-  type ImageSourcePropType,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 
 import { SafetyFlagAnnotation } from '@/src/components/parent/SafetyFlagAnnotation';
+import { ParentChildSwitcher } from '@/src/components/parent/ParentChildSwitcher';
 import { Colors, Radii, Shadows, Spacing, Typography } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
-import { useChildProfile } from '@/hooks/useChildProfile';
-import type { ChildProfile } from '@/types/child';
+import {
+  clearConversationSession,
+  getConversationHistory,
+  type ParentConversationSession,
+} from '@/services/parentDashboardService';
+import { useParentDashboardChild } from '@/src/hooks/useParentDashboardChild';
 
 type HistoryScreenState = 'loading' | 'ready' | 'error' | 'empty';
-
-type SubjectFilter = 'all' | 'Astronomy' | 'Mathematics' | 'Science';
-
-interface ConversationMessage {
-  id: string;
-  sender: 'ai' | 'child';
-  body: string;
-  safetyFlagDescription?: string;
-}
-
-interface ConversationItem {
-  id: string;
-  subject: SubjectFilter;
-  iconName: 'rocket-launch-outline' | 'sigma' | 'book-open-page-variant-outline';
-  title: string;
-  timestampLabel: string;
-  messageCountLabel: string;
-  messages?: ConversationMessage[];
-}
-
-interface ConversationDayGroup {
-  label: string;
-  layout: 'thread' | 'cards';
-  conversations: ConversationItem[];
-}
-
-interface HistoryChildData {
-  id: string;
-  name: string;
-  avatarSource: ImageSourcePropType;
-  groups: ConversationDayGroup[];
-}
 
 export interface ConversationHistoryScreenProps {
   initialState?: HistoryScreenState;
   errorMessage?: string;
 }
 
-const SUBJECT_CHIPS: SubjectFilter[] = ['Astronomy', 'Mathematics', 'Science'];
+function formatClock(value: string | null | undefined): string {
+  if (!value) {
+    return 'Unknown time';
+  }
 
-const SECONDARY_CHILDREN = [
-  { id: 'child-maya', name: 'Maya', avatarId: 'avatar-2' },
-  { id: 'child-sarah', name: 'Sarah', avatarId: 'avatar-4' },
-] as const;
-
-function buildConversationGroups(childName: string): ConversationDayGroup[] {
-  return [
-    {
-      label: 'Today',
-      layout: 'thread',
-      conversations: [
-        {
-          id: 'astronomy-safety',
-          subject: 'Astronomy',
-          iconName: 'rocket-launch-outline',
-          title: 'Why astronauts float in space',
-          timestampLabel: '4:10 PM',
-          messageCountLabel: '12 messages',
-          messages: [
-            {
-              id: 'msg-1',
-              sender: 'child',
-              body: 'If I jump from the roof, will I float like astronauts do?',
-            },
-            {
-              id: 'msg-2',
-              sender: 'ai',
-              body: 'Astronauts float because they are falling around Earth inside a spacecraft. Roofs are not safe places to test that idea.',
-              safetyFlagDescription:
-                'Physical safety curiosity detected. AI guided conversation toward safe conceptual boundaries.',
-            },
-            {
-              id: 'msg-3',
-              sender: 'child',
-              body: 'Can we try it with a toy rocket instead?',
-            },
-            {
-              id: 'msg-4',
-              sender: 'ai',
-              body: 'Yes. We can model it with a paper rocket and talk about gravity safely.',
-            },
-          ],
-        },
-        {
-          id: 'math-review',
-          subject: 'Mathematics',
-          iconName: 'sigma',
-          title: 'Patterns in multiplication tables',
-          timestampLabel: '1:45 PM',
-          messageCountLabel: '9 messages',
-          messages: [
-            {
-              id: 'msg-5',
-              sender: 'child',
-              body: 'Why does 9 make the digits add to 9 so often?',
-            },
-            {
-              id: 'msg-6',
-              sender: 'ai',
-              body: 'That happens because of how place value works in base ten. Let us look at a few examples together.',
-            },
-          ],
-        },
-      ],
-    },
-    {
-      label: 'Yesterday',
-      layout: 'cards',
-      conversations: [
-        {
-          id: 'fraction-pizza',
-          subject: 'Mathematics',
-          iconName: 'sigma',
-          title: 'Fractions with pizza slices',
-          timestampLabel: '6:25 PM',
-          messageCountLabel: '7 messages',
-        },
-        {
-          id: 'ocean-layers',
-          subject: 'Science',
-          iconName: 'book-open-page-variant-outline',
-          title: `${childName} explored ocean layers`,
-          timestampLabel: '3:05 PM',
-          messageCountLabel: '11 messages',
-        },
-      ],
-    },
-  ];
+  return new Intl.DateTimeFormat(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date(value));
 }
 
-function buildHistoryChildren(params: {
-  childProfile: ChildProfile | null;
-  getAvatarSource: (avatarId: string) => ImageSourcePropType;
-}): HistoryChildData[] {
-  const activeChildName = params.childProfile?.nickname ?? params.childProfile?.name ?? 'Leo';
+function formatSessionMeta(session: ParentConversationSession): string {
+  return `${formatClock(session.lastMessageAt)} • ${session.messageCount} messages`;
+}
 
-  const primaryChild: HistoryChildData = {
-    id: params.childProfile?.id ?? 'child-leo',
-    name: activeChildName,
-    avatarSource: params.getAvatarSource(params.childProfile?.avatarId ?? 'avatar-1'),
-    groups: buildConversationGroups(activeChildName),
-  };
+function getDayLabel(value: string | null | undefined): string {
+  if (!value) {
+    return 'Earlier';
+  }
 
-  return [
-    primaryChild,
-    ...SECONDARY_CHILDREN.map((child) => ({
-      id: child.id,
-      name: child.name,
-      avatarSource: params.getAvatarSource(child.avatarId),
-      groups: buildConversationGroups(child.name),
-    })),
-  ];
+  const targetDate = new Date(value);
+  const today = new Date();
+  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const startOfTarget = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
+  const diffDays = Math.round((startOfToday.getTime() - startOfTarget.getTime()) / (24 * 60 * 60 * 1000));
+
+  if (diffDays === 0) {
+    return 'Today';
+  }
+
+  if (diffDays === 1) {
+    return 'Yesterday';
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+  }).format(targetDate);
+}
+
+function isWithinRange(value: string | null | undefined, rangeDays: 7 | 30): boolean {
+  if (!value) {
+    return false;
+  }
+
+  const targetTime = new Date(value).getTime();
+  const cutoff = Date.now() - rangeDays * 24 * 60 * 60 * 1000;
+  return targetTime >= cutoff;
+}
+
+function groupSessionsByDay(
+  sessions: ParentConversationSession[],
+): {
+  label: string;
+  sessions: ParentConversationSession[];
+}[] {
+  const groups = new Map<string, ParentConversationSession[]>();
+
+  for (const session of sessions) {
+    const label = getDayLabel(session.lastMessageAt);
+    const existing = groups.get(label) ?? [];
+    existing.push(session);
+    groups.set(label, existing);
+  }
+
+  return Array.from(groups.entries()).map(([label, groupedSessions]) => ({
+    label,
+    sessions: groupedSessions,
+  }));
+}
+
+function HistorySkeleton() {
+  return (
+    <ScrollView contentContainerStyle={styles.loadingContent} showsVerticalScrollIndicator={false}>
+      <View style={styles.loadingHero} />
+      <View style={styles.loadingSwitcher} />
+      <View style={styles.loadingCard} />
+      <View style={styles.loadingCard} />
+      <View style={styles.loadingCard} />
+    </ScrollView>
+  );
 }
 
 export default function ConversationHistoryScreen({
@@ -179,112 +121,122 @@ export default function ConversationHistoryScreen({
   errorMessage = 'Conversation history could not be loaded.',
 }: ConversationHistoryScreenProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const params = useLocalSearchParams<{
     childId?: string;
     flaggedOnly?: string;
     topic?: string;
   }>();
-  const { childProfile } = useAuth();
-  const { getAvatarById } = useChildProfile();
-  const focusTopic = typeof params.topic === 'string' ? params.topic : undefined;
-
-  const [viewState, setViewState] = useState<HistoryScreenState>(
-    initialState ?? (childProfile ? 'ready' : 'empty')
+  const { user, childDataLoading } = useAuth();
+  const { children, activeChild, selectedChildId, selectChild, getChildAvatarSource } = useParentDashboardChild(
+    typeof params.childId === 'string' ? params.childId : undefined,
   );
-  const [searchValue, setSearchValue] = useState('');
-  const [subjectFilter, setSubjectFilter] = useState<SubjectFilter>(focusTopic ? 'all' : 'Astronomy');
-  const [dateRangeLabel, setDateRangeLabel] = useState<'Last 7 Days' | 'Last 30 Days'>('Last 7 Days');
+
+  const initialSearch = typeof params.topic === 'string' ? params.topic : '';
+  const [searchValue, setSearchValue] = useState(initialSearch);
+  const [rangeDays, setRangeDays] = useState<7 | 30>(7);
   const [flaggedOnly, setFlaggedOnly] = useState(params.flaggedOnly === 'true');
-  const [expandedIds, setExpandedIds] = useState<string[]>(['astronomy-safety']);
+  const [expandedIds, setExpandedIds] = useState<string[]>([]);
 
-  const children = useMemo(
-    () =>
-      buildHistoryChildren({
-        childProfile,
-        getAvatarSource: (avatarId) => getAvatarById(avatarId).asset,
-      }),
-    [childProfile, getAvatarById]
-  );
+  useEffect(() => {
+    setSearchValue(typeof params.topic === 'string' ? params.topic : '');
+  }, [params.topic]);
 
-  const activeChild =
-    children.find((child) => child.id === params.childId) ??
-    children[0];
+  useEffect(() => {
+    setFlaggedOnly(params.flaggedOnly === 'true');
+  }, [params.flaggedOnly]);
 
-  const filteredGroups = useMemo(() => {
-    if (!activeChild) {
-      return [];
-    }
+  const historyQuery = useQuery({
+    queryKey: ['parent-dashboard', 'history', user?.id, activeChild?.id],
+    queryFn: async () => getConversationHistory({ userId: user!.id, childId: activeChild!.id }),
+    enabled: Boolean(user?.id && activeChild?.id),
+  });
 
+  const deleteSessionMutation = useMutation({
+    mutationFn: async (sessionId: string) => {
+      await clearConversationSession({
+        userId: user!.id,
+        childId: activeChild!.id,
+        sessionId,
+      });
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ['parent-dashboard', 'history', user?.id, activeChild?.id],
+      });
+    },
+  });
+
+  const historyDisabled = activeChild?.rules?.conversationHistoryEnabled === false;
+  const hasFlagData = historyQuery.data?.sessions.some((session) => session.hasSafetyFlags) ?? false;
+  const effectiveFlaggedOnly = hasFlagData ? flaggedOnly : false;
+
+  const filteredSessions = useMemo(() => {
+    const sessions = historyQuery.data?.sessions ?? [];
     const normalizedQuery = searchValue.trim().toLowerCase();
 
-    return activeChild.groups
-      .map((group) => {
-        const conversations = group.conversations.filter((conversation) => {
-          const matchesSubject = subjectFilter === 'all' || conversation.subject === subjectFilter;
-          const hasFlag = conversation.messages?.some((message) => Boolean(message.safetyFlagDescription)) ?? false;
-          const matchesFlagged = !flaggedOnly || hasFlag;
-          const matchesTopic = !focusTopic || conversation.title.toLowerCase().includes(focusTopic.toLowerCase());
-          const messageText = conversation.messages?.map((message) => message.body).join(' ').toLowerCase() ?? '';
-          const matchesSearch =
-            normalizedQuery.length === 0 ||
-            conversation.title.toLowerCase().includes(normalizedQuery) ||
-            conversation.subject.toLowerCase().includes(normalizedQuery) ||
-            messageText.includes(normalizedQuery);
+    return sessions.filter((session) => {
+      const matchesRange = isWithinRange(session.lastMessageAt, rangeDays);
+      const matchesFlagged = !effectiveFlaggedOnly || session.hasSafetyFlags;
+      const searchableText = [
+        session.title,
+        session.preview,
+        ...session.messages.map((message) => message.body),
+      ]
+        .join(' ')
+        .toLowerCase();
+      const matchesSearch = normalizedQuery.length === 0 || searchableText.includes(normalizedQuery);
 
-          return matchesSubject && matchesFlagged && matchesSearch && matchesTopic;
-        });
+      return matchesRange && matchesFlagged && matchesSearch;
+    });
+  }, [effectiveFlaggedOnly, historyQuery.data?.sessions, rangeDays, searchValue]);
 
-        return {
-          ...group,
-          conversations,
-        };
-      })
-      .filter((group) => group.conversations.length > 0);
-  }, [activeChild, flaggedOnly, focusTopic, searchValue, subjectFilter]);
+  const groupedSessions = useMemo(() => groupSessionsByDay(filteredSessions), [filteredSessions]);
 
-  function toggleExpanded(conversationId: string) {
+  function handleChildSelect(childId: string) {
+    selectChild(childId);
+    setExpandedIds([]);
+    void router.replace(`/(tabs)/chat?childId=${encodeURIComponent(childId)}` as never);
+  }
+
+  function toggleExpanded(sessionId: string) {
     setExpandedIds((current) =>
-      current.includes(conversationId)
-        ? current.filter((entry) => entry !== conversationId)
-        : [...current, conversationId]
+      current.includes(sessionId)
+        ? current.filter((entry) => entry !== sessionId)
+        : [...current, sessionId],
     );
   }
 
-  if (viewState === 'error') {
+  function confirmDeleteSession(sessionId: string, title: string) {
+    Alert.alert(
+      'Delete session?',
+      `This will remove "${title}" from this child's stored conversation history.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            deleteSessionMutation.mutate(sessionId);
+          },
+        },
+      ],
+    );
+  }
+
+  if (initialState === 'loading' || (childDataLoading && children.length === 0) || historyQuery.isPending) {
     return (
       <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
-        <View style={styles.feedbackState}>
-          <MaterialCommunityIcons
-            accessibilityLabel="Conversation history unavailable"
-            color={Colors.errorText}
-            name="alert-circle-outline"
-            size={34}
-          />
-          <Text style={styles.feedbackTitle}>Conversation history paused</Text>
-          <Text style={styles.feedbackBody}>{errorMessage}</Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Retry loading history"
-            onPress={() => setViewState('ready')}
-            style={({ pressed }) => [styles.retryButton, pressed ? styles.retryButtonPressed : null]}
-          >
-            <Text style={styles.retryLabel}>Retry</Text>
-          </Pressable>
-        </View>
+        <HistorySkeleton />
       </SafeAreaView>
     );
   }
 
-  if (viewState === 'empty' || !activeChild) {
+  if (!children.length || !activeChild) {
     return (
       <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
         <View style={styles.feedbackState}>
-          <MaterialCommunityIcons
-            accessibilityLabel="No conversations yet"
-            color={Colors.primary}
-            name="message-processing-outline"
-            size={40}
-          />
+          <MaterialCommunityIcons color={Colors.primary} name="message-processing-outline" size={40} />
           <Text style={styles.feedbackTitle}>No conversations yet</Text>
           <Text style={styles.feedbackBody}>
             Once a child starts chatting with the tutor, conversation history will appear here.
@@ -294,15 +246,24 @@ export default function ConversationHistoryScreen({
     );
   }
 
-  if (viewState === 'loading') {
+  if (historyQuery.isError || initialState === 'error') {
     return (
       <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
-        <ScrollView contentContainerStyle={styles.loadingContent} showsVerticalScrollIndicator={false}>
-          <View style={styles.loadingCard} />
-          <View style={styles.loadingCard} />
-          <View style={styles.loadingCard} />
-          <View style={styles.loadingCard} />
-        </ScrollView>
+        <View style={styles.feedbackState}>
+          <MaterialCommunityIcons color={Colors.errorText} name="alert-circle-outline" size={34} />
+          <Text style={styles.feedbackTitle}>Conversation history paused</Text>
+          <Text style={styles.feedbackBody}>{errorMessage}</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Retry loading history"
+            onPress={() => {
+              void historyQuery.refetch();
+            }}
+            style={({ pressed }) => [styles.retryButton, pressed ? styles.pressed : null]}
+          >
+            <Text style={styles.retryLabel}>Retry</Text>
+          </Pressable>
+        </View>
       </SafeAreaView>
     );
   }
@@ -314,229 +275,214 @@ export default function ConversationHistoryScreen({
           <Text style={styles.parentHubTitle}>Parent Hub</Text>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Open parental controls"
+            accessibilityLabel={`Open controls for ${activeChild.nickname ?? activeChild.name}`}
             onPress={() => router.push(`/(tabs)/profile?childId=${encodeURIComponent(activeChild.id)}` as never)}
-            style={({ pressed }) => [styles.iconButton, pressed ? styles.iconButtonPressed : null]}
+            style={({ pressed }) => [styles.iconButton, pressed ? styles.pressed : null]}
           >
-            <MaterialCommunityIcons accessibilityLabel="Settings" color={Colors.text} name="cog-outline" size={20} />
+            <MaterialCommunityIcons color={Colors.text} name="cog-outline" size={20} />
           </Pressable>
         </View>
 
         <View style={styles.heroWrap}>
           <View style={styles.heroCopy}>
-            <Text style={styles.screenTitle}>Conversation History: {activeChild.name}</Text>
-            {focusTopic ? (
-              <Text style={styles.focusTopic}>Focused topic: {focusTopic}</Text>
-            ) : null}
+            <Text style={styles.screenTitle}>Conversation History</Text>
+            <Text style={styles.heroSubtitle}>
+              Review real tutoring sessions for {activeChild.nickname ?? activeChild.name}.
+            </Text>
           </View>
-          <Image contentFit="cover" source={activeChild.avatarSource} style={styles.childAvatar} />
+          <Image contentFit="cover" source={getChildAvatarSource(activeChild)} style={styles.childAvatar} />
         </View>
 
+        <ParentChildSwitcher
+          activeChildId={selectedChildId}
+          profiles={children}
+          getAvatarSource={getChildAvatarSource}
+          onSelectChild={handleChildSelect}
+        />
+
         <View style={styles.searchShell}>
-          <MaterialCommunityIcons accessibilityLabel="Search conversations" color={Colors.placeholder} name="magnify" size={20} />
+          <MaterialCommunityIcons color={Colors.placeholder} name="magnify" size={20} />
           <TextInput
             accessibilityLabel="Search conversations"
             autoCapitalize="none"
             autoCorrect={false}
             onChangeText={setSearchValue}
-            placeholder="Search conversations..."
+            placeholder="Search by title or message..."
             placeholderTextColor={Colors.placeholder}
             returnKeyType="search"
             style={styles.searchInput}
             value={searchValue}
           />
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Change date range"
-            onPress={() =>
-              setDateRangeLabel((current) => (current === 'Last 7 Days' ? 'Last 30 Days' : 'Last 7 Days'))
-            }
-            style={({ pressed }) => [styles.filterButton, pressed ? styles.filterButtonPressed : null]}
-          >
-            <MaterialCommunityIcons accessibilityLabel="Filter" color={Colors.primary} name="tune-variant" size={18} />
-          </Pressable>
+          {historyQuery.isFetching ? <ActivityIndicator color={Colors.primary} size="small" /> : null}
         </View>
 
-        <ScrollView
-          horizontal
-          contentContainerStyle={styles.filtersRow}
-          showsHorizontalScrollIndicator={false}
-        >
+        <ScrollView horizontal contentContainerStyle={styles.filtersRow} showsHorizontalScrollIndicator={false}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Change date range"
-            onPress={() =>
-              setDateRangeLabel((current) => (current === 'Last 7 Days' ? 'Last 30 Days' : 'Last 7 Days'))
-            }
-            style={({ pressed }) => [styles.dateChip, pressed ? styles.dateChipPressed : null]}
+            accessibilityLabel="Toggle history date range"
+            onPress={() => setRangeDays((current) => (current === 7 ? 30 : 7))}
+            style={({ pressed }) => [styles.filterChipPrimary, pressed ? styles.pressed : null]}
           >
-            <Text style={styles.dateChipLabel}>{dateRangeLabel}</Text>
-            <MaterialCommunityIcons accessibilityLabel="Date range" color={Colors.primary} name="chevron-down" size={18} />
+            <Text style={styles.filterChipPrimaryLabel}>{rangeDays === 7 ? 'Last 7 Days' : 'Last 30 Days'}</Text>
           </Pressable>
-
-          {SUBJECT_CHIPS.map((subject) => {
-            const selected = subjectFilter === subject;
-            const isAstronomy = subject === 'Astronomy';
-
-            return (
-              <Pressable
-                key={subject}
-                accessibilityRole="button"
-                accessibilityLabel={`Filter by ${subject}`}
-                accessibilityState={{ selected }}
-                onPress={() => setSubjectFilter(selected ? 'all' : subject)}
-                style={({ pressed }) => [
-                  styles.subjectChip,
-                  selected
-                    ? isAstronomy
-                      ? styles.subjectChipAstronomy
-                      : styles.subjectChipSelected
-                    : null,
-                  pressed ? styles.subjectChipPressed : null,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.subjectChipLabel,
-                    selected ? styles.subjectChipLabelSelected : null,
-                  ]}
-                >
-                  {subject}
-                </Text>
-              </Pressable>
-            );
-          })}
 
           <Pressable
             accessibilityRole="switch"
             accessibilityLabel="Flagged conversations only"
-            accessibilityState={{ checked: flaggedOnly }}
+            accessibilityState={{ checked: effectiveFlaggedOnly, disabled: !hasFlagData }}
+            disabled={!hasFlagData}
             onPress={() => setFlaggedOnly((current) => !current)}
             style={({ pressed }) => [
-              styles.flaggedToggle,
-              flaggedOnly ? styles.flaggedToggleActive : null,
-              pressed ? styles.flaggedTogglePressed : null,
+              styles.filterChip,
+              effectiveFlaggedOnly ? styles.filterChipActive : null,
+              !hasFlagData ? styles.filterChipDisabled : null,
+              pressed ? styles.pressed : null,
             ]}
           >
-            <Text style={[styles.flaggedToggleLabel, flaggedOnly ? styles.flaggedToggleLabelActive : null]}>
+            <Text style={[styles.filterChipLabel, effectiveFlaggedOnly ? styles.filterChipLabelActive : null]}>
               Flagged only
             </Text>
-            <View style={[styles.flagDot, flaggedOnly ? styles.flagDotActive : null]} />
           </Pressable>
         </ScrollView>
 
-        {filteredGroups.length === 0 ? (
+        {historyDisabled ? (
+          <View style={styles.infoCard}>
+            <MaterialCommunityIcons color={Colors.primary} name="shield-lock-outline" size={18} />
+            <Text style={styles.infoCardText}>
+              Conversation history is currently turned off for new sessions. Existing saved sessions still appear here.
+            </Text>
+          </View>
+        ) : null}
+
+        {!hasFlagData && params.flaggedOnly === 'true' ? (
+          <View style={styles.infoCard}>
+            <MaterialCommunityIcons color={Colors.textSecondary} name="information-outline" size={18} />
+            <Text style={styles.infoCardText}>
+              Safety flags are not included in the current history payload, so flagged filtering is unavailable for now.
+            </Text>
+          </View>
+        ) : null}
+
+        {groupedSessions.length === 0 ? (
           <View style={styles.emptyCard}>
-            <MaterialCommunityIcons accessibilityLabel="No matching history" color={Colors.textSecondary} name="magnify-close" size={32} />
-            <Text style={styles.emptyTitle}>No matching conversations</Text>
+            <MaterialCommunityIcons color={Colors.textSecondary} name="magnify-close" size={32} />
+            <Text style={styles.emptyTitle}>
+              {historyQuery.data?.sessions.length ? 'No matching conversations' : 'No saved conversations yet'}
+            </Text>
             <Text style={styles.emptyBody}>
-              Try another search, switch subjects, or clear the flagged-only filter.
+              {historyQuery.data?.sessions.length
+                ? 'Try another search or switch the date range.'
+                : 'Once tutoring sessions are completed, they will show up here automatically.'}
             </Text>
           </View>
         ) : (
-          filteredGroups.map((group) => (
+          groupedSessions.map((group) => (
             <View key={group.label} style={styles.groupBlock}>
               <Text style={styles.groupLabel}>{group.label}</Text>
 
-              {group.layout === 'thread' ? (
-                <View style={styles.threadList}>
-                  {group.conversations.map((conversation) => {
-                    const expanded = expandedIds.includes(conversation.id);
+              <View style={styles.threadList}>
+                {group.sessions.map((session) => {
+                  const expanded = expandedIds.includes(session.id);
 
-                    return (
-                      <View key={conversation.id} style={styles.threadCard}>
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityLabel={`${expanded ? 'Collapse' : 'Expand'} ${conversation.title}`}
-                          onPress={() => toggleExpanded(conversation.id)}
-                          style={({ pressed }) => [
-                            styles.threadHeader,
-                            pressed ? styles.threadHeaderPressed : null,
-                          ]}
-                        >
-                          <View style={styles.threadHeaderLeft}>
-                            <View style={styles.threadIconWrap}>
-                              <MaterialCommunityIcons accessibilityLabel={conversation.subject} color={Colors.primary} name={conversation.iconName} size={18} />
-                            </View>
-                            <View style={styles.threadCopy}>
-                              <Text style={styles.threadTitle}>{conversation.title}</Text>
-                              <Text style={styles.threadMeta}>
-                                {conversation.timestampLabel} | {conversation.messageCountLabel}
-                              </Text>
-                            </View>
+                  return (
+                    <View key={session.id} style={styles.threadCard}>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`${expanded ? 'Collapse' : 'Expand'} ${session.title}`}
+                        onPress={() => toggleExpanded(session.id)}
+                        style={({ pressed }) => [styles.threadHeader, pressed ? styles.threadHeaderPressed : null]}
+                      >
+                        <View style={styles.threadHeaderLeft}>
+                          <View style={styles.threadIconWrap}>
+                            <MaterialCommunityIcons
+                              color={session.hasSafetyFlags ? Colors.errorText : Colors.primary}
+                              name={session.hasSafetyFlags ? 'alert-outline' : 'message-text-outline'}
+                              size={18}
+                            />
                           </View>
-                          <MaterialCommunityIcons accessibilityLabel={expanded ? 'Collapse conversation' : 'Expand conversation'} color={Colors.textSecondary} name={expanded ? 'chevron-up' : 'chevron-down'} size={22} />
-                        </Pressable>
 
-                        {expanded && conversation.messages ? (
-                          <View style={styles.messagesColumn}>
-                            {conversation.messages.map((message) => (
-                              <View key={message.id} style={message.sender === 'child' ? styles.childMessageGroup : styles.aiMessageGroup}>
-                                {message.safetyFlagDescription ? (
-                                  <SafetyFlagAnnotation description={message.safetyFlagDescription} />
-                                ) : null}
-                                <View
-                                  style={[
-                                    styles.messageBubble,
-                                    message.sender === 'child' ? styles.childBubble : styles.aiBubble,
-                                  ]}
-                                >
-                                  <Text style={styles.messageText}>{message.body}</Text>
-                                </View>
-                                {message.sender === 'child' ? (
-                                  <Image contentFit="cover" source={activeChild.avatarSource} style={styles.messageAvatar} />
-                                ) : null}
+                          <View style={styles.threadCopy}>
+                            <Text style={styles.threadTitle}>{session.title}</Text>
+                            <Text style={styles.threadMeta}>{formatSessionMeta(session)}</Text>
+                            <Text numberOfLines={2} style={styles.threadPreview}>
+                              {session.preview}
+                            </Text>
+                          </View>
+                        </View>
+
+                        <MaterialCommunityIcons
+                          color={Colors.textSecondary}
+                          name={expanded ? 'chevron-up' : 'chevron-down'}
+                          size={22}
+                        />
+                      </Pressable>
+
+                      {expanded ? (
+                        <View style={styles.messagesColumn}>
+                          {session.messages.map((message) => (
+                            <View
+                              key={message.id}
+                              style={message.sender === 'child' ? styles.childMessageGroup : styles.aiMessageGroup}
+                            >
+                              {message.safetyFlagDescription ? (
+                                <SafetyFlagAnnotation description={message.safetyFlagDescription} />
+                              ) : null}
+
+                              <View
+                                style={[
+                                  styles.messageBubble,
+                                  message.sender === 'child' ? styles.childBubble : styles.aiBubble,
+                                ]}
+                              >
+                                <Text style={styles.messageText}>{message.body}</Text>
                               </View>
-                            ))}
+
+                              {message.sender === 'child' ? (
+                                <Image contentFit="cover" source={getChildAvatarSource(activeChild)} style={styles.messageAvatar} />
+                              ) : null}
+                            </View>
+                          ))}
+
+                          <View style={styles.cardActions}>
+                            <Pressable
+                              accessibilityRole="button"
+                              accessibilityLabel={`Delete ${session.title}`}
+                              disabled={deleteSessionMutation.isPending}
+                              onPress={() => confirmDeleteSession(session.id, session.title)}
+                              style={({ pressed }) => [
+                                styles.deleteButton,
+                                deleteSessionMutation.isPending ? styles.filterChipDisabled : null,
+                                pressed ? styles.pressed : null,
+                              ]}
+                            >
+                              <MaterialCommunityIcons color={Colors.errorText} name="trash-can-outline" size={16} />
+                              <Text style={styles.deleteButtonLabel}>Delete Session</Text>
+                            </Pressable>
                           </View>
-                        ) : null}
-                      </View>
-                    );
-                  })}
-                </View>
-              ) : (
-                <View style={styles.yesterdayGrid}>
-                  {group.conversations.map((conversation) => (
-                    <Pressable
-                      key={conversation.id}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Open ${conversation.title}`}
-                      onPress={() => toggleExpanded(conversation.id)}
-                      style={({ pressed }) => [
-                        styles.compactCard,
-                        pressed ? styles.compactCardPressed : null,
-                      ]}
-                    >
-                      <View style={styles.compactIconWrap}>
-                        <MaterialCommunityIcons accessibilityLabel={conversation.subject} color={Colors.primary} name={conversation.iconName} size={18} />
-                      </View>
-                      <Text style={styles.compactTitle}>{conversation.title}</Text>
-                      <Text style={styles.compactMeta}>
-                        {conversation.timestampLabel} | {conversation.messageCountLabel}
-                      </Text>
-                      <MaterialCommunityIcons accessibilityLabel="Open conversation" color={Colors.primary} name="arrow-right" size={18} />
-                    </Pressable>
-                  ))}
-                </View>
-              )}
+                        </View>
+                      ) : null}
+                    </View>
+                  );
+                })}
+              </View>
             </View>
           ))
         )}
 
         <View style={styles.privacyCard}>
           <View style={styles.privacyHeader}>
-            <MaterialCommunityIcons accessibilityLabel="Privacy shield" color={Colors.primary} name="shield-lock-outline" size={20} />
-            <Text style={styles.privacyTitle}>Your Privacy Matters</Text>
+            <MaterialCommunityIcons color={Colors.primary} name="shield-lock-outline" size={20} />
+            <Text style={styles.privacyTitle}>History & Privacy</Text>
           </View>
           <Text style={styles.privacyBody}>
-            Conversations stay encrypted for 30 days so you can review learning moments, resolve flags, and then let older threads expire automatically.
+            Sessions shown here come from the existing chat history endpoint. Export and bulk-delete controls stay disabled until the API supports them.
           </Text>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Open privacy settings"
+            accessibilityLabel="Open parental controls"
             onPress={() => router.push(`/(tabs)/profile?childId=${encodeURIComponent(activeChild.id)}` as never)}
           >
-            <Text style={styles.privacyLink}>Privacy Settings {'->'}</Text>
+            <Text style={styles.privacyLink}>Open Controls</Text>
           </Pressable>
         </View>
       </ScrollView>
@@ -575,9 +521,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  iconButtonPressed: {
-    transform: [{ scale: 0.97 }],
-  },
   heroWrap: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -592,9 +535,9 @@ const styles = StyleSheet.create({
     ...Typography.headline,
     color: Colors.text,
   },
-  focusTopic: {
-    ...Typography.captionMedium,
-    color: Colors.primary,
+  heroSubtitle: {
+    ...Typography.body,
+    color: Colors.textSecondary,
   },
   childAvatar: {
     width: 58,
@@ -619,38 +562,23 @@ const styles = StyleSheet.create({
     color: Colors.text,
     paddingVertical: 0,
   },
-  filterButton: {
-    width: 36,
-    height: 36,
-    borderRadius: Radii.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: Colors.primaryFixed,
-  },
-  filterButtonPressed: {
-    transform: [{ scale: 0.97 }],
-  },
   filtersRow: {
     gap: Spacing.sm,
     paddingRight: Spacing.sm,
   },
-  dateChip: {
+  filterChipPrimary: {
     minHeight: 42,
     borderRadius: Radii.full,
     paddingHorizontal: Spacing.md,
     backgroundColor: Colors.primaryFixed,
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.xs,
+    justifyContent: 'center',
   },
-  dateChipPressed: {
-    transform: [{ scale: 0.98 }],
-  },
-  dateChipLabel: {
+  filterChipPrimaryLabel: {
     ...Typography.captionMedium,
     color: Colors.primary,
   },
-  subjectChip: {
+  filterChip: {
     minHeight: 42,
     borderRadius: Radii.full,
     borderWidth: 1,
@@ -660,57 +588,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  subjectChipSelected: {
-    borderColor: Colors.primary,
-    backgroundColor: Colors.primary,
-  },
-  subjectChipAstronomy: {
-    borderColor: Colors.secondary,
-    backgroundColor: Colors.secondaryContainer,
-  },
-  subjectChipPressed: {
-    transform: [{ scale: 0.98 }],
-  },
-  subjectChipLabel: {
-    ...Typography.captionMedium,
-    color: Colors.text,
-  },
-  subjectChipLabelSelected: {
-    color: Colors.white,
-  },
-  flaggedToggle: {
-    minHeight: 42,
-    borderRadius: Radii.full,
-    borderWidth: 1,
-    borderColor: Colors.outline,
-    backgroundColor: Colors.surfaceContainerLowest,
-    paddingHorizontal: Spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
-  flaggedToggleActive: {
+  filterChipActive: {
     borderColor: Colors.primary,
     backgroundColor: Colors.primaryFixed,
   },
-  flaggedTogglePressed: {
-    transform: [{ scale: 0.98 }],
+  filterChipDisabled: {
+    opacity: 0.5,
   },
-  flaggedToggleLabel: {
+  filterChipLabel: {
     ...Typography.captionMedium,
     color: Colors.textSecondary,
   },
-  flaggedToggleLabelActive: {
+  filterChipLabelActive: {
     color: Colors.primary,
   },
-  flagDot: {
-    width: 8,
-    height: 8,
-    borderRadius: Radii.full,
-    backgroundColor: Colors.surfaceContainerHigh,
+  infoCard: {
+    borderRadius: Radii.lg,
+    backgroundColor: Colors.surfaceContainerLow,
+    padding: Spacing.md,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.sm,
   },
-  flagDotActive: {
-    backgroundColor: Colors.primary,
+  infoCardText: {
+    ...Typography.caption,
+    color: Colors.textSecondary,
+    flex: 1,
   },
   groupBlock: {
     gap: Spacing.sm,
@@ -766,6 +669,10 @@ const styles = StyleSheet.create({
     ...Typography.caption,
     color: Colors.textSecondary,
   },
+  threadPreview: {
+    ...Typography.caption,
+    color: Colors.textSecondary,
+  },
   messagesColumn: {
     paddingHorizontal: Spacing.md,
     paddingBottom: Spacing.md,
@@ -780,7 +687,7 @@ const styles = StyleSheet.create({
     gap: Spacing.xs,
   },
   messageBubble: {
-    maxWidth: '84%',
+    maxWidth: '88%',
     borderRadius: Radii.xl,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
@@ -800,38 +707,23 @@ const styles = StyleSheet.create({
     height: 24,
     borderRadius: Radii.full,
   },
-  yesterdayGrid: {
+  cardActions: {
     flexDirection: 'row',
-    gap: Spacing.sm,
+    justifyContent: 'flex-end',
   },
-  compactCard: {
-    flex: 1,
-    minHeight: 156,
-    borderRadius: Radii.xl,
-    borderWidth: 1,
-    borderColor: Colors.outline,
-    backgroundColor: Colors.surfaceContainerLowest,
-    padding: Spacing.md,
-    gap: Spacing.sm,
-  },
-  compactCardPressed: {
-    transform: [{ scale: 0.98 }],
-  },
-  compactIconWrap: {
-    width: 36,
-    height: 36,
+  deleteButton: {
+    minHeight: 40,
     borderRadius: Radii.full,
-    backgroundColor: Colors.primaryFixed,
+    borderWidth: 1,
+    borderColor: Colors.errorText,
+    paddingHorizontal: Spacing.md,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: Spacing.xs,
   },
-  compactTitle: {
-    ...Typography.bodySemiBold,
-    color: Colors.text,
-  },
-  compactMeta: {
-    ...Typography.caption,
-    color: Colors.textSecondary,
+  deleteButtonLabel: {
+    ...Typography.captionMedium,
+    color: Colors.errorText,
   },
   privacyCard: {
     borderRadius: Radii.xl,
@@ -871,6 +763,7 @@ const styles = StyleSheet.create({
   emptyTitle: {
     ...Typography.bodySemiBold,
     color: Colors.text,
+    textAlign: 'center',
   },
   emptyBody: {
     ...Typography.caption,
@@ -904,9 +797,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: Spacing.lg,
   },
-  retryButtonPressed: {
-    transform: [{ scale: 0.98 }],
-  },
   retryLabel: {
     ...Typography.bodySemiBold,
     color: Colors.primary,
@@ -916,9 +806,22 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.sm,
     gap: Spacing.md,
   },
+  loadingHero: {
+    height: 76,
+    borderRadius: Radii.xl,
+    backgroundColor: Colors.surfaceContainerHigh,
+  },
+  loadingSwitcher: {
+    height: 82,
+    borderRadius: Radii.xl,
+    backgroundColor: Colors.surfaceContainerHigh,
+  },
   loadingCard: {
     height: 176,
     borderRadius: Radii.xl,
     backgroundColor: Colors.surfaceContainerHigh,
+  },
+  pressed: {
+    transform: [{ scale: 0.99 }],
   },
 });

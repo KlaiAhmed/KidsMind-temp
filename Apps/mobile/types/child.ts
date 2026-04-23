@@ -68,7 +68,9 @@ export interface ChildProfile {
   gradeLevel: string;
   languages: string[];
   rules: ChildRules | null;
-  avatarId: string;
+  avatarId: string | null;
+  avatarName?: string | null;
+  avatarFilePath?: string | null;
   subjectIds: SubjectKey[];
   xp: number;
   xpToNextLevel: number;

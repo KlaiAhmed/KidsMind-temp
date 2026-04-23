@@ -35,6 +35,8 @@ interface ChildWeekScheduleApiResponse {
 
 interface AvatarApiResponse {
   id: string;
+  name?: string | null;
+  file_path?: string | null;
 }
 
 interface ChildProfileApiResponse {
@@ -48,6 +50,7 @@ interface ChildProfileApiResponse {
   languages: string[];
   avatar_id: string | null;
   avatar: AvatarApiResponse | null;
+  xp?: number;
   rules: ChildRulesApiResponse | null;
   allowed_subjects: string[];
   week_schedule: ChildWeekScheduleApiResponse[];
@@ -160,6 +163,15 @@ function normalizeSubjectKeys(value: unknown): SubjectKey[] {
   }
 
   return value.filter(isSubjectKey);
+}
+
+function normalizeOptionalString(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
 }
 
 function normalizeChildId(childId: string | number): string {
@@ -395,10 +407,9 @@ function normalizeChildProfile(data: ChildProfileApiResponse): ChildProfile {
   const normalizedWeekSchedule = normalizeWeekSchedule(data.week_schedule);
   const normalizedRules = normalizeRules(data.rules, normalizedAllowedSubjects, normalizedWeekSchedule);
   const subjectIds = normalizedAllowedSubjects;
-  const responseAvatarId =
-    typeof data.avatar_id === 'string' && data.avatar_id.trim().length > 0
-      ? data.avatar_id
-      : data.avatar?.id ?? null;
+  const responseAvatarId = normalizeOptionalString(data.avatar_id) ?? normalizeOptionalString(data.avatar?.id);
+  const xp = typeof data.xp === 'number' && data.xp >= 0 ? data.xp : 0;
+  const level = Math.floor(xp / 100) + 1;
   const dailyGoalMinutes =
     normalizedRules?.dailyLimitMinutes
     ?? deriveDailyLimitMinutes(normalizedWeekSchedule)
@@ -415,11 +426,13 @@ function normalizeChildProfile(data: ChildProfileApiResponse): ChildProfile {
     gradeLevel: toGradeLevelLabel(educationStage, resolvedAge),
     languages: Array.isArray(data.languages) && data.languages.length > 0 ? data.languages : ['en'],
     rules: normalizedRules,
-    avatarId: responseAvatarId ?? 'avatar-1',
+    avatarId: responseAvatarId,
+    avatarName: normalizeOptionalString(data.avatar?.name),
+    avatarFilePath: normalizeOptionalString(data.avatar?.file_path),
     subjectIds,
-    xp: 0,
-    level: 1,
-    xpToNextLevel: 100,
+    xp,
+    level,
+    xpToNextLevel: level * 100,
     streakDays: 0,
     dailyGoalMinutes,
     dailyCompletedMinutes: 0,
@@ -550,6 +563,14 @@ export async function getChildProfile(childId: string | number): Promise<ChildPr
   });
 
   return normalizeChildProfile(response);
+}
+
+export async function deleteChildProfile(childId: string | number): Promise<void> {
+  const resolvedChildId = normalizeChildId(childId);
+
+  await apiRequest<void>(`/api/v1/children/${resolvedChildId}`, {
+    method: 'DELETE',
+  });
 }
 
 export async function getChildBadges(childId: string | number): Promise<Badge[]> {
