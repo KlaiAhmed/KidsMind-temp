@@ -16,6 +16,12 @@ from dependencies.infrastructure import get_db
 from dependencies.request_security import verify_csrf_dep
 from models.user import User, UserRole
 from services.auth_service import TokenType, verify_token
+from utils.non_prod_auth_bypass import (
+    is_me_route,
+    is_media_route,
+    is_non_prod_security_bypass_enabled,
+    is_strict_auth_route,
+)
 from utils.token_blocklist import is_access_token_blocklisted
 
 
@@ -31,21 +37,6 @@ DEV_ANONYMOUS_USER = UserContext(
     role="dev",
     is_dev_bypass=True,
 )
-
-STRICT_AUTH_ROUTES = {"/api/web/auth/logout", "/api/mobile/auth/logout"}
-
-
-def _is_strict_auth_route(request: Request) -> bool:
-    return request.url.path in STRICT_AUTH_ROUTES
-
-
-def _is_me_route(request: Request) -> bool:
-    segments = request.url.path.strip("/").split("/")
-    return "me" in segments
-
-
-def _is_media_route(request: Request) -> bool:
-    return request.url.path.startswith("/api/v1/media")
 
 
 def _extract_bearer_token(authorization: str | None) -> str | None:
@@ -122,9 +113,9 @@ async def get_web_user(
 
     is_bypass_eligible = (
         not settings.IS_PROD
-        and not _is_me_route(request)
-        and not _is_media_route(request)
-        and not _is_strict_auth_route(request)
+        and not is_me_route(request.url.path)
+        and not is_media_route(request.url.path)
+        and not is_strict_auth_route(request.url.path)
     )
     if is_bypass_eligible:
         request.state.access_token_payload = None
@@ -182,7 +173,7 @@ async def get_current_user(
     if has_cookies:
         return await get_web_user(request=request, authorization=authorization, db=db)
 
-    if not settings.IS_PROD and not _is_me_route(request) and not _is_media_route(request) and not _is_strict_auth_route(request):
+    if not settings.IS_PROD and not is_me_route(request.url.path) and not is_media_route(request.url.path) and not is_strict_auth_route(request.url.path):
         return await get_web_user(request=request, authorization=authorization, db=db)
     raise HTTPException(status_code=401, detail="No credentials")
 

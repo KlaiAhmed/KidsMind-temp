@@ -138,3 +138,23 @@ async def http_exception_handler(
         extra=extra,
         headers=exc.headers,
     )
+
+
+async def unhandled_exception_handler(
+    request: Request,
+    exc: Exception,
+) -> JSONResponse:
+    logger.exception(
+        "Unhandled server exception",
+        extra={
+            "status_code": 500,
+            "path": request.url.path,
+            "method": request.method,
+        },
+    )
+
+    return _build_error_response(
+        status_code=500,
+        message="Internal Server Error",
+        error_code="INTERNAL_SERVER_ERROR",
+    )

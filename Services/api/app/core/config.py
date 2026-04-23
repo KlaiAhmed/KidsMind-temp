@@ -13,6 +13,31 @@ from typing import Literal, Set
 
 from utils.logger import logger
 
+def _validate_explicit_dev_mode(is_prod: bool, explicit_dev_mode: str, service_name: str) -> None:
+    """Validate that dev mode is intentional.
+
+    Raises:
+        RuntimeError: If IS_PROD is False and EXPLICIT_DEV_MODE is not "true".
+    """
+    if is_prod:
+        return
+
+    explicit = explicit_dev_mode.strip().lower()
+    if explicit != "true":
+        raise RuntimeError(
+            f"Dev mode is active for {service_name} (IS_PROD=False). "
+            f"Set EXPLICIT_DEV_MODE=true to confirm this is intentional. "
+            "Never use in production."
+        )
+
+    logger.critical(
+        f"\n"
+        f"================================================================\n"
+        f" WARNING: DEV MODE IS ACTIVE — IS_PROD=False\n"
+        f" Service: {service_name}\n"
+        f" EXPLICIT_DEV_MODE=true confirmed.\n"
+        f"================================================================"
+    )
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -193,20 +218,29 @@ class Settings(BaseSettings):
         return normalized or None
 
     @model_validator(mode="after")
-    def derive_cookie_secure_from_prod(self):
+    def validate_environment(self) -> "Settings":
+        # Validate explicit dev mode confirmation
+        _validate_explicit_dev_mode(
+            self.IS_PROD,
+            self.EXPLICIT_DEV_MODE,
+            self.SERVICE_NAME
+        )
+
+        # Inject Redis password into the cache URL if not already present
         if self.CACHE_PASSWORD and "@" not in self.CACHE_SERVICE_ENDPOINT:
             self.CACHE_SERVICE_ENDPOINT = f"redis://:{self.CACHE_PASSWORD}@cache:6379"
 
+        # Derive RATE_LIMIT default based on environment
         if not self.RATE_LIMIT:
             self.RATE_LIMIT = "5/minute" if self.IS_PROD else "100/minute"
 
+        # Derive COOKIE_SECURE from IS_PROD if not explicitly set
         if self.COOKIE_SECURE is None:
             self.COOKIE_SECURE = self.IS_PROD
 
+        # Enforce SERVICE_TOKEN in production
         if self.IS_PROD and not self.SERVICE_TOKEN:
             raise ValueError("SERVICE_TOKEN is required in production")
-
-        logger.info(f"Running in {'production' if self.IS_PROD else 'development'} mode")
 
         return self
 

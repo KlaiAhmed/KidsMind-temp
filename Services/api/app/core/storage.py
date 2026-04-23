@@ -12,7 +12,7 @@ from minio import Minio
 # MinIO client instance for object storage operations
 minio_client = Minio(
     settings.STORAGE_SERVICE_ENDPOINT.replace("http://", "").replace("https://", ""),
-    access_key=settings.STORAGE_ROOT_USERNAME,
+    access_key=settings.STORAGE_ROOT_USER,
     secret_key=settings.STORAGE_ROOT_PASSWORD,
     secure=False,
 )

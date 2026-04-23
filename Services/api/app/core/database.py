@@ -28,7 +28,7 @@ def _resolve_database_host_port() -> tuple[str, int]:
 # Format: postgresql://[user]:[password]@[service_name]:[port]/[db_name]
 db_host, db_port = _resolve_database_host_port()
 SQLALCHEMY_DATABASE_URL = (
-    f"postgresql://{settings.DB_USERNAME}:{settings.DB_PASSWORD}@{db_host}:{db_port}/{settings.DB_NAME}"
+    f"postgresql://{settings.DB_USER}:{settings.DB_PASSWORD}@{db_host}:{db_port}/{settings.DB_NAME}"
 )
 
 # Create the SQLAlchemy engine
@@ -77,16 +77,17 @@ def init_db() -> None:
     Creates all tables defined by ORM models that inherit from Base.
     """
     if not settings.IS_PROD:
-        import models.user  # noqa: F401
-        import models.child_profile  # noqa: F401
-        import models.child_rules  # noqa: F401
-        import models.child_allowed_subject  # noqa: F401
-        import models.child_week_schedule  # noqa: F401
-        import models.child_schedule_subject  # noqa: F401
-        import models.avatar_tier_threshold  # noqa: F401
-        import models.avatar  # noqa: F401
-        import models.media_asset  # noqa: F401
-        import models.refresh_token_session  # noqa: F401
+        import models.user
+        import models.child_profile
+        import models.child_rules
+        import models.child_allowed_subject
+        import models.child_week_schedule
+        import models.child_schedule_subject
+        import models.avatar_tier_threshold
+        import models.avatar
+        import models.media_asset
+        import models.refresh_token_session
+        import models.chat_history
 
         Base.metadata.create_all(bind=engine)
 

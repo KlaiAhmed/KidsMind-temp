@@ -16,6 +16,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from core.config import settings
 from utils.csrf import verify_csrf_token
 from utils.logger import logger
+from utils.non_prod_auth_bypass import is_non_prod_security_bypass_enabled
 
 
 class CSRFMiddleware(BaseHTTPMiddleware):
@@ -29,6 +30,9 @@ class CSRFMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: Request, call_next):
+        if is_non_prod_security_bypass_enabled(request.url.path):
+            return await call_next(request)
+
         if request.method in ("GET", "HEAD", "OPTIONS", "TRACE"):
             return await call_next(request)
 
