@@ -2,7 +2,7 @@
 
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi) ![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python) ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql) ![Redis](https://img.shields.io/badge/Redis-7-DC382D?logo=redis)
 
-KidsMind Core API is the single client-facing entry point for all web and mobile traffic. It owns authentication, child profile logic, parental safety controls, and chat orchestration. Inference is delegated to the AI service; transcription to the STT service. Clients never call upstream services directly.
+KidsMind Core API is the single client-facing entry point for all web and mobile traffic. It owns authentication, child profile logic, parental safety controls, and chat orchestration. Inference is delegated to the AI service; transcription to the STT service. Clients never call upstream services directly. By default, only `core-api` is published; AI/STT stay private on the internal Docker network unless localhost debug ports are enabled with `docker-compose.debug.yml`.
 
 ```mermaid
 graph LR
@@ -16,8 +16,8 @@ graph LR
   end
 
   subgraph Upstream Services
-    AI["AI Service<br/>:8001<br/>LangChain LCEL"]
-    STT["STT Service<br/>:8002<br/>Whisper (GPU)"]
+    AI["AI Service<br/>internal :8000<br/>LangChain LCEL"]
+    STT["STT Service<br/>internal :8000<br/>Whisper (GPU)"]
   end
 
   subgraph Data Layer
@@ -66,7 +66,7 @@ graph LR
 1. Copy `.env.example` to `.env` (repo root) and `app/.env.example` to `app/.env`; fill secrets.
 
 2. ```bash
-   docker compose up -d --build database cache file-storage ai-service stt-service core-api
+   docker compose up -d --build
    ```
 3. ```bash
    docker compose up --force-recreate --no-deps bucket-provisioner
@@ -76,6 +76,22 @@ graph LR
    ```
 
 Expected: `{"status":"ok","cache":"ok"}`
+
+Local-only debug ports for AI/STT/DB/MinIO/observability:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.debug.yml up -d
+```
+
+Prod-style upstream mode:
+
+```bash
+COMPOSE_PROFILES=
+AI_SERVICE_URL=https://your-remote-ai.example
+STT_SERVICE_URL=https://your-remote-stt.example
+```
+
+Start `core-api` with the shared dependencies after overriding those values.
 
 ## Request Pipeline
 

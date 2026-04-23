@@ -25,6 +25,8 @@ async def handle_service_errors():
     """
     try:
         yield
+    except HTTPException:
+        raise
     except httpx.RequestError as e:
         logger.error(
             "Network error calling upstream service",

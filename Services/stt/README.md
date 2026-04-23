@@ -4,7 +4,7 @@
 
 - Service Name: stt-service
 - Primary Port: 8000 (Uvicorn inside the container)
-- Docker Network Port: ${STT_PORT}:8000 (host:container from docker-compose)
+- Host Port: not published by default; opt-in localhost binding via `docker-compose.debug.yml` -> `127.0.0.1:${STT_PORT}:8000`
 - Role in ecosystem: speech-to-text microservice used by upstream services (mainly core-api). It fetches audio from a provided URL, detects language, and returns transcription text.
 
 ## 2. Quick Start
@@ -19,9 +19,10 @@
 ### With docker compose
 
 1. Make sure root .env and services/stt/app/.env exist.
-2. Start service:
+2. Keep `COMPOSE_PROFILES=local-upstreams` when running the local STT container.
+3. Start service:
 ```bash
-docker compose build stt-service
+docker compose up stt-service
 ```
 
 GPU requires the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html). For CPU-only, omit `--gpus all` and set `WHISPER_MODE=cpu`.

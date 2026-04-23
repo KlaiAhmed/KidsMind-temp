@@ -49,6 +49,7 @@ import models.avatar_tier_threshold
 import models.avatar
 import models.media_asset
 import models.refresh_token_session 
+import models.chat_history
 import models.user 
 
 
@@ -73,7 +74,7 @@ def get_database_url() -> str:
     db_host = os.getenv("DB_HOST", _default_db_host())
     db_port = os.getenv("DB_PORT", "5432")
     return (
-        f"postgresql://{settings.DB_USERNAME}:{settings.DB_PASSWORD}"
+        f"postgresql://{settings.DB_USER}:{settings.DB_PASSWORD}"
         f"@{db_host}:{db_port}/{settings.DB_NAME}"
     )
 
