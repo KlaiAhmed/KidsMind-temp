@@ -1,75 +1,58 @@
 services:
-  # Core API Service
   core-api:
     build:
       context: ./services/api
     depends_on:
       database:
         condition: service_healthy
+      cache:
+        condition: service_healthy
       file-storage:
         condition: service_healthy
-      ai-service:
-        condition: service_started
-      stt-service:
-        condition: service_started
+      bucket-provisioner:
+        condition: service_completed_successfully
     ports:
-      - "${API_PORT}:8000"
+      - "${API_BIND_HOST:-0.0.0.0}:${API_PORT:-8000}:8000"
     env_file:
       - .env
       - ./services/api/app/.env
     labels:
       logging: "promtail"
-    environment:
-      - PYTHONUNBUFFERED=1
-    volumes:
-      - ./services/api/app:/app:rw
-    command: >
-      uvicorn main:app --host 0.0.0.0 --port 8000 --reload 
-      --reload-dir /app 
-      --reload-exclude '**/.git/**' 
-      --reload-exclude '**/__pycache__/**'
+    networks:
+      - internal
 
-  # AI Service 
   ai-service:
     build:
       context: ./services/ai
-    ports:
-      - "${AI_PORT}:8000"
     env_file:
-      - .env
       - ./services/ai/app/.env
+    environment:
+      IS_PROD: ${IS_PROD:-True}
+      EXPLICIT_DEV_MODE: ${EXPLICIT_DEV_MODE:-false}
+      CACHE_SERVICE_ENDPOINT: redis://cache:6379
+      CACHE_PASSWORD: ${CACHE_PASSWORD}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
     labels:
       logging: "promtail"
-    environment:
-      - PYTHONUNBUFFERED=1
-    volumes:
-      - ./services/ai/app:/app:rw
-    command: >
-      uvicorn main:app --host 0.0.0.0 --port 8000 --reload 
-      --reload-dir /app 
-      --reload-exclude '**/.git/**'
+    networks:
+      - internal
 
-  # STT Service 
+
   stt-service:
     build:
       context: ./services/stt
-    ports:
-      - "${STT_PORT}:8000"
     env_file:
-      - .env
       - ./services/stt/app/.env
-    labels:
-      logging: "promtail"
     environment:
-      - PYTHONUNBUFFERED=1
-      - HF_HOME=/model_cache
-      - TORCH_HOME=/model_cache
-      - XDG_CACHE_HOME=/model_cache
+      IS_PROD: ${IS_PROD:-True}
+      EXPLICIT_DEV_MODE: ${EXPLICIT_DEV_MODE:-false}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      TORCH_HOME: /model_cache
+      XDG_CACHE_HOME: /model_cache
     volumes:
-      - ./services/stt/app:/app:rw
       - stt_cache:/model_cache
-    command: 
-      uvicorn main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app 
+    networks:
+      - internal
     deploy:
       resources:
         reservations:
@@ -77,36 +60,33 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
-              
-  # Database Service
+
   database:
     image: postgres:18.2-alpine
     environment:
-      - POSTGRES_USER=${DB_USER}
-      - POSTGRES_PASSWORD=${DB_PASSWORD}
-      - POSTGRES_DB=${DB_NAME}
-    ports:
-      - "${DB_PORT}:5432"
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
     volumes:
       - db_data:/var/lib/postgresql
+    networks:
+      - internal
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
       interval: 5s
       timeout: 5s
       retries: 5
 
-  # Storage Service 
   file-storage:
     image: minio/minio:RELEASE.2025-09-07T16-13-09Z-cpuv1
-    ports:
-      - "${STORAGE_API_PORT}:9000"
-      - "${STORAGE_CONSOLE_PORT}:9001"
     environment:
       MINIO_ROOT_USER: ${STORAGE_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${STORAGE_ROOT_PASSWORD}
       MINIO_PROMETHEUS_AUTH_TYPE: "public"
     volumes:
       - storage_data:/data
+    networks:
+      - internal
     command: server /data --console-address ":9001"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://127.0.0.1:9000/minio/health/ready"]
@@ -114,14 +94,12 @@ services:
       timeout: 5s
       retries: 5
 
-  # Redis Cache Service
   cache:
     image: redis:8.6.1-alpine
-    container_name: cache-service
-    ports:
-      - "127.0.0.1:6379:6379"
     volumes:
       - cache_data:/data
+    networks:
+      - internal
     command: >
       redis-server
       --requirepass ${CACHE_PASSWORD}
@@ -141,7 +119,6 @@ services:
           memory: 512M
           cpus: "0.5"
 
-  # Bucket Provisioner Service
   bucket-provisioner:
     image: minio/mc:RELEASE.2025-08-13T08-35-41Z-cpuv1
     entrypoint:
@@ -152,91 +129,89 @@ services:
       file-storage:
         condition: service_healthy
     environment:
-      STORAGE_SERVICE_ENDPOINT: ${STORAGE_SERVICE_ENDPOINT}
+      STORAGE_SERVICE_ENDPOINT: http://file-storage:9000
       MINIO_ROOT_USER: ${STORAGE_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${STORAGE_ROOT_PASSWORD}
+    restart: "no"
+    networks:
+      - internal
     volumes:
-      - ./infra/storage/provision.sh:/provision.sh
+      - ./infra/storage/provision.sh:/provision.sh:ro
 
-  # Prometheus Service for Monitoring
   prometheus:
     image: prom/prometheus:v3.9.1
-    ports:
-      - "${PROMETHEUS_PORT}:9090"
+    networks:
+      - internal
     volumes:
       - prometheus_data:/prometheus
-      - ./infra/observability/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
-    
-  # Grafana Service for Visualization
+      - ./infra/observability/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
   grafana:
     image: grafana/grafana:12.3
-    ports:
-      - "${GRAFANA_PORT}:3000"
     environment:
-      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER}
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+    networks:
+      - internal
     volumes:
       - grafana_data:/var/lib/grafana
       - ./infra/observability/logs/grafana/provisioning:/etc/grafana/provisioning:ro
 
-  # Loki Service for Log Aggregation
+  loki-init:
+    image: alpine:3.20
+    user: root
+    command: sh -c "mkdir -p /loki/index /loki/index_cache && chown -R 10001:10001 /loki"
+    networks:
+      - internal
+    volumes:
+      - loki_index:/loki
+    restart: "no"
+
   loki:
     image: grafana/loki:3.6.7
-    user: "0"
-    ports:
-      - "${LOKI_PORT}:3100"
-    environment:
-      - STORAGE_ROOT_USER=${STORAGE_ROOT_USER}
-      - STORAGE_ROOT_PASSWORD=${STORAGE_ROOT_PASSWORD}
+    user: "10001"
+    depends_on:
+      loki-init:
+        condition: service_started
+    networks:
+      - internal
     volumes:
       - ./infra/observability/logs/loki/config.yml:/etc/loki/local-config.yaml:ro
-      - loki_index:/loki/index  # only local index — chunks go to file storage
-    command: -config.file=/etc/loki/local-config.yaml -config.expand-env=true
-    depends_on:
-      file-storage:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3100/ready >/dev/null 2>&1 || curl -fsS http://127.0.0.1:3100/ready >/dev/null 2>&1 || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      - loki_index:/loki/index
 
-  # Promtail Service for Log Shipping
   promtail:
     image: grafana/promtail:3.6.7
+    depends_on:
+      loki:
+        condition: service_started
+    networks:
+      - internal
     volumes:
       - ./infra/observability/logs/promtail/config.yml:/etc/promtail/config.yml:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
     command: -config.file=/etc/promtail/config.yml
-    depends_on:
-      loki:
-        condition: service_started
 
-
-  # Postgres Exporter for Prometheus
   postgres-exporter:
     image: prometheuscommunity/postgres-exporter:v0.19.0
-    environment:
-      DATA_SOURCE_NAME: "postgresql://${DB_USER}:${DB_PASSWORD}@database:5432/${DB_NAME}?sslmode=disable"
     depends_on:
       database:
         condition: service_healthy
-    ports:
-      - "${POSTGRES_EXPORTER_PORT}:9187"
+    environment:
+      DATA_SOURCE_NAME: "postgresql://${DB_USER}:${DB_PASSWORD}@database:5432/${DB_NAME}?sslmode=disable"
+    networks:
+      - internal
 
-  # Redis Exporter for Prometheus
   redis-exporter:
     image: oliver006/redis_exporter:v1.81.0-alpine
     depends_on:
       cache:
         condition: service_healthy
     environment:
-      REDIS_ADDR: "redis://cache:6379"
+      REDIS_ADDR: redis://cache:6379
       REDIS_PASSWORD: ${CACHE_PASSWORD}
-    ports:
-      - "${REDIS_EXPORTER_PORT}:9121"
-
+    networks:
+      - internal
 
 volumes:
   db_data:
@@ -246,3 +221,7 @@ volumes:
   grafana_data:
   prometheus_data:
   loki_index:
+
+networks:
+  internal:
+    driver: bridge

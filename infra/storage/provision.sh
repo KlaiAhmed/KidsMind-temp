@@ -13,5 +13,6 @@ mc alias set "$ALIAS" "$ENDPOINT" "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"
 mc mb "$ALIAS/media-public" --ignore-existing
 mc mb "$ALIAS/media-private" --ignore-existing
 mc mb "$ALIAS/loki-chunks" --ignore-existing
+mc mb "$ALIAS/chat-archive" --ignore-existing
 
 echo "Setup complete. Buckets are ready."
