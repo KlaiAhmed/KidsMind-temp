@@ -2,37 +2,28 @@ from core.config import settings
 from fastapi import HTTPException
 import httpx
 from utils.logger import logger
-from pydantic import BaseModel
 import time
 import asyncio
 
-
 DEV_GUARD_TIMEOUT = httpx.Timeout(
-    connect=2.0,
-    read=4.0,
-    write=4.0,
-    pool=2.0,
+    connect=5.0,
+    read=10.0,
+    write=5.0,
+    pool=3.0,
 )
 
-class ModerationResponse(BaseModel):
-    moderation_classes: dict[str, float]
-
-# Custom thresholds for Dev Guard API (Development mode only)
 DEV_KIDS_THRESHOLDS = {
     "violent": 0.5,
     "insulting": 0.4,
     "discriminatory": 0.4,
     "toxic": 0.5,
     "sexual": 0.25,
-    "self-harm": 0.4
+    "self-harm": 0.4,
 }
 
-# Used only in Development mode for testing, using free Tier of Sightengine moderation API
-async def dev_check_moderation(message: str, context: str, client: httpx.AsyncClient ):
-    """ Checks if the content is appropriate for kids using Sightengine moderation API(free Tier)."""
+async def dev_check_moderation(message: str, context: str, client: httpx.AsyncClient):
     try:
         timer = time.perf_counter()
-
         text = f"APP CONTEXT: {context}\nUSER Input: {message}"
 
         payload = {
@@ -44,19 +35,17 @@ async def dev_check_moderation(message: str, context: str, client: httpx.AsyncCl
             "api_secret": settings.DEV_GUARD_API_KEY,
         }
 
-        # In development mode, use the dev guard API for testing
         response = await asyncio.wait_for(
             client.post(
                 settings.DEV_GUARD_API_URL,
                 data=payload,
                 timeout=DEV_GUARD_TIMEOUT,
             ),
-            timeout=6.0,
+            timeout=15.0,
         )
         response.raise_for_status()
 
         data = response.json()
-
         scores = data.get("moderation_classes", {})
         scores.pop("available", None)
 
@@ -85,8 +74,6 @@ async def dev_check_moderation(message: str, context: str, client: httpx.AsyncCl
     except HTTPException:
         raise
     except (httpx.TimeoutException, httpx.RequestError, TimeoutError):
-        # Dev moderation uses a best-effort free-tier external provider.
-        # If unavailable, keep chat available in development and log diagnostics.
         logger.warning(
             "Dev moderation provider unavailable; skipping moderation in development",
             extra={"provider_url": settings.DEV_GUARD_API_URL},
