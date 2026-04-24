@@ -1,5 +1,5 @@
-import { ParentalControlsScreen } from '@/src/screens/parent';
+import ProfileScreen from '@/src/screens/ProfileScreen';
 
 export default function ProfileTabScreen() {
-  return <ParentalControlsScreen />;
+  return <ProfileScreen />;
 }

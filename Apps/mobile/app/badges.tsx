@@ -1,6 +1,5 @@
-// Apps/mobile/app/badges.tsx
-import BadgeGallery from '@/screens/BadgeGallery';
+import BadgesScreen from '@/src/screens/BadgesScreen';
 
 export default function BadgeGalleryScreen() {
-  return <BadgeGallery />;
+  return <BadgesScreen />;
 }

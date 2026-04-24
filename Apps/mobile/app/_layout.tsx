@@ -53,6 +53,7 @@ function RootNavigator() {
       <Stack.Screen name="(auth)" />
       <Stack.Screen name="child-home" />
       <Stack.Screen name="badges" />
+      <Stack.Screen name="settings" />
       <Stack.Screen name="modal" options={{ presentation: 'modal', headerShown: true, title: 'Modal' }} />
       <Stack.Screen name="splash" />
       <Stack.Screen name="onboarding" />
