@@ -46,6 +46,7 @@ import type {
   Subject,
   Topic,
 } from '@/types/child';
+import { AppState } from 'react-native';
 
 // ─── Types ────────────────────────────────────────────────────────
 
@@ -864,6 +865,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }));
     }
   }, [applyResolvedChildProfiles]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      return;
+    }
+
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        void refreshChildData();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [isAuthenticated, refreshChildData]);
 
   const deleteChildProfile = useCallback(async (childId: string) => {
     try {

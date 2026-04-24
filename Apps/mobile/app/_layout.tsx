@@ -22,6 +22,7 @@ import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { Colors } from '@/constants/theme';
 import { queryClient } from '@/services/queryClient';
+import { ToastHost } from '@/services/toastClient';
 
 // Prevent the splash screen from auto-hiding while fonts load
 SplashScreen.preventAutoHideAsync();
@@ -50,6 +51,7 @@ function RootNavigator() {
   return (
     <Stack initialRouteName="(tabs)" screenOptions={{ headerShown: false }}>
       <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="(child-tabs)" />
       <Stack.Screen name="(auth)" />
       <Stack.Screen name="child-home" />
       <Stack.Screen name="badges" />
@@ -93,6 +95,7 @@ export default function RootLayout() {
         <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
           <RootNavigator />
           <StatusBar style="auto" />
+          <ToastHost />
         </ThemeProvider>
       </AuthProvider>
     </QueryClientProvider>
