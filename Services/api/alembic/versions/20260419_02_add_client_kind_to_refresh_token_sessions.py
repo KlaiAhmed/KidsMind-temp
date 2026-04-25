@@ -33,6 +33,15 @@ def _index_names(table_name: str) -> set[str]:
     return {index["name"] for index in inspector.get_indexes(table_name)}
 
 
+def _revocation_column_name(table_name: str) -> str | None:
+    column_names = _column_names(table_name)
+    if "revoked" in column_names:
+        return "revoked"
+    if "revoked_at" in column_names:
+        return "revoked_at"
+    return None
+
+
 def upgrade() -> None:
     inspector = inspect(op.get_bind())
     if TABLE_NAME not in inspector.get_table_names():
@@ -52,12 +61,16 @@ def upgrade() -> None:
         # Remove server default after existing rows are safely backfilled.
         op.alter_column(TABLE_NAME, "client_kind", server_default=None)
 
+    revocation_column = _revocation_column_name(TABLE_NAME)
+    if revocation_column is None:
+        return
+
     index_names = _index_names(TABLE_NAME)
     if INDEX_NAME not in index_names:
         op.create_index(
             INDEX_NAME,
             TABLE_NAME,
-            ["user_id", "client_kind", "revoked"],
+            ["user_id", "client_kind", revocation_column],
             unique=False,
         )
 

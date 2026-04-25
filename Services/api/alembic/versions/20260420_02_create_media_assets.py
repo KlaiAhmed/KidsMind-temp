@@ -11,6 +11,7 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy import inspect
+from sqlalchemy.dialects import postgresql
 
 
 # revision identifiers, used by Alembic.
@@ -30,15 +31,49 @@ def _table_exists(table_name: str) -> bool:
     return table_name in inspector.get_table_names()
 
 
+def _user_id_column_type() -> sa.TypeEngine:
+    inspector = inspect(op.get_bind())
+    if "users" not in inspector.get_table_names():
+        return sa.Integer()
+
+    for column in inspector.get_columns("users"):
+        if column["name"] == "id":
+            if isinstance(column["type"], postgresql.UUID):
+                return postgresql.UUID(as_uuid=True)
+            break
+
+    return sa.Integer()
+
+
 def upgrade() -> None:
     if _table_exists(TABLE_NAME):
         return
 
-    media_type = sa.Enum("avatar", "badge", "audio_track", "audio_effect", name=MEDIA_TYPE_ENUM)
-    avatar_tier = sa.Enum("starter", "common", "rare", "epic", "legendary", name=AVATAR_TIER_ENUM)
+    # Deviation from the approved plan: keep explicit enum creation below, but
+    # disable implicit create_table type creation to avoid duplicate CREATE TYPE
+    # failures in the pre-existing migration chain during clean-db verification.
+    media_type = postgresql.ENUM(
+        "avatar",
+        "badge",
+        "audio_track",
+        "audio_effect",
+        name=MEDIA_TYPE_ENUM,
+        create_type=False,
+    )
+    avatar_tier = postgresql.ENUM(
+        "starter",
+        "common",
+        "rare",
+        "epic",
+        "legendary",
+        name=AVATAR_TIER_ENUM,
+        create_type=False,
+    )
 
     media_type.create(op.get_bind(), checkfirst=True)
     avatar_tier.create(op.get_bind(), checkfirst=True)
+
+    user_id_type = _user_id_column_type()
 
     op.create_table(
         TABLE_NAME,
@@ -59,8 +94,8 @@ def upgrade() -> None:
         sa.Column("avatar_tier", avatar_tier, nullable=True),
         sa.Column("badge_group", sa.String(length=100), nullable=True),
         sa.Column("criteria_description", sa.Text(), nullable=True),
-        sa.Column("created_by_user_id", sa.Integer(), nullable=True),
-        sa.Column("updated_by_user_id", sa.Integer(), nullable=True),
+        sa.Column("created_by_user_id", user_id_type, nullable=True),
+        sa.Column("updated_by_user_id", user_id_type, nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.ForeignKeyConstraint(["created_by_user_id"], ["users.id"], ondelete="SET NULL"),

@@ -14,10 +14,10 @@ from fastapi import HTTPException
 from sqlalchemy import delete, insert
 from sqlalchemy.orm import Session
 
+from models.access_window import AccessWindow
 from models.child_allowed_subject import ChildAllowedSubject
 from models.child_profile import ChildProfile
 from models.child_rules import ChildRules
-from models.child_week_schedule import ChildWeekSchedule
 from models.user import User
 from schemas.safety_and_rules_schema import SafetyAndRulesPatchRequest, SafetyAndRulesPatchResponse
 from utils.manage_pwd import hash_password, verify_password
@@ -68,7 +68,7 @@ class SafetyAndRulesService:
 
     def _replace_week_schedule(self, child_profile_id: UUID, weekdays: list[str]) -> None:
         self.db.execute(
-            delete(ChildWeekSchedule).where(ChildWeekSchedule.child_profile_id == child_profile_id)
+            delete(AccessWindow).where(AccessWindow.child_profile_id == child_profile_id)
         )
         self.db.flush()
         for day_name in weekdays:
@@ -76,7 +76,7 @@ class SafetyAndRulesService:
             if dow is None:
                 continue
             self.db.add(
-                ChildWeekSchedule(
+                AccessWindow(
                     child_profile_id=child_profile_id,
                     day_of_week=dow,
                     access_window_start=dt_time(8, 0),

@@ -93,4 +93,4 @@ class SafetyAndRulesVerifyPinResponse(BaseModel):
 class SafetyAndRulesPatchResponse(BaseModel):
     message: str
     child_id: UUID | None = None
-    parent_id: int
+    parent_id: UUID

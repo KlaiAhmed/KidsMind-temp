@@ -83,7 +83,7 @@ class MediaService:
     def _is_locked_avatar(avatar: Avatar) -> bool:
         return int(avatar.xp_threshold or 0) > 0
 
-    def create_media_asset(self, *, file: UploadFile, payload: AvatarUploadFormData, actor_user_id: int) -> Avatar:
+    def create_media_asset(self, *, file: UploadFile, payload: AvatarUploadFormData, actor_user_id: UUID) -> Avatar:
         del actor_user_id
 
         self._get_avatar_tier_or_404(payload.tier_id)
@@ -141,7 +141,7 @@ class MediaService:
         *,
         media_id: UUID,
         payload: AvatarUpdateRequest,
-        actor_user_id: int,
+        actor_user_id: UUID,
     ) -> Avatar:
         del actor_user_id
 
@@ -282,6 +282,53 @@ class MediaService:
             raise HTTPException(status_code=500, detail="Failed to update avatar tiers")
 
         return self.db.query(AvatarTier).order_by(AvatarTier.sort_order.asc()).all()
+
+    def build_avatar_catalog(self, *, child_id: UUID | None = None) -> dict[str, Any]:
+        avatars = (
+            self.db.query(Avatar)
+            .filter(Avatar.is_active.is_(True))
+            .order_by(Avatar.sort_order.asc(), Avatar.id.asc())
+            .all()
+        )
+
+        child_xp = 0
+        if child_id is not None:
+            child_profile = self.db.query(ChildProfile).filter(ChildProfile.id == child_id).first()
+            if child_profile:
+                child_xp = int(child_profile.xp or 0)
+
+        items = []
+        for avatar in avatars:
+            is_locked = int(avatar.xp_threshold or 0) > child_xp
+            url = None
+            if not is_locked:
+                try:
+                    url = minio_client.presigned_get_object(
+                        MEDIA_PUBLIC_BUCKET,
+                        avatar.file_path,
+                        expires=timedelta(seconds=SIGNED_URL_EXPIRY_SECONDS),
+                    )
+                except S3Error:
+                    logger.warning(
+                        "Failed to generate signed URL for avatar catalog",
+                        extra={"avatar_id": str(avatar.id)},
+                    )
+
+            items.append({
+                "id": avatar.id,
+                "tier_id": avatar.tier_id,
+                "name": avatar.name,
+                "description": avatar.description,
+                "file_path": avatar.file_path,
+                "xp_threshold": int(avatar.xp_threshold or 0),
+                "is_active": avatar.is_active,
+                "sort_order": avatar.sort_order,
+                "is_locked": is_locked,
+                "url": url,
+                "tier": avatar.tier,
+            })
+
+        return {"items": items, "child_xp": child_xp}
 
     async def get_cached_base_avatars(self) -> list[dict[str, Any]]:
         if not self.redis:

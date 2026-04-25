@@ -12,14 +12,25 @@ from fastapi import APIRouter, Depends, File, Form, Query, Request, Response, Up
 from redis.asyncio import Redis
 from sqlalchemy.orm import Session
 
-from controllers.media import download_media_controller, upload_media_controller
+from controllers.media import download_media_controller, upload_media_controller, avatar_catalog_controller
 from dependencies.auth import get_current_admin_or_super_admin, get_current_user
 from dependencies.infrastructure import get_db, get_redis
 from models.user import User
-from schemas.media_schema import AvatarDownloadResponse, AvatarResponse, AvatarUploadFormData
+from schemas.media_schema import AvatarCatalogResponse, AvatarDownloadResponse, AvatarResponse, AvatarUploadFormData
 
 
 router = APIRouter()
+
+
+@router.get("/avatars", response_model=AvatarCatalogResponse)
+async def avatar_catalog(
+    request: Request,
+    response: Response,
+    child_id: UUID | None = Query(default=None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return await avatar_catalog_controller(child_id=child_id, db=db)
 
 
 @router.post("/upload", response_model=AvatarResponse, status_code=201)

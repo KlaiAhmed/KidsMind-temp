@@ -170,5 +170,26 @@ class AvatarDownloadResponse(BaseModel):
     expires_in_seconds: int
 
 
+class AvatarCatalogItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    tier_id: UUID
+    name: str
+    description: str | None
+    file_path: str
+    xp_threshold: int
+    is_active: bool
+    sort_order: int
+    is_locked: bool = False
+    url: str | None = None
+    tier: AvatarTierResponse | None = None
+
+
+class AvatarCatalogResponse(BaseModel):
+    items: list[AvatarCatalogItem]
+    child_xp: int = 0
+
+
 class AvatarListResponse(BaseModel):
     items: list[AvatarResponse]

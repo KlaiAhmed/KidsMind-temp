@@ -43,14 +43,17 @@ from core.database import Base
 import models.child_profile
 import models.child_rules
 import models.child_allowed_subject
-import models.child_week_schedule
-import models.child_schedule_subject
+import models.access_window
+import models.access_window_subject
 import models.avatar_tier_threshold
 import models.avatar
 import models.media_asset
 import models.refresh_token_session 
 import models.chat_history
-import models.user 
+import models.chat_session
+import models.badge
+import models.notification_prefs
+import models.user
 
 
 config = context.config

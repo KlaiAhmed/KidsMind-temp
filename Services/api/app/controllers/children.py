@@ -91,11 +91,11 @@ async def update_child_rules_controller(
     payload: ChildRulesUpdate,
     current_user: User,
     db: Session,
-) -> ChildRulesRead:
+) -> ChildProfileRead:
     return await guarded_controller_call(
         operation="updating child rules",
         context={"parent_id": current_user.id, "child_id": child_id},
-        func=lambda: ChildProfileService(db).update_child_rules(child_id, current_user, payload),
+        func=lambda: ChildProfileService(db).update_child_rules_full(child_id, current_user, payload),
     )
 
 

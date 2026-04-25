@@ -238,3 +238,20 @@ async def list_base_avatars_controller(*, db: Session, redis) -> list[dict]:
     except Exception:
         logger.exception("Unexpected error listing base avatars")
         raise HTTPException(status_code=500, detail="Internal Server Error")
+
+
+async def avatar_catalog_controller(*, child_id: UUID | None, db: Session) -> dict:
+    try:
+        media_service = MediaService(db=db)
+        return media_service.build_avatar_catalog(child_id=child_id)
+    except HTTPException:
+        raise
+    except (S3Error, RedisError, SQLAlchemyError, ValueError) as exc:
+        _raise_mapped_media_error(
+            exc=exc,
+            operation="avatar_catalog",
+            context={"child_id": str(child_id) if child_id else None},
+        )
+    except Exception:
+        logger.exception("Unexpected error building avatar catalog")
+        raise HTTPException(status_code=500, detail="Internal Server Error")

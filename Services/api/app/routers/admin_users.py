@@ -62,7 +62,7 @@ async def get_all_users_endpoint(
 
 @router.get("/{user_id}", response_model=UserFullResponse)
 async def get_user_by_id_endpoint(
-    user_id: int,
+    user_id: UUID,
     request: Request,
     response: Response,
     db: Session = Depends(get_db),
@@ -81,7 +81,7 @@ async def get_user_by_id_endpoint(
 
 @router.get("/{parent_id}/children", response_model=list[ChildProfileRead])
 async def get_children_by_parent_id_endpoint(
-    parent_id: int,
+    parent_id: UUID,
     request: Request,
     response: Response,
     db: Session = Depends(get_db),
@@ -103,7 +103,7 @@ async def get_children_by_parent_id_endpoint(
 
 @router.delete("/{user_id}/hard", response_model=DeleteAccountResponse)
 async def hard_delete_user_by_id_endpoint(
-    user_id: int,
+    user_id: UUID,
     request: Request,
     response: Response,
     db: Session = Depends(get_db),
@@ -125,7 +125,7 @@ async def hard_delete_user_by_id_endpoint(
 
 @router.delete("/{parent_id}/children/{child_id}/hard", response_model=DeleteChildResponse)
 async def hard_delete_child_by_id_endpoint(
-    parent_id: int,
+    parent_id: UUID,
     child_id: UUID,
     request: Request,
     response: Response,
@@ -152,7 +152,7 @@ async def hard_delete_child_by_id_endpoint(
 
 @router.patch("/{user_id}", response_model=UserFullResponse)
 async def patch_user_by_id_endpoint(
-    user_id: int,
+    user_id: UUID,
     request: Request,
     response: Response,
     payload: AdminUserUpdate = Body(...),
@@ -185,7 +185,7 @@ async def patch_user_by_id_endpoint(
 
 @router.patch("/{parent_id}/children/{child_id}", response_model=ChildProfileRead)
 async def patch_child_by_id_endpoint(
-    parent_id: int,
+    parent_id: UUID,
     child_id: UUID,
     request: Request,
     response: Response,
