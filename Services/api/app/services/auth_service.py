@@ -433,13 +433,21 @@ def revoke_refresh_family(db: Session, user_id: UUID, family_id: str) -> None:
 # ---------------------------------------------------------------------------
 
 def get_cookie_config() -> dict:
-    """Return runtime cookie configuration for auth cookies."""
-    return {
+    """Return runtime cookie configuration for auth cookies.
+
+    In production the ``domain`` attribute is set to ``COOKIE_DOMAIN`` so the
+    cookie is scoped to the real hostname.  In non-production environments the
+    ``domain`` key is omitted entirely so that browsers (and Postman) accept the
+    cookie on ``localhost`` / ``127.0.0.1``.
+    """
+    cfg: dict = {
         "httponly": True,
-        "secure": settings.COOKIE_SECURE or settings.IS_PROD,
+        "secure": bool(settings.COOKIE_SECURE),
         "samesite": settings.COOKIE_SAMESITE,
-        "domain": settings.COOKIE_DOMAIN,
     }
+    if settings.IS_PROD and settings.COOKIE_DOMAIN:
+        cfg["domain"] = settings.COOKIE_DOMAIN
+    return cfg
 
 
 def hash_token(token: str) -> str:
@@ -488,21 +496,23 @@ def set_auth_cookies(
 
 
 def set_csrf_cookie(response: Response, csrf_token: str) -> None:
+    cookie_config = get_cookie_config()
     response.set_cookie(
         key="csrf_token",
         value=csrf_token,
         max_age=settings.CSRF_TOKEN_EXPIRE_SECONDS,
         path="/api",
         httponly=False,
-        secure=settings.COOKIE_SECURE or settings.IS_PROD,
-        samesite=settings.COOKIE_SAMESITE,
-        domain=settings.COOKIE_DOMAIN,
+        secure=cookie_config["secure"],
+        samesite=cookie_config["samesite"],
+        **({"domain": cookie_config["domain"]} if "domain" in cookie_config else {}),
     )
 
 
 def clear_auth_cookies(response: Response) -> None:
     """Expire auth cookies for browser logout."""
     cookie_config = get_cookie_config()
+    domain_kwarg = {"domain": cookie_config["domain"]} if "domain" in cookie_config else {}
     response.set_cookie(key="access_token", value="", max_age=0, path="/api", **cookie_config)
     response.set_cookie(
         key="refresh_token",
@@ -517,9 +527,9 @@ def clear_auth_cookies(response: Response) -> None:
         max_age=0,
         path="/api",
         httponly=False,
-        secure=settings.COOKIE_SECURE or settings.IS_PROD,
-        samesite=settings.COOKIE_SAMESITE,
-        domain=settings.COOKIE_DOMAIN,
+        secure=cookie_config["secure"],
+        samesite=cookie_config["samesite"],
+        **domain_kwarg,
     )
 
 

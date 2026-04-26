@@ -13,14 +13,14 @@ from dependencies.auth import get_web_user
 from dependencies.infrastructure import get_db
 from dependencies.request_security import verify_csrf_dep
 from models.user import User
-from schemas.auth_schema import MessageResponse, UserLogin, UserRegister, WebAuthResponse
+from schemas.auth_schema import UserLogin, UserRegister
 from services.web_auth_service import WebAuthService
 from utils.request_timing import timed_handler
 
 router = APIRouter()
 
 
-@router.post("/register", response_model=WebAuthResponse, status_code=201)
+@router.post("/register", status_code=201)
 @timed_handler("web_auth_register")
 async def register(
     request: Request,
@@ -33,7 +33,7 @@ async def register(
     return await service.register(payload, device_info=x_device_info)
 
 
-@router.post("/login", response_model=WebAuthResponse)
+@router.post("/login")
 @timed_handler("web_auth_login")
 async def login(
     request: Request,
@@ -46,7 +46,7 @@ async def login(
     return await service.login(request, payload, device_info=x_device_info)
 
 
-@router.post("/refresh", response_model=WebAuthResponse)
+@router.post("/refresh")
 @timed_handler("web_auth_refresh")
 async def refresh(
     request: Request,
@@ -58,7 +58,7 @@ async def refresh(
     return await service.refresh(request)
 
 
-@router.post("/logout", response_model=MessageResponse)
+@router.post("/logout")
 @timed_handler("web_auth_logout")
 async def logout(
     request: Request,
