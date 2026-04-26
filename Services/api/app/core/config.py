@@ -9,7 +9,7 @@ Domain: Configuration
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import Literal, Set
+from typing import Literal, Optional, Set
 
 from utils.logger import logger
 
@@ -74,9 +74,29 @@ class Settings(BaseSettings):
     # Service URLs
     STT_SERVICE_URL: str = "http://stt-service:8000"
     STORAGE_SERVICE_ENDPOINT: str = "http://file-storage:9000"
-    AI_SERVICE_URL: str = "http://ai-service:8000"
     DB_SERVICE_ENDPOINT: str = "http://database:5432"
     CACHE_SERVICE_ENDPOINT: str = "redis://cache:6379"
+
+    # AI Model
+    MODEL_NAME: str
+    API_KEY: str
+    BASE_URL: str
+
+    # Production moderation (OpenAI)
+    GUARD_API_KEY: Optional[str] = None
+    GUARD_API_URL: Optional[str] = None
+    GUARD_MODEL_NAME: Optional[str] = None
+
+    # Dev moderation (Sightengine)
+    DEV_GUARD_API_KEY: Optional[str] = None
+    DEV_GUARD_API_URL: Optional[str] = None
+    DEV_API_USER: Optional[str] = None
+
+    # AI history settings
+    MAX_HISTORY_MESSAGES: int = 40
+    MAX_LOADED_HISTORY_MESSAGES: int = 10
+    MAX_HISTORY_TOKENS: int = 1500
+    HISTORY_TTL: int = Field(default=3600, alias="HISTORY_TTL_SECONDS")
 
     # File Upload Configuration
     MAX_SIZE: int = Field(default=10 * 1024 * 1024)
@@ -241,6 +261,16 @@ class Settings(BaseSettings):
         # Enforce SERVICE_TOKEN in production
         if self.IS_PROD and not self.SERVICE_TOKEN:
             raise ValueError("SERVICE_TOKEN is required in production")
+
+        if self.IS_PROD:
+            if not all([self.GUARD_API_KEY, self.GUARD_API_URL, self.GUARD_MODEL_NAME]):
+                raise ValueError("IS_PROD=True requires GUARD_API_KEY, GUARD_API_URL, and GUARD_MODEL_NAME")
+        else:
+            if not all([self.DEV_GUARD_API_KEY, self.DEV_GUARD_API_URL, self.DEV_API_USER]):
+                import logging as _logging
+                _logging.getLogger(__name__).warning(
+                    "DEV_GUARD credentials not fully configured; dev moderation may fail"
+                )
 
         return self
 
