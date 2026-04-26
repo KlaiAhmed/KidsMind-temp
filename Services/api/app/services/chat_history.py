@@ -9,17 +9,15 @@ Domain: Chat
 
 import io
 import json
-import time
 from datetime import datetime, timedelta, timezone
-from functools import partial
 from uuid import UUID
 
-import httpx
-from anyio import from_thread
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import func, inspect
 from sqlalchemy.orm import Session
 
+from services.ai_service import ai_service
+from services.history import history_service
 from core.config import settings
 from core.storage import minio_client
 from models.chat_history import ChatHistory
@@ -29,71 +27,36 @@ from utils.logger import logger
 
 
 class ChatHistoryService:
-    async def _cache_get_conversation_history(
-        self,
-        user_id: str,
-        child_id: str,
-        session_id: str,
-        client: httpx.AsyncClient,
-        timeout: int = 30,
-    ) -> dict:
-        url = f"{settings.AI_SERVICE_URL}/v1/ai/history/{user_id}/{child_id}/{session_id}"
-
-        logger.info(
-            "Fetching conversation history",
-            extra={"user_id": user_id, "child_id": child_id, "session_id": session_id},
-        )
-
-        start_time = time.perf_counter()
-        res = await client.get(url, timeout=timeout)
-        elapsed = time.perf_counter() - start_time
-
-        res.raise_for_status()
-
-        logger.info(
-            "Conversation history retrieved",
-            extra={
-                "user_id": user_id,
-                "child_id": child_id,
-                "session_id": session_id,
-                "duration_seconds": round(elapsed, 3),
-            },
-        )
-
-        return res.json()
-
     async def _cache_clear_conversation_history(
         self,
         user_id: str,
         child_id: str,
         session_id: str,
-        client: httpx.AsyncClient,
-        timeout: int = 30,
-    ) -> dict:
-        url = f"{settings.AI_SERVICE_URL}/v1/ai/history/{user_id}/{child_id}/{session_id}"
-
+    ) -> None:
         logger.info(
             "Clearing conversation history",
             extra={"user_id": user_id, "child_id": child_id, "session_id": session_id},
         )
 
-        start_time = time.perf_counter()
-        res = await client.delete(url, timeout=timeout)
-        elapsed = time.perf_counter() - start_time
+        try:
+            session_key = ai_service.build_session_key(user_id, child_id, session_id)
+            history = history_service.get_history(session_key)
+            history.clear()
 
-        res.raise_for_status()
-
-        logger.info(
-            "Conversation history cleared",
-            extra={
-                "user_id": user_id,
-                "child_id": child_id,
-                "session_id": session_id,
-                "duration_seconds": round(elapsed, 3),
-            },
-        )
-
-        return res.json()
+            logger.info(
+                "Conversation history cleared",
+                extra={
+                    "user_id": user_id,
+                    "child_id": child_id,
+                    "session_id": session_id,
+                },
+            )
+        except Exception:
+            logger.exception(
+                "Failed to clear conversation history",
+                extra={"user_id": user_id, "child_id": child_id, "session_id": session_id},
+            )
+            raise
 
     def _db_save_turn_to_db(
         self,
@@ -210,14 +173,12 @@ class ChatHistoryService:
             )
             return False
 
-    def _db_delete_session_from_db(
+    def _db_delete_session_rows(
         self,
         db: Session,
         child_id: str,
         session_id: UUID,
-        user_id: str,
-        client: httpx.AsyncClient,
-    ) -> None:
+    ) -> int:
         logger.info(
             "Deleting persisted chat session from database",
             extra={"child_id": child_id, "session_id": str(session_id)},
@@ -230,17 +191,6 @@ class ChatHistoryService:
                 .delete(synchronize_session=False)
             )
             db.flush()
-
-            from_thread.run(
-                partial(
-                    self._cache_clear_conversation_history,
-                    user_id=user_id,
-                    child_id=child_id,
-                    session_id=str(session_id),
-                    client=client,
-                )
-            )
-
             db.commit()
         except Exception:
             db.rollback()
@@ -258,12 +208,12 @@ class ChatHistoryService:
                 "deleted_rows": deleted_rows,
             },
         )
+        return deleted_rows
 
     def _db_archive_and_delete_expired_sessions(
         self,
         db: Session,
         user_id: str,
-        client: httpx.AsyncClient,
     ) -> dict:
         cutoff = datetime.now(timezone.utc) - timedelta(days=90)
         archived_count = 0
@@ -292,21 +242,19 @@ class ChatHistoryService:
                 failed_count += 1
                 continue
 
-            try:
-                self._db_delete_session_from_db(
-                    db=db,
-                    child_id=str(child_id),
-                    session_id=session_id,
-                    user_id=user_id,
-                    client=client,
-                )
-                archived_count += 1
-            except Exception:
-                failed_count += 1
-                logger.exception(
-                    "Failed deleting archived chat session",
-                    extra={"child_id": str(child_id), "session_id": str(session_id)},
-                )
+        try:
+            self._db_delete_session_rows(
+                db=db,
+                child_id=str(child_id),
+                session_id=session_id,
+            )
+            archived_count += 1
+        except Exception:
+            failed_count += 1
+            logger.exception(
+                "Failed deleting archived chat session",
+                extra={"child_id": str(child_id), "session_id": str(session_id)},
+            )
 
         result = {"archived": archived_count, "failed": failed_count}
         logger.info("Expired chat session archive job completed", extra=result)
@@ -346,28 +294,28 @@ class ChatHistoryService:
         child_id: str,
         session_id: UUID,
         user_id: str,
-        client: httpx.AsyncClient,
     ) -> None:
         await run_in_threadpool(
-            self._db_delete_session_from_db,
+            self._db_delete_session_rows,
             db=db,
             child_id=child_id,
             session_id=session_id,
+        )
+        await self._cache_clear_conversation_history(
             user_id=user_id,
-            client=client,
+            child_id=child_id,
+            session_id=str(session_id),
         )
 
     async def archive_and_delete_expired_sessions(
         self,
         db: Session,
         user_id: str,
-        client: httpx.AsyncClient,
     ) -> dict:
         return await run_in_threadpool(
             self._db_archive_and_delete_expired_sessions,
             db=db,
             user_id=user_id,
-            client=client,
         )
 
 

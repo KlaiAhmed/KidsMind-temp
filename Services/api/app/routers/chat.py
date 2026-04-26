@@ -26,7 +26,7 @@ from controllers.chat import (
 )
 from core.config import settings
 from dependencies.auth import get_current_user
-from dependencies.infrastructure import get_client, get_db, get_redis
+from dependencies.infrastructure import get_client, get_db, get_external_client, get_redis
 from dependencies.media import validate_audio_file
 from models.user import User
 from schemas.chat_schema import ChatSessionClose, ChatSessionCreate, ChatSessionRead, TextChatRequest
@@ -76,6 +76,7 @@ async def voice_chat(
     stream: bool = Form(False),
     store_audio: bool = Form(True),
     client: httpx.AsyncClient = Depends(get_client),
+    external_client: httpx.AsyncClient = Depends(get_external_client),
     db: Session = Depends(get_db),
     redis: Redis = Depends(get_redis),
 ):
@@ -91,6 +92,7 @@ async def voice_chat(
         stream=stream,
         store_audio=store_audio,
         client=client,
+        external_client=external_client,
         db=db,
         redis=redis,
     )
@@ -106,6 +108,7 @@ async def text_chat(
     body: TextChatRequest,
     current_user: User = Depends(get_current_user),
     client: httpx.AsyncClient = Depends(get_client),
+    external_client: httpx.AsyncClient = Depends(get_external_client),
     db: Session = Depends(get_db),
     redis: Redis = Depends(get_redis),
 ):
@@ -120,6 +123,7 @@ async def text_chat(
         context=body.context,
         stream=body.stream,
         client=client,
+        external_client=external_client,
         db=db,
         redis=redis,
     )
@@ -159,7 +163,6 @@ async def clear_history(
     session_id: UUID,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-    client: httpx.AsyncClient = Depends(get_client),
 ):
     if current_user.id != user_id:
         raise HTTPException(status_code=403, detail="User mismatch")
@@ -169,5 +172,4 @@ async def clear_history(
         child_id=child_id,
         session_id=session_id,
         user_id=user_id,
-        client=client,
     )
