@@ -450,7 +450,7 @@ def hash_token(token: str) -> str:
 def build_user_data(user: User) -> dict:
     """Build a minimal serialized user payload for auth responses."""
     return {
-        "id": user.id,
+        "id": str(user.id),
         "email": user.email,
         "pin_configured": user.pin_configured,
     }
