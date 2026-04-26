@@ -21,23 +21,6 @@ services:
     networks:
       - internal
 
-  ai-service:
-    build:
-      context: ./services/ai
-    env_file:
-      - ./services/ai/app/.env
-    environment:
-      IS_PROD: ${IS_PROD:-True}
-      EXPLICIT_DEV_MODE: ${EXPLICIT_DEV_MODE:-false}
-      CACHE_SERVICE_ENDPOINT: redis://cache:6379
-      CACHE_PASSWORD: ${CACHE_PASSWORD}
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
-    labels:
-      logging: "promtail"
-    networks:
-      - internal
-
-
   stt-service:
     build:
       context: ./services/stt

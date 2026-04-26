@@ -1,8 +1,4 @@
 services:
-  ai-service:
-    ports:
-      - "127.0.0.1:${AI_PORT:-8001}:8000"
-
   stt-service:
     ports:
       - "127.0.0.1:${STT_PORT:-8002}:8000"
