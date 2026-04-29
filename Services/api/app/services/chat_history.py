@@ -1,10 +1,22 @@
-"""
-Chat History Service
+"""Chat History Service
 
-Responsibility: Handles conversation history persistence in Postgres,
-archival to MinIO, and short-term cache management via the AI service.
+Responsibility: Handles conversation HISTORY persistence in Postgres,
+archival to MinIO, and MEMORY cache clearing via the session_memory service.
 Layer: Service
 Domain: Chat
+
+ARCHITECTURAL NOTE: History vs Memory
+---------------------------------------
+- **HISTORY** = Persisted conversation data in Postgres (ChatHistory model).
+  This service manages HISTORY - saving turns, archiving old sessions, etc.
+  HISTORY is inactive; it's stored for retrieval and analytics.
+
+- **MEMORY** = Active conversation context in Redis (managed by session_memory_service).
+  MEMORY is what the LLM "sees" during conversations.
+  MEMORY has a TTL and is cleared when sessions end.
+
+This service clears MEMORY cache when a session is deleted, but does NOT
+manage MEMORY loading - that's handled by build_chain.py using session_memory_service.
 """
 
 import io
@@ -17,7 +29,7 @@ from sqlalchemy import func, inspect
 from sqlalchemy.orm import Session
 
 from services.ai_service import ai_service
-from services.history import history_service
+from services.session_memory import session_memory_service
 from core.config import settings
 from core.storage import minio_client
 from models.chat_history import ChatHistory
@@ -27,24 +39,25 @@ from utils.logger import logger
 
 
 class ChatHistoryService:
-    async def _cache_clear_conversation_history(
+    async def _clear_session_memory(
         self,
         user_id: str,
         child_id: str,
         session_id: str,
     ) -> None:
+        """Clear the active MEMORY cache for a session (NOT the persisted HISTORY)."""
         logger.info(
-            "Clearing conversation history",
+            "Clearing session memory cache",
             extra={"user_id": user_id, "child_id": child_id, "session_id": session_id},
         )
 
         try:
             session_key = ai_service.build_session_key(user_id, child_id, session_id)
-            history = history_service.get_history(session_key)
-            history.clear()
+            memory = session_memory_service.get_session_memory(session_key)
+            memory.clear()
 
             logger.info(
-                "Conversation history cleared",
+                "Session memory cache cleared",
                 extra={
                     "user_id": user_id,
                     "child_id": child_id,
@@ -53,7 +66,7 @@ class ChatHistoryService:
             )
         except Exception:
             logger.exception(
-                "Failed to clear conversation history",
+                "Failed to clear session memory cache",
                 extra={"user_id": user_id, "child_id": child_id, "session_id": session_id},
             )
             raise
@@ -65,6 +78,7 @@ class ChatHistoryService:
         user_message: str,
         ai_response: str,
     ) -> None:
+        """Persist a chat turn to HISTORY (Postgres), NOT to MEMORY (Redis)."""
         logger.info(
             "Persisting chat turn to database",
             extra={
@@ -114,6 +128,7 @@ class ChatHistoryService:
         child_id: str,
         session_id: UUID,
     ) -> bool:
+        """Archive HISTORY from Postgres to MinIO for long-term storage."""
         bucket_name = "chat-archive"
 
         try:
@@ -176,6 +191,7 @@ class ChatHistoryService:
         child_id: str,
         session_id: UUID,
     ) -> int:
+        """Delete HISTORY rows from Postgres. MEMORY cache is cleared separately."""
         logger.info(
             "Deleting persisted chat session from database",
             extra={"child_id": child_id, "session_id": str(session_id)},
@@ -212,6 +228,7 @@ class ChatHistoryService:
         db: Session,
         user_id: str,
     ) -> dict:
+        """Archive old HISTORY to MinIO and delete from Postgres."""
         cutoff = datetime.now(timezone.utc) - timedelta(days=90)
         archived_count = 0
         failed_count = 0
@@ -264,6 +281,7 @@ class ChatHistoryService:
         user_message: str,
         ai_response: str,
     ) -> None:
+        """Save a chat turn to HISTORY (Postgres)."""
         await run_in_threadpool(
             self._db_save_turn_to_db,
             db=db,
@@ -278,6 +296,7 @@ class ChatHistoryService:
         child_id: str,
         session_id: UUID,
     ) -> bool:
+        """Archive session HISTORY to MinIO."""
         return await run_in_threadpool(
             self._db_archive_session_to_minio,
             db=db,
@@ -292,13 +311,14 @@ class ChatHistoryService:
         session_id: UUID,
         user_id: str,
     ) -> None:
+        """Delete session HISTORY from Postgres and clear MEMORY cache."""
         await run_in_threadpool(
             self._db_delete_session_rows,
             db=db,
             child_id=child_id,
             session_id=session_id,
         )
-        await self._cache_clear_conversation_history(
+        await self._clear_session_memory(
             user_id=user_id,
             child_id=child_id,
             session_id=str(session_id),
@@ -309,6 +329,7 @@ class ChatHistoryService:
         db: Session,
         user_id: str,
     ) -> dict:
+        """Archive and delete expired session HISTORY."""
         return await run_in_threadpool(
             self._db_archive_and_delete_expired_sessions,
             db=db,

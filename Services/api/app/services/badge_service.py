@@ -9,7 +9,6 @@ Domain: Children / Badges
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from models.badge import Badge, ChildBadge

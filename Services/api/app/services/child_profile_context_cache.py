@@ -15,6 +15,7 @@ from uuid import UUID
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from crud.crud_child_rules import get_child_rules_by_child_id
 from models.child_profile import ChildProfile
 from core.config import settings
 from utils.child_profile_logic import evaluate_stage_alignment, get_age_group
@@ -24,7 +25,7 @@ from utils.logger import logger
 
 
 def _child_profile_cache_key(child_id: UUID) -> str:
-    return f"child:profile:{child_id}"
+    return f"child:profile:v2:{child_id}"
 
 
 def _parse_child_id(child_id: str | UUID) -> UUID:
@@ -53,35 +54,48 @@ async def get_child_profile_context(child_id: str | UUID, redis: Any, db: Sessio
         try:
             profile_context = json.loads(cached_value)
 
-            required_keys = {
-                "nickname",
-                "age_group",
-                "education_stage",
-                "is_accelerated",
-                "is_below_expected_stage",
-            }
-            if not required_keys.issubset(profile_context.keys()):
+            missing_voice_mode = "voice_mode_enabled" not in profile_context
+            missing_audio_storage = "audio_storage_enabled" not in profile_context
+            missing_language = "language" not in profile_context
+            if missing_voice_mode or missing_audio_storage or missing_language:
                 await redis.delete(cache_key)
                 logger.info(
-                    "Child profile context cache entry missing required keys; forcing DB refresh",
+                    "Child profile context cache entry missing voice/audio flags; forcing DB refresh",
                     extra={
                         "child_id": parsed_child_id,
                         "cache_key": cache_key,
                     },
                 )
             else:
-                total_ms = (time.perf_counter() - timer_total_start) * 1000
-                logger.info(
-                    "Child profile context resolved from cache",
-                    extra={
-                        "child_id": parsed_child_id,
-                        "cache_key": cache_key,
-                        "source": "cache",
-                        "cache_read_ms": round(cache_read_ms, 2),
-                        "total_ms": round(total_ms, 2),
-                    },
-                )
-                return profile_context
+                required_keys = {
+                    "nickname",
+                    "age_group",
+                    "education_stage",
+                    "is_accelerated",
+                    "is_below_expected_stage",
+                }
+                if not required_keys.issubset(profile_context.keys()):
+                    await redis.delete(cache_key)
+                    logger.info(
+                        "Child profile context cache entry missing required keys; forcing DB refresh",
+                        extra={
+                            "child_id": parsed_child_id,
+                            "cache_key": cache_key,
+                        },
+                    )
+                else:
+                    total_ms = (time.perf_counter() - timer_total_start) * 1000
+                    logger.info(
+                        "Child profile context resolved from cache",
+                        extra={
+                            "child_id": parsed_child_id,
+                            "cache_key": cache_key,
+                            "source": "cache",
+                            "cache_read_ms": round(cache_read_ms, 2),
+                            "total_ms": round(total_ms, 2),
+                        },
+                    )
+                    return profile_context
         except json.JSONDecodeError:
             await redis.delete(cache_key)
             logger.warning(
@@ -117,6 +131,15 @@ async def get_child_profile_context(child_id: str | UUID, redis: Any, db: Sessio
         )
         raise HTTPException(status_code=404, detail="Child profile not found")
 
+    child_rules = get_child_rules_by_child_id(db, child_profile_id=child_profile.id)
+    voice_mode_enabled = False
+    audio_storage_enabled = False
+    default_language = settings.DEFAULT_LANGUAGE
+    if child_rules:
+        voice_mode_enabled = child_rules.voice_mode_enabled
+        audio_storage_enabled = child_rules.audio_storage_enabled
+        default_language = child_rules.default_language or settings.DEFAULT_LANGUAGE
+
     is_accelerated, is_below_expected_stage, _, _ = evaluate_stage_alignment(
         child_profile.birth_date,
         child_profile.education_stage,
@@ -129,6 +152,9 @@ async def get_child_profile_context(child_id: str | UUID, redis: Any, db: Sessio
         "education_stage": child_profile.education_stage.value,
         "is_accelerated": is_accelerated,
         "is_below_expected_stage": is_below_expected_stage,
+        "language": default_language,
+        "voice_mode_enabled": voice_mode_enabled,
+        "audio_storage_enabled": audio_storage_enabled,
     }
 
     timer_cache_write_start = time.perf_counter()
@@ -149,6 +175,7 @@ async def get_child_profile_context(child_id: str | UUID, redis: Any, db: Sessio
             "db_read_ms": round(db_read_ms, 2),
             "cache_write_ms": round(cache_write_ms, 2),
             "total_ms": round(total_ms, 2),
+            "language": default_language,
         },
     )
 
