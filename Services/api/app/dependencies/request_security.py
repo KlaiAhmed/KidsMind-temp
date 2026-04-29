@@ -1,5 +1,4 @@
-"""
-Request security dependencies.
+"""Request security dependencies.
 
 Responsibility: Validates request-level CSRF protection for browser-cookie based
 authenticated flows.
@@ -10,7 +9,6 @@ import hmac
 from fastapi import Cookie, Header, HTTPException, Request
 
 from core.config import settings
-from utils.non_prod_auth_bypass import is_non_prod_security_bypass_enabled
 from utils.csrf import verify_csrf_token
 
 
@@ -20,9 +18,6 @@ async def verify_csrf_dep(
     x_csrf_token: str | None = Header(default=None, alias="X-CSRF-Token"),
 ) -> None:
     """Verify CSRF token for state-changing requests from web clients."""
-
-    if is_non_prod_security_bypass_enabled(request.url.path):
-        return
 
     if request.method in ("GET", "HEAD", "OPTIONS", "TRACE"):
         return
