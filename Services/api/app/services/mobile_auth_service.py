@@ -33,7 +33,6 @@ from services.auth_service import (
 )
 from services.login_flow import authenticate_user_with_challenge
 from utils.logger import logger
-from utils.non_prod_auth_bypass import is_non_prod_security_bypass_enabled
 
 
 class MobileAuthService:
@@ -92,13 +91,6 @@ class MobileAuthService:
         }
 
     async def logout(self, current_user: User, refresh_token: str, request: Request | None = None) -> dict:
-        if request is not None and is_non_prod_security_bypass_enabled(request.url.path):
-            logger.info(
-                "Non-prod logout bypass applied",
-                extra={"user_id": current_user.id, "client_type": "mobile"},
-            )
-            return {"message": "Logout successful"}
-
         payload = verify_token(
             refresh_token,
             TokenType.REFRESH,

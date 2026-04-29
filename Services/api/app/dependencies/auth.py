@@ -5,7 +5,6 @@ Responsibility: Enforce strict credential-dispatch between web cookie auth and
 mobile bearer auth with audience validation.
 """
 
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -17,27 +16,7 @@ from dependencies.infrastructure import get_db
 from dependencies.request_security import verify_csrf_dep
 from models.user import User, UserRole
 from services.auth_service import TokenType, verify_token
-from utils.non_prod_auth_bypass import (
-    is_me_route,
-    is_media_route,
-    is_non_prod_security_bypass_enabled,
-    is_strict_auth_route,
-)
 from utils.token_blocklist import is_access_token_blocklisted
-
-
-@dataclass(frozen=True)
-class UserContext:
-    id: str
-    role: str
-    is_dev_bypass: bool = False
-
-
-DEV_ANONYMOUS_USER = UserContext(
-    id="dev-anonymous",
-    role="dev",
-    is_dev_bypass=True,
-)
 
 
 def _extract_bearer_token(authorization: str | None) -> str | None:
@@ -112,20 +91,10 @@ async def get_web_user(
     request: Request,
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
-) -> User | UserContext:
+) -> User:
     bearer_token = _extract_bearer_token(authorization)
     if bearer_token:
         raise HTTPException(status_code=401, detail="Ambiguous credentials")
-
-    is_bypass_eligible = (
-        not settings.IS_PROD
-        and not is_me_route(request.url.path)
-        and not is_media_route(request.url.path)
-        and not is_strict_auth_route(request.url.path)
-    )
-    if is_bypass_eligible:
-        request.state.access_token_payload = None
-        return DEV_ANONYMOUS_USER
 
     cookie_token = request.cookies.get("access_token")
     if not cookie_token:
@@ -166,7 +135,7 @@ async def get_current_user(
     request: Request,
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
-) -> User | UserContext:
+) -> User:
     has_bearer = _extract_bearer_token(authorization) is not None
     has_cookies = "access_token" in request.cookies
 
@@ -179,14 +148,12 @@ async def get_current_user(
     if has_cookies:
         return await get_web_user(request=request, authorization=authorization, db=db)
 
-    if not settings.IS_PROD and not is_me_route(request.url.path) and not is_media_route(request.url.path) and not is_strict_auth_route(request.url.path):
-        return await get_web_user(request=request, authorization=authorization, db=db)
     raise HTTPException(status_code=401, detail="No credentials")
 
 
 def get_current_admin_or_super_admin(
-    current_user: User | UserContext = Depends(get_current_user),
-) -> User | UserContext:
+    current_user: User = Depends(get_current_user),
+) -> User:
     if current_user.role not in (UserRole.ADMIN, UserRole.SUPER_ADMIN):
         raise HTTPException(status_code=403, detail="Insufficient permissions")
     return current_user
