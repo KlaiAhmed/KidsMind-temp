@@ -1,10 +1,5 @@
-from pydantic import BaseModel, HttpUrl, Field
+from pydantic import BaseModel, Field
 from typing import Optional
-
-
-class TranscriptionRequest(BaseModel):
-    audio_url: HttpUrl
-    initial_prompt: Optional[str] = Field(default=None,description="Optional text passed to the model as context for the transcription.")
 
 
 class TranscriptionResult(BaseModel):

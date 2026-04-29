@@ -47,22 +47,12 @@ from routers.quiz import router as quiz_router
 from routers.safety_and_rules import router as safety_and_rules_router
 from routers.users import router as users_router
 from routers.web_auth import router as web_auth_router
+from routers.voice import router as voice_router
 from services.bootstrap_admin import ensure_super_admin_exists
 from services.media_cache_service import warm_base_avatar_cache
 from utils.limiter import limiter
 from utils.logger import logger
 from utils.upstream_headers import build_service_headers
-
-
-# ---------------------------------------------------------------------------
-# HTTP Client Configuration
-# ---------------------------------------------------------------------------
-HTTPX_TIMEOUT = httpx.Timeout(
-    connect=5.0,
-    read=60.0,
-    write=10.0,
-    pool=5.0,
-)
 
 
 # ---------------------------------------------------------------------------
@@ -81,12 +71,27 @@ async def lifespan(app: FastAPI):
 
     async with AsyncExitStack() as stack:
         internal_client = await stack.enter_async_context(
-            httpx.AsyncClient(timeout=HTTPX_TIMEOUT, headers=build_service_headers())
+            httpx.AsyncClient(
+                timeout=httpx.Timeout(
+                    connect=settings.HTTP_CLIENT_CONNECT_TIMEOUT,
+                    read=settings.HTTP_CLIENT_READ_TIMEOUT,
+                    write=settings.HTTP_CLIENT_WRITE_TIMEOUT,
+                    pool=settings.HTTP_CLIENT_POOL_TIMEOUT,
+                ),
+                headers=build_service_headers(),
+            )
         )
         app.state.http_client = internal_client
 
         external_client = await stack.enter_async_context(
-            httpx.AsyncClient(timeout=HTTPX_TIMEOUT)
+            httpx.AsyncClient(
+                timeout=httpx.Timeout(
+                    connect=settings.HTTP_CLIENT_CONNECT_TIMEOUT,
+                    read=settings.HTTP_CLIENT_READ_TIMEOUT,
+                    write=settings.HTTP_CLIENT_WRITE_TIMEOUT,
+                    pool=settings.HTTP_CLIENT_POOL_TIMEOUT,
+                ),
+            )
         )
         app.state.external_client = external_client
 
@@ -179,6 +184,7 @@ def create_app() -> FastAPI:
     app.include_router(media_router, prefix="/api/v1/media", tags=["Media"])
     app.include_router(admin_media_router, prefix="/api/v1/media/admin", tags=["Admin Media"])
     app.include_router(chat_router, prefix="/api/v1/chat", tags=["Chat"])
+    app.include_router(voice_router, prefix="/api/v1/voice", tags=["Voice"])
     app.include_router(children_router, prefix="/api/v1/children", tags=["Children"])
     app.include_router(quiz_router, prefix="/api/v1/quizzes", tags=["Quizzes"])
     app.include_router(safety_and_rules_router, prefix="/api/v1", tags=["Safety and Rules"])

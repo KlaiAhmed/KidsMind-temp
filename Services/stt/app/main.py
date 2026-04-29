@@ -2,7 +2,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from prometheus_fastapi_instrumentator import Instrumentator
-import httpx
 import asyncio
 
 # Local imports
@@ -11,14 +10,6 @@ from core.logging_setup import setup_logging, RequestTracingMiddleware
 from core.config import settings
 from models.whisper import load_all_models, get_model
 from utils.logger import logger
-
-
-HTTPX_TIMEOUT = httpx.Timeout(
-    connect=5.0,
-    read=60.0,
-    write=10.0,
-    pool=5.0,
-)
 
 
 @asynccontextmanager
@@ -47,19 +38,15 @@ async def lifespan(app: FastAPI):
     # Initialize the worker semaphore based on the number of workers/threads configured for the mode
     app.state.worker_semaphore = asyncio.Semaphore(settings.WHISPER_NUM_WORKERS if settings.WHISPER_MODE == "gpu" else settings.WHISPER_CPU_THREADS)
 
-    async with httpx.AsyncClient(timeout=HTTPX_TIMEOUT) as client:
-        app.state.http_client = client
+    logger.info(
+        "STT service startup complete",
+        extra={
+            "service": settings.SERVICE_NAME,
+            "max_audio_mb": settings.MAX_AUDIO_BYTES / (1024 * 1024),
+        },
+    )
 
-        logger.info(
-            "STT service startup complete",
-            extra={
-                "service": settings.SERVICE_NAME,
-                "max_audio_mb": settings.MAX_AUDIO_BYTES / (1024 * 1024),
-                "supported_formats": list(settings.SUPPORTED_AUDIO_EXTENSIONS),
-            },
-        )
-
-        yield
+    yield
 
     logger.info(
         "STT service shutdown complete",

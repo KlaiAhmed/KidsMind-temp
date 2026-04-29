@@ -223,7 +223,6 @@ Client → CORS → CSRF → Tracing → Rate Limit → Auth → Router → Cont
 | Refresh delivery | Cookie (auto-sent) | Request body `refresh_token` |
 | Session cap | No hard cap | 10 (configurable) |
 | Logout revocation | Blocklist JTI + revoke refresh | Revoke refresh session only |
-| Dev auth bypass | `DEV_ANONYMOUS_USER` (except `/me`, media, strict routes) | Not bypassed — must send Bearer |
 
 ## Security Model
 

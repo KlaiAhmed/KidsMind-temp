@@ -385,8 +385,6 @@ uvicorn main:app --reload --port 8000
 | Refresh TTL | 7 days | 30 days |
 | Session cap | No hard cap | 10 concurrent (configurable) |
 
-> In dev mode (`IS_PROD=False`), unauthenticated requests receive a `DEV_ANONYMOUS_USER` context — except `/me` and logout routes.
-
 ## Security & Compliance
 
 - **RBAC (Role-Based Access Control):** Strict separation between Admin, Parent (Owner), and Child (User) permissions.

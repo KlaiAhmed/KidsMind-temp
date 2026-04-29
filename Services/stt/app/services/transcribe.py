@@ -60,7 +60,6 @@ async def transcribe_audio(main_model: WhisperModel, audio_file: io.BytesIO, lan
         "Transcription completed",
         extra={
             "text_length_chars": len(text),
-            "text_preview": text[:100] + "..." if len(text) > 100 else text,
         },
     )
 

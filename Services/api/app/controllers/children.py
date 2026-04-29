@@ -19,7 +19,6 @@ from schemas.child_profile_schema import (
     ChildProfileOut,
     ChildProfileRead,
     ChildProfileUpdate,
-    ChildRulesRead,
     ChildRulesUpdate,
 )
 from services.child_profile_service import ChildProfileService

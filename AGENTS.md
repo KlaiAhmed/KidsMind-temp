@@ -157,7 +157,6 @@ Root `.env` is loaded by docker-compose and by `alembic/env.py` for migrations. 
 - **Mobile path alias**: `@/*` maps to project root (`Apps/mobile/`).
 - **STT requires GPU**: `docker-compose.yml` reserves an NVIDIA GPU device. Service returns `503` when `WHISPER_NUM_WORKERS` capacity is exhausted.
 - **Windows CRLF**: `.gitattributes` enforces LF for `*.sh`, `*.yml`, `*.yaml`. `bucket-provisioner` strips `\r` at runtime.
-- **Dev auth bypass**: `IS_PROD=False` grants unauthenticated requests a `DEV_ANONYMOUS_USER` context except `/me` and logout routes.
 - **Rate limits**: multi-tier — T0 (IP), T1 (user), T2 (refresh), T3 (auth), T4 (general), T5 (AI cost-controlled). Redis-backed via SlowAPI. If Redis is down, `RL_STORE_UNAVAILABLE_MODE` controls behavior (default `fail_open`).
 - **No comments in code unless explicitly requested.**
 

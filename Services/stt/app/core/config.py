@@ -52,9 +52,11 @@ class Settings(BaseSettings):
     # CORS
     CORS_ORIGINS: list[str] = ["*"]
 
+    # Inter-service authentication — always required
+    SERVICE_TOKEN: str
+
     # Audio file constraints
     MAX_AUDIO_BYTES : int = 50 * 1024 * 1024 # 50 MB
-    SUPPORTED_AUDIO_EXTENSIONS: set = {".mp3", ".wav", ".ogg", ".flac", ".m4a"}
 
     # Whisper mode and model configuration
     WHISPER_MODE: Literal["cpu", "gpu"] = "gpu"

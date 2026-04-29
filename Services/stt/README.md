@@ -251,10 +251,10 @@ All settings are loaded via `pydantic-settings` from environment variables or `.
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `SERVICE_NAME` | No | `stt-service` | Service identifier, used in logs and FastAPI title |
-| `IS_PROD` | No | `True` | Production mode. When `False`, auth is skipped |
+| `IS_PROD` | No | `True` | Production mode flag (used for rate limit multiplier and dev mode startup guard) |
 | `EXPLICIT_DEV_MODE` | **Yes** when `IS_PROD=False` | `false` | Must be `"true"` if `IS_PROD=False`, otherwise the service **crashes at startup**. This is a safety guard — not optional. |
 | `CORS_ORIGINS` | No | `["*"]` | Allowed CORS origins (JSON-serializable list) |
-| `SERVICE_TOKEN` | **Yes** in production | — | Shared secret for inter-service auth (`X-Service-Token` header). Compared with `secrets.compare_digest` to prevent timing attacks. Skipped entirely in dev mode. |
+| `SERVICE_TOKEN` | **Yes** | — | Shared secret for inter-service auth (`X-Service-Token` header). Compared with `secrets.compare_digest` to prevent timing attacks. Always required. |
 
 ### Audio constraints
 
@@ -346,7 +346,6 @@ Every response includes an `X-Request-ID` header (propagated from the incoming `
 
 When `IS_PROD=False`, the `EXPLICIT_DEV_MODE` guard requires explicit `"true"` confirmation or the service crashes at startup. In dev mode:
 
-- Service token auth is completely skipped — all requests are accepted without `X-Service-Token`.
 - A prominent `WARNING: DEV MODE IS ACTIVE` banner is logged at startup.
 - **Never set `IS_PROD=False` in production.**
 

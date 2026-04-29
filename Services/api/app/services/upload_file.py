@@ -14,7 +14,7 @@ from fastapi import File, HTTPException, UploadFile
 from minio.error import S3Error
 
 from core.storage import minio_client
-from utils.file_name import generate_audioFile_storage_path
+from utils.file_name import generate_audio_file_storage_path
 from utils.logger import logger
 
 
@@ -28,7 +28,7 @@ def upload_audio(file: UploadFile = File(...), user_id: str = "", child_id: str 
         file_size = file.file.tell()
         file.file.seek(0)
 
-        filename = generate_audioFile_storage_path(
+        filename = generate_audio_file_storage_path(
             file.filename,
             user_id=user_id,
             child_id=child_id,
