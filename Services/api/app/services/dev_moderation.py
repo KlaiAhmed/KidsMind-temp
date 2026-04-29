@@ -6,10 +6,10 @@ import time
 import asyncio
 
 DEV_GUARD_TIMEOUT = httpx.Timeout(
-    connect=5.0,
-    read=10.0,
-    write=5.0,
-    pool=3.0,
+    connect=settings.DEV_GUARD_CONNECT_TIMEOUT,
+    read=settings.DEV_GUARD_READ_TIMEOUT,
+    write=settings.DEV_GUARD_WRITE_TIMEOUT,
+    pool=settings.DEV_GUARD_POOL_TIMEOUT,
 )
 
 DEV_KIDS_THRESHOLDS = {
@@ -21,7 +21,7 @@ DEV_KIDS_THRESHOLDS = {
     "self-harm": 0.4,
 }
 
-async def dev_check_moderation(message: str, context: str, client: httpx.AsyncClient):
+async def dev_check_moderation(message: str, context: str, client: httpx.AsyncClient, language: str = "en"):
     try:
         timer = time.perf_counter()
         text = f"APP CONTEXT: {context}\nUSER Input: {message}"
@@ -30,7 +30,7 @@ async def dev_check_moderation(message: str, context: str, client: httpx.AsyncCl
             "text": text,
             "mode": "ml",
             "models": "general,self-harm",
-            "lang": "en",
+            "lang": language,
             "api_user": settings.DEV_API_USER,
             "api_secret": settings.DEV_GUARD_API_KEY,
         }

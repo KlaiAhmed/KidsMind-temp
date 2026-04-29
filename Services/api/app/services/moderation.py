@@ -12,7 +12,7 @@ KIDS_THRESHOLDS = {
     "self-harm": 0.5
 }
 
-async def check_moderation(message: str, context: str, client: httpx.AsyncClient ):
+async def check_moderation(message: str, context: str, client: httpx.AsyncClient, language: str = "en"):
     try:
         timer = time.perf_counter()
 

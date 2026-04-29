@@ -6,8 +6,6 @@ Layer: Service
 Domain: Auth / Admin
 """
 
-from datetime import datetime, timezone
-
 from sqlalchemy import or_
 from sqlalchemy.exc import ProgrammingError
 
