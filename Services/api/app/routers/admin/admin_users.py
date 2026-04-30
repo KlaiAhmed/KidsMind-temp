@@ -13,25 +13,25 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Res
 from redis.asyncio import Redis
 from sqlalchemy.orm import Session
 
-from dependencies.auth import get_current_admin_or_super_admin
-from dependencies.infrastructure import get_db, get_redis
-from models.user import User
-from schemas.child_profile_schema import ChildProfileRead, ChildProfileUpdate
-from schemas.user_schema import (
+from dependencies.auth.auth import get_current_admin_or_super_admin
+from dependencies.infrastructure.infrastructure import get_db, get_redis
+from models.user.user import User
+from schemas.child.child_profile_schema import ChildProfileRead, ChildProfileUpdate
+from schemas.user.user_schema import (
     AdminUserUpdate,
     DeleteAccountResponse,
     DeleteChildResponse,
     UserFullResponse,
 )
-from services.child_profile_context_cache import invalidate_child_profile_context_cache
-from services.child_profile_service import ChildProfileService
-from services.user_service import (
+from services.child.child_profile_context_cache import invalidate_child_profile_context_cache
+from services.child.child_profile_service import ChildProfileService
+from services.user.user_service import (
     get_all_users,
     get_user_by_id,
     hard_delete_child_by_id,
     hard_delete_user_account_by_id,
 )
-from utils.logger import logger
+from utils.shared.logger import logger
 
 
 router = APIRouter(dependencies=[Depends(get_current_admin_or_super_admin)])

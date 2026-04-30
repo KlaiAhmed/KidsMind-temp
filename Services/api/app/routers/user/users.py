@@ -8,24 +8,26 @@ Domain: Users
 """
 
 import time
+from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.orm import Session
 
-from dependencies.auth import get_current_user
-from dependencies.infrastructure import get_db
-from models.user import User
-from schemas.auth_schema import MessageResponse
-from schemas.user_schema import (
+from dependencies.auth.auth import get_current_user
+from dependencies.infrastructure.infrastructure import get_db
+from models.audit.audit_log import AuditLog
+from models.user.user import User
+from schemas.auth.auth_schema import MessageResponse
+from schemas.user.user_schema import (
     DeleteAccountResponse,
     ParentPinSetupRequest,
     ParentPinSetupResponse,
     UserFullResponse,
     UserSummaryResponse,
 )
-from services.user_service import revoke_all_user_sessions, set_parent_pin, soft_delete_user_account
-from utils.token_blocklist import blocklist_access_token_jti
-from utils.logger import logger
+from services.user.user_service import revoke_all_user_sessions, set_parent_pin, soft_delete_user_account
+from utils.auth.token_blocklist import blocklist_access_token_jti
+from utils.shared.logger import logger
 
 router = APIRouter()
 
@@ -156,3 +158,48 @@ async def logout_all_sessions(
     logger.info(f"Logout-all completed for user_id={current_user.id} in {timer:.3f} seconds")
 
     return {"message": "All sessions revoked successfully"}
+
+
+@router.get("/parents/{user_id}/audit-logs")
+async def get_parent_audit_logs(
+    user_id: UUID,
+    request: Request,
+    response: Response,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    action: str | None = Query(default=None, description="Filter by action type"),
+) -> dict:
+    if current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    query = db.query(AuditLog).filter(AuditLog.actor_id == user_id)
+    if action:
+        query = query.filter(AuditLog.action == action)
+
+    total = query.count()
+    logs = (
+        query.order_by(AuditLog.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
+    return {
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "logs": [
+            {
+                "id": str(log.id),
+                "action": log.action,
+                "resource": log.resource,
+                "resource_id": str(log.resource_id) if log.resource_id else None,
+                "before_state": log.before_state,
+                "after_state": log.after_state,
+                "created_at": log.created_at.isoformat() if log.created_at else None,
+            }
+            for log in logs
+        ],
+    }

@@ -13,23 +13,23 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, Request, Response
 from sqlalchemy.orm import Session
 
-from controllers.safety_and_rules import (
+from controllers.safety.safety_and_rules import (
     patch_safety_and_rules_controller,
     verify_parent_pin_controller,
 )
 from core.config import settings
-from dependencies.auth import get_current_user
-from dependencies.infrastructure import get_db, get_redis
-from models.user import User
-from schemas.safety_and_rules_schema import (
+from dependencies.auth.auth import get_current_user
+from dependencies.infrastructure.infrastructure import get_db, get_redis
+from models.user.user import User
+from schemas.safety.safety_and_rules_schema import (
     SafetyAndRulesPatchRequest,
     SafetyAndRulesPatchResponse,
     SafetyAndRulesVerifyPinRequest,
     SafetyAndRulesVerifyPinResponse,
 )
-from services.child_profile_context_cache import invalidate_child_profile_context_cache
-from utils.limiter import limiter
-from utils.logger import logger
+from services.child.child_profile_context_cache import invalidate_child_profile_context_cache
+from utils.shared.limiter import limiter
+from utils.shared.logger import logger
 
 router = APIRouter()
 

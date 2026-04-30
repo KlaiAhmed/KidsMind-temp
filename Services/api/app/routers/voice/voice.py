@@ -6,13 +6,13 @@ from fastapi.responses import StreamingResponse
 from redis.asyncio import Redis
 from sqlalchemy.orm import Session
 
-from controllers.voice import voice_transcribe_stream_controller, voice_transcribe_sync_controller
-from dependencies.auth import get_current_user
-from dependencies.infrastructure import get_client, get_db, get_redis
-from dependencies.media import validate_audio_file
-from dependencies.voice import check_voice_mode_enabled
-from models.user import User
-from schemas.voice_schema import TranscribeResponse
+from controllers.voice.voice import voice_transcribe_stream_controller, voice_transcribe_sync_controller
+from dependencies.auth.auth import get_current_user
+from dependencies.infrastructure.infrastructure import get_client, get_db, get_redis
+from dependencies.media.media import validate_audio_file
+from dependencies.voice.voice import check_voice_mode_enabled
+from models.user.user import User
+from schemas.voice.voice_schema import TranscribeResponse
 
 
 router = APIRouter()

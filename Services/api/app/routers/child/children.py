@@ -12,11 +12,13 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Request, Response
 from redis.asyncio import Redis
 from sqlalchemy.orm import Session
 
-from controllers.children import (
+from services.audit.constants import AuditAction
+from services.audit.service import extract_request_context, sanitize_child_profile, sanitize_child_rules, write_audit_log
+from controllers.child.children import (
     create_child_controller,
     delete_child_controller,
     get_child_controller,
@@ -24,8 +26,8 @@ from controllers.children import (
     update_child_controller,
     update_child_rules_controller,
 )
-from controllers.badge import get_badge_catalog_controller
-from controllers.parent_dashboard import (
+from controllers.gamification.badge import get_badge_catalog_controller
+from controllers.child.parent_dashboard import (
     bulk_delete_sessions_controller,
     export_history_controller,
     get_control_audit_controller,
@@ -37,27 +39,30 @@ from controllers.parent_dashboard import (
     resume_child_controller,
     update_notification_prefs_controller,
 )
-from controllers.parent_notification import (
+from controllers.child.parent_notification import (
     list_notifications_controller,
     mark_all_notifications_read_controller,
     mark_notifications_read_controller,
 )
-from dependencies.auth import get_current_user
-from dependencies.infrastructure import get_db, get_redis
-from models.user import User, UserRole
-from schemas.child_profile_schema import (
+from dependencies.auth.auth import get_current_user
+from dependencies.infrastructure.infrastructure import get_db, get_redis
+from models.audit.audit_log import AuditActorRole
+from models.child.child_profile import ChildProfile
+from models.child.child_rules import ChildRules
+from models.user.user import User, UserRole
+from schemas.child.child_profile_schema import (
     ChildProfileCreate,
     ChildProfileRead,
     ChildProfileUpdate,
     ChildRulesRead,
     ChildRulesUpdate,
 )
-from schemas.badge_schema import BadgeCatalogResponse
-from schemas.notification_schema import (
+from schemas.gamification.badge_schema import BadgeCatalogResponse
+from schemas.gamification.notification_schema import (
     MarkNotificationsReadRequest,
     ParentBadgeNotificationListResponse,
 )
-from schemas.parent_dashboard_schema import (
+from schemas.child.parent_dashboard_schema import (
     BulkDeleteRequest,
     BulkDeleteResponse,
     ControlAuditResponse,
@@ -69,16 +74,40 @@ from schemas.parent_dashboard_schema import (
     ParentOverviewResponse,
     ParentProgressResponse,
 )
-from services.child_profile_context_cache import invalidate_child_profile_context_cache
-from utils.logger import logger
+from services.child.child_profile_context_cache import invalidate_child_profile_context_cache
+from utils.shared.logger import logger
 
 router = APIRouter()
+
+
+def _snapshot_child_profile(profile: ChildProfile) -> dict:
+    return {c.name: getattr(profile, c.name) for c in profile.__table__.columns if c.name in sanitize_child_profile.__module__ or c.name in _CHILD_PROFILE_SAFE_FIELDS}
+
+_CHILD_PROFILE_SAFE_FIELDS = {
+    "education_stage", "is_accelerated", "is_below_expected_stage", "xp", "is_paused",
+}
+
+_CHILD_RULES_SAFE_FIELDS = {
+    "voice_mode_enabled", "audio_storage_enabled", "conversation_history_enabled",
+    "homework_mode_enabled", "default_language",
+}
+
+
+def _snapshot_safe_profile(profile: ChildProfile) -> dict:
+    return {k: getattr(profile, k) for k in _CHILD_PROFILE_SAFE_FIELDS if hasattr(profile, k)}
+
+
+def _snapshot_safe_rules(rules: ChildRules | None) -> dict | None:
+    if rules is None:
+        return None
+    return {k: getattr(rules, k) for k in _CHILD_RULES_SAFE_FIELDS if hasattr(rules, k)}
 
 
 @router.post("", response_model=ChildProfileRead, status_code=201)
 async def create_child_profile(
     request: Request,
     response: Response,
+    background_tasks: BackgroundTasks,
     payload: ChildProfileCreate = Body(...),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -91,6 +120,20 @@ async def create_child_profile(
 
     logger.info(f"Create child profile request received for parent_id={current_user.id}")
     result = await create_child_controller(payload, current_user, db)
+
+    ip, ua = extract_request_context(request)
+    after_state = sanitize_child_profile(result.model_dump())
+    background_tasks.add_task(
+        write_audit_log,
+        actor_id=current_user.id,
+        actor_role=AuditActorRole.PARENT,
+        action=AuditAction.CHILD_PROFILE_CREATE,
+        resource="child_profile",
+        resource_id=result.id,
+        after_state=after_state,
+        ip_address=ip,
+        user_agent=ua,
+    )
 
     timer = time.perf_counter() - timer
     logger.info(f"Create child profile request processed in {timer:.3f} seconds")
@@ -142,6 +185,7 @@ async def patch_child_profile(
     child_id: UUID,
     request: Request,
     response: Response,
+    background_tasks: BackgroundTasks,
     payload: ChildProfileUpdate = Body(...),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -151,8 +195,27 @@ async def patch_child_profile(
     timer = time.perf_counter()
 
     logger.info(f"Update child profile request received for child_id={child_id} parent_id={current_user.id}")
+
+    existing = db.query(ChildProfile).filter(ChildProfile.id == child_id, ChildProfile.parent_id == current_user.id).first()
+    before_state = sanitize_child_profile(existing.__dict__.copy()) if existing else None
+
     result = await update_child_controller(child_id, payload, current_user, db)
     await invalidate_child_profile_context_cache(child_id, redis)
+
+    ip, ua = extract_request_context(request)
+    after_state = sanitize_child_profile(result.model_dump())
+    background_tasks.add_task(
+        write_audit_log,
+        actor_id=current_user.id,
+        actor_role=AuditActorRole.PARENT,
+        action=AuditAction.CHILD_PROFILE_UPDATE,
+        resource="child_profile",
+        resource_id=child_id,
+        before_state=before_state,
+        after_state=after_state,
+        ip_address=ip,
+        user_agent=ua,
+    )
 
     timer = time.perf_counter() - timer
     logger.info(f"Update child profile request processed in {timer:.3f} seconds")
@@ -165,6 +228,7 @@ async def patch_child_rules(
     child_id: UUID,
     request: Request,
     response: Response,
+    background_tasks: BackgroundTasks,
     payload: ChildRulesUpdate = Body(...),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -177,8 +241,26 @@ async def patch_child_rules(
     timer = time.perf_counter()
 
     logger.info(f"Update child rules request received for child_id={child_id} parent_id={current_user.id}")
+    existing_rules = db.query(ChildRules).filter(ChildRules.child_profile_id == child_id).first()
+    before_state = sanitize_child_rules(existing_rules.__dict__.copy()) if existing_rules else None
     result = await update_child_rules_controller(child_id, payload, current_user, db)
     await invalidate_child_profile_context_cache(child_id, redis)
+
+    updated_rules = db.query(ChildRules).filter(ChildRules.child_profile_id == child_id).first()
+    after_state = sanitize_child_rules(updated_rules.__dict__.copy()) if updated_rules else None
+    ip, ua = extract_request_context(request)
+    background_tasks.add_task(
+        write_audit_log,
+        actor_id=current_user.id,
+        actor_role=AuditActorRole.PARENT,
+        action=AuditAction.CHILD_RULES_UPDATE,
+        resource="child_rules",
+        resource_id=child_id,
+        before_state=before_state,
+        after_state=after_state,
+        ip_address=ip,
+        user_agent=ua,
+    )
 
     timer = time.perf_counter() - timer
     logger.info(f"Update child rules request processed in {timer:.3f} seconds")
@@ -253,6 +335,7 @@ async def get_child_dashboard_history(
     child_id: UUID,
     request: Request,
     response: Response,
+    background_tasks: BackgroundTasks,
     flagged_only: bool = False,
     limit: int = 20,
     offset: int = 0,
@@ -269,6 +352,25 @@ async def get_child_dashboard_history(
         child_id, current_user, db,
         flagged_only=flagged_only, limit=limit, offset=offset,
         date_from=date_from, date_to=date_to,
+    )
+
+    ip, ua = extract_request_context(request)
+    background_tasks.add_task(
+        write_audit_log,
+        actor_id=current_user.id,
+        actor_role=AuditActorRole.PARENT,
+        action=AuditAction.DATA_ACCESS_HISTORY_VIEW,
+        resource="child_profile",
+        resource_id=child_id,
+        after_state={
+            "flagged_only": flagged_only,
+            "date_from": date_from.isoformat() if date_from else None,
+            "date_to": date_to.isoformat() if date_to else None,
+            "limit": limit,
+            "offset": offset,
+        },
+        ip_address=ip,
+        user_agent=ua,
     )
 
     timer = time.perf_counter() - timer
@@ -303,6 +405,7 @@ async def export_child_history(
     child_id: UUID,
     request: Request,
     response: Response,
+    background_tasks: BackgroundTasks,
     export_format: str = "json",
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -312,6 +415,20 @@ async def export_child_history(
 
     logger.info(f"Export history request received for child_id={child_id} parent_id={current_user.id}")
     result = await export_history_controller(child_id, current_user, db, export_format=export_format)
+
+    if export_format.lower() == "pdf":
+        ip, ua = extract_request_context(request)
+        background_tasks.add_task(
+            write_audit_log,
+            actor_id=current_user.id,
+            actor_role=AuditActorRole.PARENT,
+            action=AuditAction.DATA_ACCESS_EXPORT_PDF,
+            resource="child_profile",
+            resource_id=child_id,
+            after_state={"period": "weekly", "export_format": export_format},
+            ip_address=ip,
+            user_agent=ua,
+        )
 
     timer = time.perf_counter() - timer
     logger.info(f"Export history request processed in {timer:.3f} seconds")
@@ -425,6 +542,7 @@ async def delete_child_profile(
     child_id: UUID,
     request: Request,
     response: Response,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
     redis: Redis = Depends(get_redis),
@@ -433,8 +551,23 @@ async def delete_child_profile(
     timer = time.perf_counter()
 
     logger.info(f"Delete child profile request received for child_id={child_id} parent_id={current_user.id}")
+    existing_profile = db.query(ChildProfile).filter(ChildProfile.id == child_id, ChildProfile.parent_id == current_user.id).first()
+    before_state = sanitize_child_profile(existing_profile.__dict__.copy()) if existing_profile else None
     await delete_child_controller(child_id, current_user, db)
     await invalidate_child_profile_context_cache(child_id, redis)
+
+    ip, ua = extract_request_context(request)
+    background_tasks.add_task(
+        write_audit_log,
+        actor_id=current_user.id,
+        actor_role=AuditActorRole.PARENT,
+        action=AuditAction.CHILD_PROFILE_DELETE,
+        resource="child_profile",
+        resource_id=child_id,
+        before_state=before_state,
+        ip_address=ip,
+        user_agent=ua,
+    )
 
     timer = time.perf_counter() - timer
     logger.info(f"Delete child profile request processed in {timer:.3f} seconds")

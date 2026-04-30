@@ -10,11 +10,11 @@ Domain: Chat
 import httpx
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Query, Request
 from redis.asyncio import Redis
 from sqlalchemy.orm import Session
 
-from controllers.chat import (
+from controllers.chat.chat import (
     DEFAULT_CHAT_HISTORY_LIMIT,
     MAX_CHAT_HISTORY_LIMIT,
     chat_message_controller,
@@ -25,12 +25,12 @@ from controllers.chat import (
     quiz_generate_controller,
 )
 from core.config import settings
-from dependencies.auth import get_current_user
-from dependencies.infrastructure import get_db, get_external_client, get_redis
-from models.user import User
-from schemas.chat_schema import ChatSessionClose, ChatSessionCreate, ChatSessionRead, TextChatRequest
-from schemas.quiz_schema import QuizRequest, QuizResponse
-from utils.limiter import limiter
+from dependencies.auth.auth import get_current_user
+from dependencies.infrastructure.infrastructure import get_db, get_external_client, get_redis
+from models.user.user import User
+from schemas.chat.chat_schema import ChatSessionClose, ChatSessionCreate, ChatSessionRead, TextChatRequest
+from schemas.quiz.quiz_schema import QuizRequest, QuizResponse
+from utils.shared.limiter import limiter
 
 router = APIRouter()
 
@@ -120,6 +120,7 @@ async def chat_message(
     child_id: UUID,
     session_id: UUID,
     body: TextChatRequest,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     external_client: httpx.AsyncClient = Depends(get_external_client),
     db: Session = Depends(get_db),
@@ -147,6 +148,7 @@ async def chat_message(
         input_source=body.input_source,
         stream=body.stream,
         external_client=external_client,
+        background_tasks=background_tasks,
     )
 
 

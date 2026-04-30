@@ -10,7 +10,7 @@ Domain: Infrastructure / Monitoring
 from fastapi import APIRouter, Request, Response
 
 from core.cache_client import get_cache_client
-from utils.logger import logger
+from utils.shared.logger import logger
 
 router = APIRouter()
 

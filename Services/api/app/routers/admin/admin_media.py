@@ -12,25 +12,25 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Resp
 from redis.asyncio import Redis
 from sqlalchemy.orm import Session
 
-from controllers.badge_admin import (
+from controllers.admin.badge_admin import (
     delete_badge_controller,
     list_badges_controller,
     replace_badge_icon_controller,
     update_badge_controller,
     upload_badge_controller,
 )
-from controllers.media import (
+from controllers.media.media import (
     delete_media_controller,
     list_media_controller,
     replace_avatar_image_controller,
     update_avatar_thresholds_controller,
     update_media_controller,
 )
-from dependencies.auth import get_current_admin_or_super_admin
-from dependencies.infrastructure import get_db, get_redis
-from models.user import User
-from schemas.badge_schema import BadgeAdminListResponse, BadgeAdminResponse, BadgeAdminUpdateRequest
-from schemas.media_schema import (
+from dependencies.auth.auth import get_current_admin_or_super_admin
+from dependencies.infrastructure.infrastructure import get_db, get_redis
+from models.user.user import User
+from schemas.gamification.badge_schema import BadgeAdminListResponse, BadgeAdminResponse, BadgeAdminUpdateRequest
+from schemas.media.media_schema import (
     AvatarListResponse,
     AvatarResponse,
     AvatarTierResponse,

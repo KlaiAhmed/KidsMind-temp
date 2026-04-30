@@ -11,13 +11,13 @@ from uuid import UUID
 from fastapi import APIRouter, Body, Depends, Request
 from sqlalchemy.orm import Session
 
-from controllers.quiz import submit_quiz_controller
+from controllers.quiz.quiz import submit_quiz_controller
 from core.config import settings
-from dependencies.auth import get_current_user
-from dependencies.infrastructure import get_db
-from models.user import User
-from schemas.quiz_schema import QuizSubmitRequest
-from utils.limiter import limiter
+from dependencies.auth.auth import get_current_user
+from dependencies.infrastructure.infrastructure import get_db
+from models.user.user import User
+from schemas.quiz.quiz_schema import QuizSubmitRequest
+from utils.shared.limiter import limiter
 
 router = APIRouter()
 
