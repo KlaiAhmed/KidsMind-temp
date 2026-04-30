@@ -1,6 +1,5 @@
 import { useMemo } from 'react';
 import {
-  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -16,9 +15,10 @@ import { Image } from 'expo-image';
 import { ParentChildSwitcher } from '@/src/components/parent/ParentChildSwitcher';
 import { Colors, Radii, Shadows, Spacing, Typography } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
-import { getConversationHistory } from '@/services/parentDashboardService';
+import { getParentProgress } from '@/services/parentDashboardService';
 import { useParentDashboardChild } from '@/src/hooks/useParentDashboardChild';
 import { SUBJECT_LABEL_MAP } from '@/src/utils/childProfileWizard';
+import type { ProgressDashboard, SubjectKey } from '@/types/child';
 
 type ProgressScreenState = 'loading' | 'ready' | 'error' | 'empty';
 
@@ -27,9 +27,13 @@ export interface ChildProgressScreenProps {
   errorMessage?: string;
 }
 
+function getDateKey(value: Date): string {
+  return value.toISOString().slice(0, 10);
+}
+
 function formatMinutes(minutes: number | null | undefined): string {
   if (typeof minutes !== 'number' || minutes <= 0) {
-    return 'Not set';
+    return '0m';
   }
 
   const hours = Math.floor(minutes / 60);
@@ -59,35 +63,66 @@ function formatDateTime(value: string | null | undefined): string {
   }).format(new Date(value));
 }
 
-function buildSevenDayActivitySeries(values: (string | null | undefined)[]) {
+function formatPercent(value: number | null): string {
+  return typeof value === 'number' ? `${Math.round(value)}%` : 'No scores';
+}
+
+function getSubjectLabel(subject: string): string {
+  const normalized = subject.toLowerCase() as SubjectKey;
+  return SUBJECT_LABEL_MAP[normalized] ?? subject;
+}
+
+function buildSevenDayActivitySeries(activity: ProgressDashboard['sessionActivity']) {
   const today = new Date();
   const days = Array.from({ length: 7 }).map((_, index) => {
     const date = new Date(today);
     date.setDate(today.getDate() - (6 - index));
-    const key = date.toISOString().slice(0, 10);
+    const key = getDateKey(date);
 
     return {
       key,
       label: new Intl.DateTimeFormat(undefined, { weekday: 'narrow' }).format(date),
-      count: 0,
+      sessions: 0,
+      messages: 0,
+      durationSeconds: 0,
     };
   });
 
   const lookup = new Map(days.map((day) => [day.key, day]));
 
-  for (const value of values) {
-    if (!value) {
-      continue;
-    }
-
-    const key = new Date(value).toISOString().slice(0, 10);
-    const day = lookup.get(key);
+  for (const point of activity) {
+    const day = lookup.get(point.date);
     if (day) {
-      day.count += 1;
+      day.sessions += point.sessions;
+      day.messages += point.messages;
+      day.durationSeconds += point.durationSeconds;
     }
   }
 
   return days;
+}
+
+function computeDailyStreak(activity: ProgressDashboard['sessionActivity']): number {
+  const activeDays = new Set(
+    activity
+      .filter((point) => point.sessions > 0)
+      .map((point) => point.date),
+  );
+  const today = new Date();
+  let streak = 0;
+
+  for (let index = 0; index < 365; index += 1) {
+    const date = new Date(today);
+    date.setDate(today.getDate() - index);
+
+    if (!activeDays.has(getDateKey(date))) {
+      break;
+    }
+
+    streak += 1;
+  }
+
+  return streak;
 }
 
 function ProgressSkeleton() {
@@ -115,27 +150,60 @@ export default function ChildProgressScreen({
 
   const isChildDataResolving = childProfileStatus === 'unknown' || (childDataLoading && children.length === 0);
 
-  const historyQuery = useQuery({
-    queryKey: ['parent-dashboard', 'progress-history', user?.id, activeChild?.id],
-    queryFn: async () => getConversationHistory({ userId: user!.id, childId: activeChild!.id }),
+  const progressQuery = useQuery({
+    queryKey: ['parent-dashboard', 'progress', user?.id, activeChild?.id],
+    queryFn: async () => getParentProgress(user!.id, activeChild!.id),
     enabled: Boolean(user?.id && activeChild?.id),
+    staleTime: 2 * 60 * 1000,
+    gcTime: 5 * 60 * 1000,
   });
 
-  const sessions = useMemo(() => historyQuery.data?.sessions ?? [], [historyQuery.data?.sessions]);
-  const totalMessages = sessions.reduce((sum, session) => sum + session.messageCount, 0);
-  const sevenDaySeries = useMemo(
-    () => buildSevenDayActivitySeries(sessions.map((session) => session.lastMessageAt)),
-    [sessions],
+  const progress = progressQuery.data;
+  const todayKey = getDateKey(new Date());
+  const todayActivity = useMemo(
+    () => progress?.sessionActivity.filter((point) => point.date === todayKey) ?? [],
+    [progress?.sessionActivity, todayKey],
   );
-  const maxDailyCount = Math.max(...sevenDaySeries.map((day) => day.count), 1);
-  const allowedSubjects = activeChild?.subjectIds ?? [];
+  const todayMinutes = Math.round(
+    todayActivity.reduce((sum, point) => sum + point.durationSeconds, 0) / 60,
+  );
+  const sevenDaySeries = useMemo(
+    () => buildSevenDayActivitySeries(progress?.sessionActivity ?? []),
+    [progress?.sessionActivity],
+  );
+  const maxDailyCount = Math.max(...sevenDaySeries.map((day) => day.sessions), 1);
+  const averageScore = useMemo(() => {
+    const results = progress?.results ?? [];
+    if (results.length === 0) {
+      return null;
+    }
+
+    return results.reduce((sum, result) => sum + result.score, 0) / results.length;
+  }, [progress?.results]);
+  const exercisesToday = useMemo(
+    () =>
+      (progress?.results ?? []).filter((result) => result.submittedAt.slice(0, 10) === todayKey).length,
+    [progress?.results, todayKey],
+  );
+  const dailyStreak = useMemo(
+    () => computeDailyStreak(progress?.sessionActivity ?? []),
+    [progress?.sessionActivity],
+  );
+  const recentResults = useMemo(
+    () =>
+      [...(progress?.results ?? [])]
+        .sort((left, right) => new Date(right.submittedAt).getTime() - new Date(left.submittedAt).getTime())
+        .slice(0, 4),
+    [progress?.results],
+  );
+  const maxMasteryXp = Math.max(...(progress?.subjectMastery ?? []).map((subject) => subject.xp), 1);
 
   function handleChildSelect(childId: string) {
     selectChild(childId);
     void router.replace(`/(tabs)/explore?childId=${encodeURIComponent(childId)}` as never);
   }
 
-  if (initialState === 'loading' || isChildDataResolving || historyQuery.isPending) {
+  if (initialState === 'loading' || isChildDataResolving || progressQuery.isPending) {
     return (
       <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
         <ProgressSkeleton />
@@ -157,7 +225,7 @@ export default function ChildProgressScreen({
     );
   }
 
-  if (historyQuery.isError || initialState === 'error') {
+  if (progressQuery.isError || initialState === 'error') {
     return (
       <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
         <View style={styles.feedbackState}>
@@ -168,7 +236,7 @@ export default function ChildProgressScreen({
             accessibilityRole="button"
             accessibilityLabel="Retry loading progress"
             onPress={() => {
-              void historyQuery.refetch();
+              void progressQuery.refetch();
             }}
             style={({ pressed }) => [styles.retryButton, pressed ? styles.pressed : null]}
           >
@@ -186,7 +254,7 @@ export default function ChildProgressScreen({
           <View style={styles.heroCopy}>
             <Text style={styles.screenTitle}>Progress Report</Text>
             <Text style={styles.heroSubtitle}>
-              Real-time insights into {activeChild.nickname ?? activeChild.name}'s progress.
+              Real-time insights into {activeChild.nickname ?? activeChild.name}&apos;s progress.
             </Text>
           </View>
           <Image contentFit="cover" source={getChildAvatarSource(activeChild)} style={styles.childAvatar} />
@@ -201,43 +269,53 @@ export default function ChildProgressScreen({
 
         <View style={styles.metricsRow}>
           <View style={styles.metricCard}>
-            <Text style={styles.metricTitle}>Daily Limit</Text>
-            <Text style={styles.metricValue}>{formatMinutes(activeChild.rules?.dailyLimitMinutes)}</Text>
-            <Text style={styles.metricSubtitle}>
-              Window: {activeChild.rules?.timeWindowStart && activeChild.rules?.timeWindowEnd
-                ? `${activeChild.rules.timeWindowStart} - ${activeChild.rules.timeWindowEnd}`
-                : 'Not configured'}
-            </Text>
+            <Text style={styles.metricTitle}>Today&apos;s Minutes</Text>
+            <Text style={styles.metricValue}>{formatMinutes(todayMinutes)}</Text>
+            <Text style={styles.metricSubtitle}>From saved learning sessions today</Text>
           </View>
 
           <View style={styles.metricCard}>
-            <Text style={styles.metricTitle}>Sessions Reviewed</Text>
-            <Text style={styles.metricValue}>{sessions.length}</Text>
-            <Text style={styles.metricSubtitle}>{totalMessages} total messages saved</Text>
+            <Text style={styles.metricTitle}>Exercises Today</Text>
+            <Text style={styles.metricValue}>{exercisesToday}</Text>
+            <Text style={styles.metricSubtitle}>Quiz submissions completed today</Text>
+          </View>
+        </View>
+
+        <View style={styles.metricsRow}>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricTitle}>Average Score</Text>
+            <Text style={styles.metricValue}>{formatPercent(averageScore)}</Text>
+            <Text style={styles.metricSubtitle}>Mean score across all quiz results</Text>
+          </View>
+
+          <View style={styles.metricCard}>
+            <Text style={styles.metricTitle}>Daily Streak</Text>
+            <Text style={styles.metricValue}>{dailyStreak}</Text>
+            <Text style={styles.metricSubtitle}>Consecutive active learning days</Text>
           </View>
         </View>
 
         <View style={styles.surfaceCard}>
           <Text style={styles.sectionTitle}>Activity Last 7 Days</Text>
-          {sessions.length === 0 ? (
+          {sevenDaySeries.every((day) => day.sessions === 0) ? (
             <View style={styles.emptyInlineState}>
               <MaterialCommunityIcons color={Colors.textSecondary} name="chart-bar" size={28} />
               <Text style={styles.emptyInlineTitle}>No activity yet</Text>
               <Text style={styles.emptyInlineBody}>
-                This chart becomes live as soon as sessions are saved to history.
+                This chart becomes live as soon as learning sessions are recorded.
               </Text>
             </View>
           ) : (
             <View style={styles.sparkline}>
               {sevenDaySeries.map((day) => (
                 <View key={day.key} style={styles.sparkColumn}>
-                  <Text style={styles.sparkCount}>{day.count}</Text>
+                  <Text style={styles.sparkCount}>{day.sessions}</Text>
                   <View
                     style={[
                       styles.sparkBar,
                       {
-                        height: Math.max(20, (day.count / maxDailyCount) * 120),
-                        backgroundColor: day.count > 0 ? Colors.primary : Colors.surfaceContainerHigh,
+                        height: Math.max(20, (day.sessions / maxDailyCount) * 120),
+                        backgroundColor: day.sessions > 0 ? Colors.primary : Colors.surfaceContainerHigh,
                       },
                     ]}
                   />
@@ -250,34 +328,48 @@ export default function ChildProgressScreen({
 
         <View style={styles.surfaceCard}>
           <Text style={styles.sectionTitle}>Weekly Insight</Text>
-          <View style={styles.unsupportedState}>
-            <MaterialCommunityIcons color={Colors.textSecondary} name="star-four-points-outline" size={24} />
-            <Text style={styles.unsupportedTitle}>No live insight feed yet</Text>
-            <Text style={styles.unsupportedBody}>
-              The current API does not expose generated parent insights yet, so this section stays empty instead of showing mock analysis.
-            </Text>
-          </View>
+          {progress?.weeklyInsight ? (
+            <Text style={styles.insightBody}>{progress.weeklyInsight}</Text>
+          ) : (
+            <View style={styles.emptyInlineState}>
+              <MaterialCommunityIcons color={Colors.textSecondary} name="star-four-points-outline" size={24} />
+              <Text style={styles.emptyInlineTitle}>No weekly insight yet</Text>
+              <Text style={styles.emptyInlineBody}>
+                Weekly guidance will appear after more learning activity is available.
+              </Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.surfaceCard}>
           <Text style={styles.sectionTitle}>Subject Mastery</Text>
-          {allowedSubjects.length === 0 ? (
-            <View style={styles.unsupportedState}>
-              <MaterialCommunityIcons color={Colors.textSecondary} name="school-outline" size={24} />
-              <Text style={styles.unsupportedTitle}>No subjects configured</Text>
-              <Text style={styles.unsupportedBody}>
-                {"Subject mastery is not exposed yet. Once analytics are available, they will align with the child's enabled subjects."}
-              </Text>
-            </View>
-          ) : (
-            <View style={styles.subjectChipRow}>
-              {allowedSubjects.map((subjectId) => (
-                <View key={subjectId} style={styles.subjectChip}>
-                  <Text style={styles.subjectChipLabel}>{SUBJECT_LABEL_MAP[subjectId]}</Text>
+          {progress?.subjectMastery.length ? (
+            <View style={styles.masteryList}>
+              {progress.subjectMastery.map((subject) => (
+                <View key={subject.subject} style={styles.masteryRow}>
+                  <View style={styles.masteryCopy}>
+                    <Text style={styles.masteryTitle}>{getSubjectLabel(subject.subject)}</Text>
+                    <Text style={styles.masteryMeta}>
+                      {subject.sessions} sessions - {subject.messages} messages - {subject.xp} XP
+                    </Text>
+                  </View>
+                  <View style={styles.masteryBarTrack}>
+                    <View
+                      style={[
+                        styles.masteryBarFill,
+                        { width: `${Math.max(8, (subject.xp / maxMasteryXp) * 100)}%` },
+                      ]}
+                    />
+                  </View>
                 </View>
               ))}
-              <Text style={styles.unsupportedBody}>
-                Live mastery percentages are not returned by the API yet.
+            </View>
+          ) : (
+            <View style={styles.emptyInlineState}>
+              <MaterialCommunityIcons color={Colors.textSecondary} name="school-outline" size={24} />
+              <Text style={styles.emptyInlineTitle}>No subject mastery yet</Text>
+              <Text style={styles.emptyInlineBody}>
+                Subject totals will appear as sessions and quiz results accumulate.
               </Text>
             </View>
           )}
@@ -285,48 +377,33 @@ export default function ChildProgressScreen({
 
         <View style={styles.surfaceCard}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Recent Sessions</Text>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Open full conversation history"
-              onPress={() => router.push(`/(tabs)/chat?childId=${encodeURIComponent(activeChild.id)}` as never)}
-            >
-              <Text style={styles.linkLabel}>View all</Text>
-            </Pressable>
+            <Text style={styles.sectionTitle}>Recent Results</Text>
           </View>
 
-          {sessions.length === 0 ? (
+          {recentResults.length === 0 ? (
             <View style={styles.emptyInlineState}>
-              <MaterialCommunityIcons color={Colors.textSecondary} name="message-text-outline" size={28} />
-              <Text style={styles.emptyInlineTitle}>No sessions saved yet</Text>
+              <MaterialCommunityIcons color={Colors.textSecondary} name="clipboard-check-outline" size={28} />
+              <Text style={styles.emptyInlineTitle}>No quiz results yet</Text>
               <Text style={styles.emptyInlineBody}>
-                As soon as tutoring conversations are saved, they will appear here.
+                Completed exercises will show here with scores and subjects.
               </Text>
             </View>
           ) : (
             <View style={styles.sessionsList}>
-              {sessions.slice(0, 4).map((session) => (
-                <Pressable
-                  key={session.id}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Open ${session.title}`}
-                  onPress={() => router.push(`/(tabs)/chat?childId=${encodeURIComponent(activeChild.id)}` as never)}
-                  style={({ pressed }) => [styles.sessionRow, pressed ? styles.pressed : null]}
-                >
+              {recentResults.map((result) => (
+                <View key={`${result.quizId}-${result.submittedAt}`} style={styles.sessionRow}>
                   <View style={styles.sessionIconWrap}>
-                    <MaterialCommunityIcons color={Colors.primary} name="message-text-outline" size={18} />
+                    <MaterialCommunityIcons color={Colors.primary} name="clipboard-check-outline" size={18} />
                   </View>
 
                   <View style={styles.sessionCopy}>
-                    <Text style={styles.sessionTitle}>{session.title}</Text>
-                    <Text style={styles.sessionMeta}>
-                      {formatDateTime(session.lastMessageAt)} • {session.messageCount} messages
-                    </Text>
+                    <Text style={styles.sessionTitle}>{getSubjectLabel(result.subject)}</Text>
+                    <Text style={styles.sessionMeta}>{formatDateTime(result.submittedAt)}</Text>
                     <Text numberOfLines={2} style={styles.sessionPreview}>
-                      {session.preview}
+                      Score: {Math.round(result.score)}%
                     </Text>
                   </View>
-                </Pressable>
+                </View>
               ))}
             </View>
           )}
@@ -346,66 +423,6 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.sm,
     paddingBottom: Spacing.xxxl + Spacing.xxl,
     gap: Spacing.md,
-  },
-  topRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: Spacing.sm,
-  },
-  parentHubTitle: {
-    ...Typography.captionMedium,
-    color: Colors.textSecondary,
-  },
-  iconButton: {
-    width: 44,
-    height: 44,
-    borderRadius: Radii.full,
-    borderWidth: 1,
-    borderColor: Colors.outline,
-    backgroundColor: Colors.surfaceContainerLowest,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  heroCard: {
-    borderRadius: Radii.xl,
-    borderWidth: 1,
-    borderColor: Colors.outline,
-    backgroundColor: Colors.surfaceContainerLowest,
-    padding: Spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: Spacing.md,
-    ...Shadows.card,
-  },
-  heroIdentity: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-  },
-  heroAvatarWrap: {
-    position: 'relative',
-  },
-  heroAvatar: {
-    width: 84,
-    height: 84,
-    borderRadius: Radii.full,
-    backgroundColor: Colors.surfaceContainerHigh,
-  },
-  editBadge: {
-    position: 'absolute',
-    right: -2,
-    bottom: -2,
-    width: 28,
-    height: 28,
-    borderRadius: Radii.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: Colors.primary,
-    borderWidth: 2,
-    borderColor: Colors.surface,
   },
   heroCopy: {
     flex: 1,
@@ -430,10 +447,6 @@ const styles = StyleSheet.create({
   heroSubtitle: {
     ...Typography.body,
     color: Colors.textSecondary,
-  },
-  heroMeta: {
-    ...Typography.captionMedium,
-    color: Colors.primary,
   },
   metricsRow: {
     flexDirection: 'row',
@@ -480,9 +493,9 @@ const styles = StyleSheet.create({
     ...Typography.title,
     color: Colors.text,
   },
-  linkLabel: {
-    ...Typography.captionMedium,
-    color: Colors.primary,
+  insightBody: {
+    ...Typography.body,
+    color: Colors.text,
   },
   sparkline: {
     flexDirection: 'row',
@@ -507,35 +520,33 @@ const styles = StyleSheet.create({
     ...Typography.caption,
     color: Colors.textSecondary,
   },
-  unsupportedState: {
-    alignItems: 'center',
-    gap: Spacing.xs,
-    paddingVertical: Spacing.sm,
+  masteryList: {
+    gap: Spacing.md,
   },
-  unsupportedTitle: {
+  masteryRow: {
+    gap: Spacing.xs,
+  },
+  masteryCopy: {
+    gap: 2,
+  },
+  masteryTitle: {
     ...Typography.bodySemiBold,
     color: Colors.text,
-    textAlign: 'center',
   },
-  unsupportedBody: {
+  masteryMeta: {
     ...Typography.caption,
     color: Colors.textSecondary,
-    textAlign: 'center',
   },
-  subjectChipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.sm,
-  },
-  subjectChip: {
+  masteryBarTrack: {
+    height: 8,
     borderRadius: Radii.full,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
-    backgroundColor: Colors.primaryFixed,
+    backgroundColor: Colors.surfaceContainerHigh,
+    overflow: 'hidden',
   },
-  subjectChipLabel: {
-    ...Typography.captionMedium,
-    color: Colors.primary,
+  masteryBarFill: {
+    height: 8,
+    borderRadius: Radii.full,
+    backgroundColor: Colors.primary,
   },
   sessionsList: {
     gap: Spacing.sm,

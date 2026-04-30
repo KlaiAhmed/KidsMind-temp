@@ -1,5 +1,7 @@
 import type {
   AgeGroup,
+  AvatarOption,
+  ChildPauseState,
   ChildProfile,
   ChildRules,
   CreateChildProfileInput,
@@ -606,4 +608,33 @@ export async function getAvatarCatalog(childId?: string): Promise<{
   }));
 
   return { avatars, childXp: response.child_xp };
+}
+
+interface ChildPauseApiResponse {
+  child_id: string;
+  is_paused: boolean;
+}
+
+export async function pauseChild(childId: string | number): Promise<ChildPauseState> {
+  const resolvedChildId = normalizeChildId(childId);
+  const response = await apiRequest<ChildPauseApiResponse>(`/api/v1/children/${resolvedChildId}/pause`, {
+    method: 'POST',
+  });
+
+  return {
+    childId: response.child_id,
+    isPaused: response.is_paused,
+  };
+}
+
+export async function resumeChild(childId: string | number): Promise<ChildPauseState> {
+  const resolvedChildId = normalizeChildId(childId);
+  const response = await apiRequest<ChildPauseApiResponse>(`/api/v1/children/${resolvedChildId}/resume`, {
+    method: 'POST',
+  });
+
+  return {
+    childId: response.child_id,
+    isPaused: response.is_paused,
+  };
 }

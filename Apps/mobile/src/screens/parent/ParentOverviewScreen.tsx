@@ -21,10 +21,8 @@ import { ParentChildSwitcher } from '@/src/components/parent/ParentChildSwitcher
 import { ChildSwitchModal } from '@/src/components/spaceSwitch/ChildSwitchModal';
 import { Colors, Gradients, Radii, Shadows, Spacing, Typography } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
-import { getConversationHistory } from '@/services/parentDashboardService';
+import { getConversationHistory, getParentOverview } from '@/services/parentDashboardService';
 import { useParentDashboardChild } from '@/src/hooks/useParentDashboardChild';
-import { SUBJECT_LABEL_MAP } from '@/src/utils/childProfileWizard';
-import type { SubjectKey } from '@/types/child';
 
 type OverviewScreenState = 'loading' | 'ready' | 'error' | 'empty';
 
@@ -60,14 +58,6 @@ function formatMinutes(minutes: number | null | undefined): string {
   return `${hours}h ${remainder}m`;
 }
 
-function formatTimeWindow(startTime: string | null | undefined, endTime: string | null | undefined): string {
-  if (!startTime || !endTime) {
-    return 'Flexible';
-  }
-
-  return `${startTime} - ${endTime}`;
-}
-
 function formatDateLabel(value: string | null | undefined): string {
   if (!value) {
     return 'No activity yet';
@@ -99,17 +89,12 @@ function getInitials(user: { email: string; fullName?: string; username?: string
   return `${parts[0]?.slice(0, 1) ?? ''}${parts[1]?.slice(0, 1) ?? ''}`.toUpperCase();
 }
 
-function summarizeSubjects(subjectIds: SubjectKey[]): string {
-  if (subjectIds.length === 0) {
-    return 'No subjects selected';
-  }
+function formatSecondsAsMinutes(seconds: number): string {
+  return formatMinutes(Math.round(seconds / 60)).replace('Not set', '0m');
+}
 
-  if (subjectIds.length <= 3) {
-    return subjectIds.map((subjectId) => SUBJECT_LABEL_MAP[subjectId]).join(', ');
-  }
-
-  const firstSubjects = subjectIds.slice(0, 3).map((subjectId) => SUBJECT_LABEL_MAP[subjectId]).join(', ');
-  return `${firstSubjects} +${subjectIds.length - 3}`;
+function formatScore(value: number | null): string {
+  return typeof value === 'number' ? `${Math.round(value)}%` : 'No scores';
 }
 
 function OverviewSkeleton() {
@@ -136,10 +121,18 @@ export default function ParentOverviewScreen({ initialState }: ParentOverviewScr
 
   const isChildDataResolving = childProfileStatus === 'unknown' || (childDataLoading && children.length === 0);
 
+  const overviewQuery = useQuery({
+    queryKey: ['parent-dashboard', 'overview', user?.id, activeChild?.id],
+    queryFn: async () => getParentOverview(user!.id, activeChild!.id),
+    enabled: Boolean(user?.id && activeChild?.id),
+    staleTime: 2 * 60 * 1000,
+  });
+
   const historyQuery = useQuery({
     queryKey: ['parent-dashboard', 'overview-history', user?.id, activeChild?.id],
     queryFn: async () => getConversationHistory({ userId: user!.id, childId: activeChild!.id }),
     enabled: Boolean(user?.id && activeChild?.id),
+    staleTime: 60 * 1000,
   });
 
   // Space switching modal state
@@ -159,56 +152,56 @@ export default function ParentOverviewScreen({ initialState }: ParentOverviewScr
       return [];
     }
 
-    const rules = activeChild.rules;
+    const overview = overviewQuery.data;
     const sessions = historyQuery.data?.sessions ?? [];
     const latestSessionAt = sessions[0]?.lastMessageAt;
 
     return [
       {
-        id: 'daily-limit',
-        title: 'Daily Limit',
-        value: formatMinutes(rules?.dailyLimitMinutes),
-        subtitle:
-          typeof rules?.dailyLimitMinutes === 'number'
-            ? 'Configured from parental controls'
-            : 'No daily time cap configured yet',
+        id: 'screen-time',
+        title: "Today's Screen Time",
+        value: formatSecondsAsMinutes(overview?.screenTimeTodaySeconds ?? 0),
+        subtitle: 'Tracked from dashboard progress',
         icon: 'clock-outline',
         tint: Colors.primary,
       },
       {
-        id: 'window',
-        title: 'Study Window',
-        value: formatTimeWindow(rules?.timeWindowStart, rules?.timeWindowEnd),
-        subtitle:
-          rules?.timeWindowStart && rules?.timeWindowEnd
-            ? 'Based on the active weekly schedule'
-            : 'No time window has been set yet',
-        icon: 'calendar-clock-outline',
+        id: 'exercises',
+        title: 'Exercises Today',
+        value: `${overview?.exercisesToday ?? 0}`,
+        subtitle: 'Completed quiz submissions today',
+        icon: 'clipboard-check-outline',
         tint: Colors.secondary,
       },
       {
-        id: 'subjects',
-        title: 'Enabled Subjects',
-        value: activeChild.subjectIds.length > 0 ? `${activeChild.subjectIds.length}` : 'None',
-        subtitle: summarizeSubjects(activeChild.subjectIds),
-        icon: 'school-outline',
+        id: 'score',
+        title: 'Average Score',
+        value: formatScore(overview?.avgScore ?? null),
+        subtitle: 'All-time average for this child',
+        icon: 'star-check-outline',
         tint: Colors.tertiary,
+      },
+      {
+        id: 'streak',
+        title: 'Daily Streak',
+        value: `${overview?.dailyStreak ?? 0}`,
+        subtitle: `Personal best ${overview?.streakPersonalBest ?? 0}`,
+        icon: 'fire',
+        tint: Colors.errorText,
       },
       {
         id: 'history',
         title: 'Conversation Sessions',
-        value: sessions.length > 0 ? `${sessions.length}` : 'No history',
+        value: historyQuery.isPending ? 'Loading' : sessions.length > 0 ? `${sessions.length}` : 'No history',
         subtitle:
           sessions.length > 0
             ? `Last activity ${formatDateLabel(latestSessionAt)}`
-            : rules?.conversationHistoryEnabled
-              ? 'History will appear after the first session'
-              : 'Conversation history is turned off',
+            : 'History will appear after the first session',
         icon: 'message-text-outline',
         tint: Colors.accentAmber,
       },
     ];
-  }, [activeChild, historyQuery.data?.sessions]);
+  }, [activeChild, historyQuery.data?.sessions, historyQuery.isPending, overviewQuery.data]);
 
   const recentSessions = historyQuery.data?.sessions.slice(0, 3) ?? [];
   const todayLabel = new Intl.DateTimeFormat(undefined, {
@@ -278,7 +271,7 @@ export default function ParentOverviewScreen({ initialState }: ParentOverviewScr
     void router.push(`/(tabs)/chat?childId=${encodeURIComponent(activeChild.id)}` as never);
   }
 
-  if (initialState === 'loading' || isChildDataResolving) {
+  if (initialState === 'loading' || isChildDataResolving || overviewQuery.isPending) {
     return (
       <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
         <OverviewSkeleton />
@@ -322,7 +315,7 @@ export default function ParentOverviewScreen({ initialState }: ParentOverviewScr
     );
   }
 
-  if (historyQuery.isError || initialState === 'error') {
+  if (overviewQuery.isError || initialState === 'error') {
     return (
       <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
         <View style={styles.feedbackContainer}>
@@ -333,6 +326,7 @@ export default function ParentOverviewScreen({ initialState }: ParentOverviewScr
             accessibilityRole="button"
             accessibilityLabel="Retry loading parent dashboard"
             onPress={() => {
+              void overviewQuery.refetch();
               void historyQuery.refetch();
             }}
             style={({ pressed }) => [styles.outlineButton, pressed ? styles.pressed : null]}
@@ -418,7 +412,26 @@ export default function ParentOverviewScreen({ initialState }: ParentOverviewScr
             </Pressable>
           </View>
 
-          {recentSessions.length === 0 ? (
+          {historyQuery.isPending ? (
+            <View style={styles.emptyInlineState}>
+              <ActivityIndicator color={Colors.primary} size="small" />
+              <Text style={styles.emptyInlineTitle}>Loading activity</Text>
+            </View>
+          ) : historyQuery.isError ? (
+            <View style={styles.emptyInlineState}>
+              <MaterialCommunityIcons color={Colors.errorText} name="alert-circle-outline" size={24} />
+              <Text style={styles.emptyInlineTitle}>Activity could not load</Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Retry recent activity"
+                onPress={() => {
+                  void historyQuery.refetch();
+                }}
+              >
+                <Text style={styles.linkLabel}>Retry</Text>
+              </Pressable>
+            </View>
+          ) : recentSessions.length === 0 ? (
             <View style={styles.emptyInlineState}>
               <MaterialCommunityIcons color={Colors.textSecondary} name="message-processing-outline" size={24} />
               <Text style={styles.emptyInlineTitle}>No conversations yet</Text>

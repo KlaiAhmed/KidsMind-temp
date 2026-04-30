@@ -169,29 +169,26 @@ export interface BrowserSubjectMatch {
   score: number;
 }
 
-export interface ParentOverviewStats {
-  totalSessions: number;
-  totalMessages: number;
-  totalExercisesCompleted: number;
-  totalXp: number;
-  streakDays: number;
-  flaggedMessageCount: number;
-  lastActiveAt: string | null;
-}
-
 export interface ParentOverview {
-  childId: string;
-  childNickname: string;
-  childXp: number;
-  childLevel: number;
-  stats: ParentOverviewStats;
+  screenTimeTodaySeconds: number;
+  exercisesToday: number;
+  avgScore: number | null;
+  dailyStreak: number;
+  streakPersonalBest: number;
 }
 
-export interface DailyUsagePoint {
+export interface ProgressSessionActivity {
   date: string;
   sessions: number;
   messages: number;
-  xpGained: number;
+  durationSeconds: number;
+}
+
+export interface ProgressResult {
+  quizId: string;
+  score: number;
+  submittedAt: string;
+  subject: string;
 }
 
 export interface SubjectMasteryItem {
@@ -201,27 +198,11 @@ export interface SubjectMasteryItem {
   xp: number;
 }
 
-export interface WeeklyInsight {
-  summary: string;
-  topSubject: string | null;
-  engagementLevel: string;
-}
-
-export interface SessionMetadata {
-  sessionId: string;
-  startedAt: string | null;
-  endedAt: string | null;
-  messageCount: number;
-  hasFlaggedContent: boolean;
-  subjects: string[];
-}
-
-export interface ParentProgress {
-  childId: string;
-  dailyUsage: DailyUsagePoint[];
+export interface ProgressDashboard {
+  sessionActivity: ProgressSessionActivity[];
+  results: ProgressResult[];
   subjectMastery: SubjectMasteryItem[];
-  weeklyInsight: WeeklyInsight;
-  recentSessions: SessionMetadata[];
+  weeklyInsight: string | null;
 }
 
 export interface ParentHistorySession {
@@ -248,12 +229,12 @@ export interface BulkDeleteResult {
   notFoundCount: number;
 }
 
-export interface HistoryExport {
+export interface ExportResponse {
   childId: string;
-  exportFormat: string;
-  downloadUrl: string | null;
-  totalSessions: number;
-  totalMessages: number;
+  url: string | null;
+  exportFormat?: string;
+  totalSessions?: number;
+  totalMessages?: number;
 }
 
 export interface ChildPauseState {
@@ -262,38 +243,87 @@ export interface ChildPauseState {
 }
 
 export interface NotificationPrefs {
-  dailySummaryEnabled: boolean;
-  safetyAlertsEnabled: boolean;
-  weeklyReportEnabled: boolean;
-  sessionStartEnabled: boolean;
-  sessionEndEnabled: boolean;
-  streakMilestoneEnabled: boolean;
-  emailChannel: boolean;
-  pushChannel: boolean;
+  limitAlerts: boolean;
+  flaggedContentAlerts: boolean;
 }
 
-export interface NotificationPrefsUpdate {
-  dailySummaryEnabled?: boolean;
-  safetyAlertsEnabled?: boolean;
-  weeklyReportEnabled?: boolean;
-  sessionStartEnabled?: boolean;
-  sessionEndEnabled?: boolean;
-  streakMilestoneEnabled?: boolean;
-  emailChannel?: boolean;
-  pushChannel?: boolean;
+export interface AuditEntry {
+  action: string;
+  timestamp: string | null;
+  details: string | null;
 }
 
-export interface ControlAuditEntry {
+export type ParentProgress = ProgressDashboard;
+
+export type HistoryExport = ExportResponse;
+
+export type NotificationPrefsUpdate = Partial<NotificationPrefs>;
+
+export interface ControlAuditEntry extends AuditEntry {
+  actorId?: string;
+  targetChildId?: string;
+  detail?: string;
+}
+
+export interface ControlAuditLog {
+  entries: AuditEntry[];
+  totalCount: number;
+  limit: number;
+  offset: number;
+}
+
+export interface DailyUsagePoint {
+  date: string;
+  sessions: number;
+  messages: number;
+  xpGained: number;
+}
+
+export interface WeeklyInsight {
+  summary: string;
+  topSubject: string | null;
+  engagementLevel: string;
+}
+
+export interface SessionMetadata {
+  sessionId: string;
+  startedAt: string | null;
+  endedAt: string | null;
+  messageCount: number;
+  hasFlaggedContent: boolean;
+  subjects: string[];
+}
+
+export interface ParentOverviewStats {
+  totalSessions: number;
+  totalMessages: number;
+  totalExercisesCompleted: number;
+  totalXp: number;
+  streakDays: number;
+  flaggedMessageCount: number;
+  lastActiveAt: string | null;
+}
+
+export interface LegacyParentOverview {
+  childId: string;
+  childNickname: string;
+  childXp: number;
+  childLevel: number;
+  stats: ParentOverviewStats;
+}
+
+export interface LegacyParentProgress {
+  childId: string;
+  dailyUsage: DailyUsagePoint[];
+  subjectMastery: SubjectMasteryItem[];
+  weeklyInsight: WeeklyInsight;
+  recentSessions: SessionMetadata[];
+}
+
+export interface LegacyControlAuditEntry {
   action: string;
   actorId: string;
   targetChildId: string;
   detail: string;
   timestamp: string | null;
-}
-
-export interface ControlAuditLog {
-  entries: ControlAuditEntry[];
-  totalCount: number;
-  limit: number;
-  offset: number;
 }

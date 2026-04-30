@@ -1,6 +1,7 @@
 import type { ComponentProps } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Pressable,
   ScrollView,
@@ -11,23 +12,29 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
+import * as Linking from 'expo-linking';
 
 import { LabeledToggleRow } from '@/components/ui/LabeledToggleRow';
 import { Colors, Radii, Shadows, Spacing, Typography } from '@/constants/theme';
 import { toApiErrorMessage, useAuth } from '@/contexts/AuthContext';
-import { patchChildRules } from '@/services/childService';
+import { patchChildRules, pauseChild, resumeChild } from '@/services/childService';
+import {
+  exportHistory,
+  getControlAudit,
+  getNotificationPrefs,
+  updateNotificationPrefs,
+} from '@/services/parentDashboardService';
 import { ParentChildSwitcher } from '@/src/components/parent/ParentChildSwitcher';
 import { useParentDashboardChild } from '@/src/hooks/useParentDashboardChild';
 import {
   computeEndTimeFromStart,
   deriveTimeWindowFromWeekSchedule,
   SUBJECT_OPTIONS,
-  SUBJECT_LABEL_MAP,
 } from '@/src/utils/childProfileWizard';
-import type { SubjectKey, WeekSchedule, WeekdayKey } from '@/types/child';
+import type { AuditEntry, NotificationPrefs, SubjectKey, WeekSchedule, WeekdayKey } from '@/types/child';
 
 type ControlsScreenState = 'loading' | 'ready' | 'error' | 'empty';
 
@@ -38,7 +45,7 @@ interface SubjectToggleItem {
 }
 
 interface AlertPreference {
-  id: string;
+  id: keyof NotificationPrefs;
   title: string;
   description: string;
   iconName: 'clock-outline' | 'flag-outline';
@@ -63,15 +70,15 @@ const DAILY_ALLOWANCE_OPTIONS = [30, 45, 60, 90, 120, 150, 180];
 
 const ALERT_PREFERENCES: AlertPreference[] = [
   {
-    id: 'limit',
+    id: 'limitAlerts',
     title: 'Limit alerts',
-    description: 'Notification preferences are not exposed by the current API yet.',
+    description: 'Get notified when a child is close to a time limit.',
     iconName: 'clock-outline',
   },
   {
-    id: 'flagged',
+    id: 'flaggedContentAlerts',
     title: 'Flagged content',
-    description: 'Safety alert subscriptions will light up once backend support is available.',
+    description: 'Get notified when a session includes flagged content.',
     iconName: 'flag-outline',
   },
 ];
@@ -252,8 +259,10 @@ export default function ParentalControlsScreen({
   errorMessage = 'Controls could not be loaded right now.',
 }: ParentalControlsScreenProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const params = useLocalSearchParams<{ childId?: string }>();
   const {
+    user,
     childDataLoading,
     childProfileStatus,
     updateChildProfile,
@@ -272,6 +281,11 @@ export default function ParentalControlsScreen({
   const [micAccessEnabled, setMicAccessEnabled] = useState(true);
   const [audioStorageEnabled, setAudioStorageEnabled] = useState(false);
   const [conversationHistoryEnabled, setConversationHistoryEnabled] = useState(true);
+  const [optimisticPauseValue, setOptimisticPauseValue] = useState<boolean | null>(null);
+  const [pauseError, setPauseError] = useState<string | null>(null);
+  const [notificationError, setNotificationError] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [auditExpanded, setAuditExpanded] = useState(false);
 
   useEffect(() => {
     if (!activeChild) {
@@ -293,6 +307,21 @@ export default function ParentalControlsScreen({
   );
   const derivedWindow = deriveTimeWindowFromWeekSchedule(weekSchedule);
   const hasScheduleConfigured = enabledDaysCount > 0;
+  const isPaused = optimisticPauseValue ?? activeChild?.isPaused ?? false;
+
+  const notificationPrefsQuery = useQuery({
+    queryKey: ['parent-dashboard', 'notification-prefs', user?.id],
+    queryFn: async () => getNotificationPrefs(user!.id),
+    enabled: Boolean(user?.id),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const auditQuery = useQuery({
+    queryKey: ['parent-dashboard', 'audit-log', user?.id],
+    queryFn: async () => getControlAudit(user!.id),
+    enabled: Boolean(user?.id),
+    staleTime: 5 * 60 * 1000,
+  });
 
   const rulesMutation = useMutation({
     mutationFn: async (snapshot: ControlsSnapshot) =>
@@ -303,11 +332,83 @@ export default function ParentalControlsScreen({
           activeChild?.rules?.defaultLanguage ?? activeChild?.languages?.[0] ?? 'en',
         ),
       ),
-    onSuccess: (nextRules) => {
+    onSuccess: async (nextProfile) => {
       updateChildProfile({
-        rules: nextRules,
-        subjectIds: nextRules.allowedSubjects,
+        rules: nextProfile.rules,
+        subjectIds: nextProfile.subjectIds,
+        dailyGoalMinutes: nextProfile.dailyGoalMinutes,
       });
+      await queryClient.invalidateQueries({ queryKey: ['parent-dashboard'] });
+    },
+  });
+
+  const pauseMutation = useMutation({
+    mutationFn: async (nextPaused: boolean) =>
+      nextPaused ? pauseChild(activeChild!.id) : resumeChild(activeChild!.id),
+    onMutate: (nextPaused) => {
+      setPauseError(null);
+      setOptimisticPauseValue(nextPaused);
+      return { previousPaused: activeChild?.isPaused ?? false };
+    },
+    onSuccess: async (result) => {
+      updateChildProfile({ isPaused: result.isPaused });
+      setOptimisticPauseValue(null);
+      await queryClient.invalidateQueries({ queryKey: ['parent-dashboard'] });
+    },
+    onError: (_error, _nextPaused, context) => {
+      setOptimisticPauseValue(context?.previousPaused ?? null);
+      setPauseError('Failed to update access. Try again.');
+      setTimeout(() => setOptimisticPauseValue(null), 0);
+    },
+  });
+
+  const notificationMutation = useMutation({
+    mutationFn: async (input: { key: keyof NotificationPrefs; value: boolean }) =>
+      updateNotificationPrefs(user!.id, { [input.key]: input.value }),
+    onMutate: async (input) => {
+      const queryKey = ['parent-dashboard', 'notification-prefs', user?.id] as const;
+      setNotificationError(null);
+      await queryClient.cancelQueries({ queryKey });
+      const previousPrefs = queryClient.getQueryData<NotificationPrefs>(queryKey);
+      queryClient.setQueryData<NotificationPrefs>(queryKey, {
+        limitAlerts: previousPrefs?.limitAlerts ?? false,
+        flaggedContentAlerts: previousPrefs?.flaggedContentAlerts ?? false,
+        [input.key]: input.value,
+      });
+      return { previousPrefs, queryKey };
+    },
+    onSuccess: async (nextPrefs, _input, context) => {
+      if (context?.queryKey) {
+        queryClient.setQueryData(context.queryKey, nextPrefs);
+      }
+      await queryClient.invalidateQueries({ queryKey: ['parent-dashboard'] });
+    },
+    onError: (error, _input, context) => {
+      if (context?.queryKey && context.previousPrefs) {
+        queryClient.setQueryData(context.queryKey, context.previousPrefs);
+      }
+      setNotificationError(toApiErrorMessage(error));
+    },
+  });
+
+  const exportMutation = useMutation({
+    mutationFn: async () => {
+      const response = await exportHistory(user!.id, activeChild!.id);
+      if (!response.url) {
+        throw new Error('Export failed. Please try again.');
+      }
+
+      await Linking.openURL(response.url);
+      return response;
+    },
+    onMutate: () => {
+      setExportError(null);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['parent-dashboard'] });
+    },
+    onError: (error) => {
+      setExportError(toApiErrorMessage(error) || 'Export failed. Please try again.');
     },
   });
 
@@ -388,7 +489,7 @@ export default function ParentalControlsScreen({
 
     Alert.alert(
       `Delete ${activeChild.nickname ?? activeChild.name}?`,
-      'This removes the child profile using the current API. Conversation export and audit logs are not available yet.',
+      'This removes the child profile and keeps the parent dashboard in sync.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -406,6 +507,11 @@ export default function ParentalControlsScreen({
       ],
     );
   }
+
+  const notificationPrefs = notificationPrefsQuery.data;
+  const updatingAlertKey = notificationMutation.isPending ? notificationMutation.variables?.key : null;
+  const auditEntries = auditQuery.data ?? [];
+  const displayedAuditEntries = auditExpanded ? auditEntries : auditEntries.slice(0, 10);
 
   if (initialState === 'loading' || isChildDataResolving) {
     return (
@@ -494,6 +600,13 @@ export default function ParentalControlsScreen({
           </View>
         ) : null}
 
+        {pauseError ? (
+          <View style={styles.errorCard}>
+            <MaterialCommunityIcons color={Colors.errorText} name="alert-circle-outline" size={18} />
+            <Text style={styles.errorCardText}>{pauseError}</Text>
+          </View>
+        ) : null}
+
         <View style={styles.sectionBlock}>
           <SectionHeader iconName="clock-outline" title="Time Limits" />
 
@@ -537,14 +650,36 @@ export default function ParentalControlsScreen({
               </Text>
             ) : null}
 
-            <LabeledToggleRow
+            <Pressable
+              accessibilityRole="switch"
               accessibilityLabel="Pause access"
-              description="Immediate pause is not supported by the current API yet."
-              disabled
-              label="Pause access"
-              onValueChange={() => undefined}
-              value={false}
-            />
+              accessibilityState={{ checked: isPaused, disabled: pauseMutation.isPending }}
+              disabled={pauseMutation.isPending}
+              onPress={() => pauseMutation.mutate(!isPaused)}
+              style={({ pressed }) => [
+                styles.pauseRow,
+                pauseMutation.isPending ? styles.disabledSection : null,
+                pressed ? styles.pressed : null,
+              ]}
+            >
+              <View style={styles.pauseCopy}>
+                <Text style={styles.pauseLabel}>Pause access</Text>
+                <Text style={styles.pauseDescription}>
+                  Temporarily block chat access while preserving learning data.
+                </Text>
+              </View>
+              {pauseMutation.isPending ? (
+                <ActivityIndicator color={Colors.primary} size="small" />
+              ) : (
+                <Switch
+                  accessibilityLabel="Pause access toggle"
+                  onValueChange={(nextValue) => pauseMutation.mutate(nextValue)}
+                  thumbColor={Colors.white}
+                  trackColor={{ false: Colors.surfaceContainerHigh, true: Colors.primary }}
+                  value={isPaused}
+                />
+              )}
+            </Pressable>
           </View>
         </View>
 
@@ -611,15 +746,46 @@ export default function ParentalControlsScreen({
         <View style={styles.sectionBlock}>
           <SectionHeader iconName="bell-outline" title="Alerts" />
 
-          <View style={styles.alertRow}>
-            {ALERT_PREFERENCES.map((alert) => (
-              <View key={alert.id} style={[styles.alertCard, styles.disabledSection]}>
-                <MaterialCommunityIcons color={Colors.textSecondary} name={alert.iconName} size={22} />
-                <Text style={styles.alertTitle}>{alert.title}</Text>
-                <Text style={styles.alertBody}>{alert.description}</Text>
-              </View>
-            ))}
-          </View>
+          {notificationPrefsQuery.isPending ? (
+            <View style={styles.alertRow}>
+              <View style={styles.alertSkeletonCard} />
+              <View style={styles.alertSkeletonCard} />
+            </View>
+          ) : notificationPrefsQuery.isError ? (
+            <View style={styles.errorCard}>
+              <MaterialCommunityIcons color={Colors.errorText} name="alert-circle-outline" size={18} />
+              <Text style={styles.errorCardText}>{toApiErrorMessage(notificationPrefsQuery.error)}</Text>
+            </View>
+          ) : (
+            <View style={styles.alertRow}>
+              {ALERT_PREFERENCES.map((alert) => {
+                const isUpdating = updatingAlertKey === alert.id;
+
+                return (
+                  <View key={alert.id} style={styles.alertCard}>
+                    <MaterialCommunityIcons color={Colors.primary} name={alert.iconName} size={22} />
+                    <Text style={styles.alertTitle}>{alert.title}</Text>
+                    <Text style={styles.alertBody}>{alert.description}</Text>
+                    <View style={styles.alertToggleRow}>
+                      {isUpdating ? <ActivityIndicator color={Colors.primary} size="small" /> : null}
+                      <Switch
+                        accessibilityLabel={`${alert.title} toggle`}
+                        disabled={notificationMutation.isPending}
+                        onValueChange={(value) => notificationMutation.mutate({ key: alert.id, value })}
+                        thumbColor={Colors.white}
+                        trackColor={{ false: Colors.surfaceContainerHigh, true: Colors.primary }}
+                        value={Boolean(notificationPrefs?.[alert.id])}
+                      />
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+
+          {notificationError ? (
+            <Text style={styles.inlineErrorText}>{notificationError}</Text>
+          ) : null}
         </View>
 
         <View style={styles.sectionBlock}>
@@ -639,21 +805,42 @@ export default function ParentalControlsScreen({
               <MaterialCommunityIcons color={Colors.textSecondary} name="chevron-right" size={20} />
             </Pressable>
 
-            <View style={[styles.linkRow, styles.disabledSection]}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Open delete history controls"
+              onPress={() => router.push(`/(tabs)/chat?childId=${encodeURIComponent(activeChild.id)}` as never)}
+              style={({ pressed }) => [styles.linkRow, pressed ? styles.pressed : null]}
+            >
               <View style={styles.inlineTitleRow}>
-                <MaterialCommunityIcons color={Colors.textSecondary} name="trash-can-outline" size={18} />
+                <MaterialCommunityIcons color={Colors.errorText} name="trash-can-outline" size={18} />
                 <Text style={styles.inlineTitle}>Delete all history</Text>
               </View>
-              <Text style={styles.disabledText}>Unavailable</Text>
-            </View>
+              <MaterialCommunityIcons color={Colors.errorText} name="chevron-right" size={20} />
+            </Pressable>
 
-            <View style={[styles.linkRow, styles.disabledSection]}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Export history data"
+              disabled={exportMutation.isPending}
+              onPress={() => exportMutation.mutate()}
+              style={({ pressed }) => [
+                styles.linkRow,
+                exportMutation.isPending ? styles.disabledSection : null,
+                pressed ? styles.pressed : null,
+              ]}
+            >
               <View style={styles.inlineTitleRow}>
-                <MaterialCommunityIcons color={Colors.textSecondary} name="export-variant" size={18} />
+                <MaterialCommunityIcons color={Colors.text} name="export-variant" size={18} />
                 <Text style={styles.inlineTitle}>Export data</Text>
               </View>
-              <Text style={styles.disabledText}>Unavailable</Text>
-            </View>
+              {exportMutation.isPending ? (
+                <ActivityIndicator color={Colors.primary} size="small" />
+              ) : (
+                <MaterialCommunityIcons color={Colors.textSecondary} name="chevron-right" size={20} />
+              )}
+            </Pressable>
+
+            {exportError ? <Text style={styles.inlineErrorText}>{exportError}</Text> : null}
 
             <Pressable
               accessibilityRole="button"
@@ -670,15 +857,59 @@ export default function ParentalControlsScreen({
           </View>
 
           <View style={styles.auditCard}>
-            <Text style={styles.auditBadgeLabel}>Audit log unavailable</Text>
-            <Text style={styles.auditBody}>
-              Changes above are persisted only through supported child-rules endpoints. A dedicated controls audit trail is not exposed by the API yet.
-            </Text>
-            <Text style={styles.auditBody}>
-              Current subjects: {activeChild.subjectIds.length > 0
-                ? activeChild.subjectIds.map((subjectId) => SUBJECT_LABEL_MAP[subjectId]).join(', ')
-                : 'None selected'}
-            </Text>
+            <Text style={styles.auditBadgeLabel}>Control Audit</Text>
+            {auditQuery.isPending ? (
+              <View style={styles.auditList}>
+                <View style={styles.auditSkeletonRow} />
+                <View style={styles.auditSkeletonRow} />
+                <View style={styles.auditSkeletonRow} />
+              </View>
+            ) : auditQuery.isError ? (
+              <View style={styles.auditErrorState}>
+                <Text style={styles.auditBody}>{toApiErrorMessage(auditQuery.error)}</Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Retry audit log"
+                  onPress={() => {
+                    void auditQuery.refetch();
+                  }}
+                >
+                  <Text style={styles.auditLink}>Retry</Text>
+                </Pressable>
+              </View>
+            ) : auditEntries.length === 0 ? (
+              <Text style={styles.auditBody}>No audit entries yet</Text>
+            ) : (
+              <View style={styles.auditList}>
+                {displayedAuditEntries.map((entry: AuditEntry, index) => (
+                  <View key={`${entry.action}-${entry.timestamp ?? index}`} style={styles.auditRow}>
+                    <View style={styles.auditDot} />
+                    <View style={styles.auditCopy}>
+                      <Text style={styles.auditAction}>{entry.action}</Text>
+                      <Text style={styles.auditBody}>
+                        {entry.timestamp
+                          ? new Intl.DateTimeFormat(undefined, {
+                              month: 'short',
+                              day: 'numeric',
+                              hour: 'numeric',
+                              minute: '2-digit',
+                            }).format(new Date(entry.timestamp))
+                          : 'Unknown time'}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+                {auditEntries.length > 10 ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={auditExpanded ? 'Show fewer audit entries' : 'View all audit entries'}
+                    onPress={() => setAuditExpanded((current) => !current)}
+                  >
+                    <Text style={styles.auditLink}>{auditExpanded ? 'Show less' : 'View all'}</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            )}
           </View>
         </View>
       </ScrollView>
@@ -762,12 +993,6 @@ const styles = StyleSheet.create({
   heroMeta: {
     ...Typography.captionMedium,
     color: Colors.primary,
-  },
-  heroAvatar: {
-    width: 84,
-    height: 84,
-    borderRadius: Radii.full,
-    backgroundColor: Colors.surfaceContainerHigh,
   },
   sectionBlock: {
     gap: Spacing.md,
@@ -885,6 +1110,29 @@ const styles = StyleSheet.create({
     ...Typography.caption,
     color: Colors.textSecondary,
   },
+  pauseRow: {
+    minHeight: 64,
+    borderRadius: Radii.lg,
+    backgroundColor: Colors.surfaceContainerLow,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.md,
+  },
+  pauseCopy: {
+    flex: 1,
+    gap: Spacing.xs,
+  },
+  pauseLabel: {
+    ...Typography.bodySemiBold,
+    color: Colors.text,
+  },
+  pauseDescription: {
+    ...Typography.caption,
+    color: Colors.textSecondary,
+  },
   curriculumList: {
     gap: Spacing.sm,
   },
@@ -935,6 +1183,12 @@ const styles = StyleSheet.create({
     padding: Spacing.md,
     gap: Spacing.sm,
   },
+  alertSkeletonCard: {
+    flex: 1,
+    minHeight: 148,
+    borderRadius: Radii.xl,
+    backgroundColor: Colors.surfaceContainerHigh,
+  },
   alertTitle: {
     ...Typography.bodySemiBold,
     color: Colors.text,
@@ -942,6 +1196,13 @@ const styles = StyleSheet.create({
   alertBody: {
     ...Typography.caption,
     color: Colors.textSecondary,
+  },
+  alertToggleRow: {
+    marginTop: 'auto',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: Spacing.sm,
   },
   errorCard: {
     borderRadius: Radii.lg,
@@ -955,6 +1216,10 @@ const styles = StyleSheet.create({
     ...Typography.caption,
     color: Colors.errorText,
     flex: 1,
+  },
+  inlineErrorText: {
+    ...Typography.caption,
+    color: Colors.errorText,
   },
   linkRow: {
     flexDirection: 'row',
@@ -978,9 +1243,43 @@ const styles = StyleSheet.create({
     ...Typography.label,
     color: Colors.primary,
   },
+  auditList: {
+    gap: Spacing.sm,
+  },
+  auditSkeletonRow: {
+    height: 42,
+    borderRadius: Radii.lg,
+    backgroundColor: Colors.surfaceContainerHigh,
+  },
+  auditErrorState: {
+    gap: Spacing.xs,
+  },
+  auditRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  auditDot: {
+    width: 8,
+    height: 8,
+    borderRadius: Radii.full,
+    backgroundColor: Colors.primary,
+  },
+  auditCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  auditAction: {
+    ...Typography.captionMedium,
+    color: Colors.text,
+  },
   auditBody: {
     ...Typography.caption,
     color: Colors.textSecondary,
+  },
+  auditLink: {
+    ...Typography.captionMedium,
+    color: Colors.primary,
   },
   feedbackState: {
     flex: 1,

@@ -15,16 +15,16 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 
-import { SafetyFlagAnnotation } from '@/src/components/parent/SafetyFlagAnnotation';
 import { ParentChildSwitcher } from '@/src/components/parent/ParentChildSwitcher';
 import { Colors, Radii, Shadows, Spacing, Typography } from '@/constants/theme';
-import { useAuth } from '@/contexts/AuthContext';
+import { toApiErrorMessage, useAuth } from '@/contexts/AuthContext';
 import {
-  clearConversationSession,
-  getConversationHistory,
-  type ParentConversationSession,
+  bulkDeleteSessions,
+  getParentHistory,
 } from '@/services/parentDashboardService';
+import { showToast } from '@/services/toastClient';
 import { useParentDashboardChild } from '@/src/hooks/useParentDashboardChild';
+import type { ParentHistorySession } from '@/types/child';
 
 type HistoryScreenState = 'loading' | 'ready' | 'error' | 'empty';
 
@@ -44,8 +44,18 @@ function formatClock(value: string | null | undefined): string {
   }).format(new Date(value));
 }
 
-function formatSessionMeta(session: ParentConversationSession): string {
-  return `${formatClock(session.lastMessageAt)} • ${session.messageCount} messages`;
+function formatSessionMeta(session: ParentHistorySession): string {
+  const timestamp = session.lastMessageAt ?? session.startedAt;
+  return `${formatClock(timestamp)} - ${session.messageCount} messages`;
+}
+
+function getSessionTitle(session: ParentHistorySession): string {
+  const preview = session.preview.trim().replace(/\s+/g, ' ');
+  if (preview.length > 0) {
+    return preview.length > 58 ? `${preview.slice(0, 55)}...` : preview;
+  }
+
+  return `Conversation ${session.sessionId.slice(-6)}`;
 }
 
 function getDayLabel(value: string | null | undefined): string {
@@ -73,26 +83,16 @@ function getDayLabel(value: string | null | undefined): string {
   }).format(targetDate);
 }
 
-function isWithinRange(value: string | null | undefined, rangeDays: 7 | 30): boolean {
-  if (!value) {
-    return false;
-  }
-
-  const targetTime = new Date(value).getTime();
-  const cutoff = Date.now() - rangeDays * 24 * 60 * 60 * 1000;
-  return targetTime >= cutoff;
-}
-
 function groupSessionsByDay(
-  sessions: ParentConversationSession[],
+  sessions: ParentHistorySession[],
 ): {
   label: string;
-  sessions: ParentConversationSession[];
+  sessions: ParentHistorySession[];
 }[] {
-  const groups = new Map<string, ParentConversationSession[]>();
+  const groups = new Map<string, ParentHistorySession[]>();
 
   for (const session of sessions) {
-    const label = getDayLabel(session.lastMessageAt);
+    const label = getDayLabel(session.lastMessageAt ?? session.startedAt);
     const existing = groups.get(label) ?? [];
     existing.push(session);
     groups.set(label, existing);
@@ -138,7 +138,8 @@ export default function ConversationHistoryScreen({
   const [searchValue, setSearchValue] = useState(initialSearch);
   const [rangeDays, setRangeDays] = useState<7 | 30>(7);
   const [flaggedOnly, setFlaggedOnly] = useState(params.flaggedOnly === 'true');
-  const [expandedIds, setExpandedIds] = useState<string[]>([]);
+  const [selectedSessionIds, setSelectedSessionIds] = useState<string[]>([]);
+  const [bulkDeleteError, setBulkDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     setSearchValue(typeof params.topic === 'string' ? params.topic : '');
@@ -148,81 +149,98 @@ export default function ConversationHistoryScreen({
     setFlaggedOnly(params.flaggedOnly === 'true');
   }, [params.flaggedOnly]);
 
+  const historyParams = useMemo(
+    () => ({
+      limit: 50,
+      offset: 0,
+      search: searchValue.trim() || undefined,
+      flaggedOnly,
+      days: rangeDays,
+    }),
+    [flaggedOnly, rangeDays, searchValue],
+  );
+
   const historyQuery = useQuery({
-    queryKey: ['parent-dashboard', 'history', user?.id, activeChild?.id],
-    queryFn: async () => getConversationHistory({ userId: user!.id, childId: activeChild!.id }),
+    queryKey: ['parent-dashboard', 'history', user?.id, activeChild?.id, historyParams],
+    queryFn: async () => getParentHistory(user!.id, activeChild!.id, historyParams),
     enabled: Boolean(user?.id && activeChild?.id),
+    staleTime: 60 * 1000,
   });
 
-  const deleteSessionMutation = useMutation({
-    mutationFn: async (sessionId: string) => {
-      await clearConversationSession({
-        userId: user!.id,
-        childId: activeChild!.id,
-        sessionId,
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (sessionIds: string[]) => bulkDeleteSessions(user!.id, activeChild!.id, sessionIds),
+    onMutate: () => {
+      setBulkDeleteError(null);
+    },
+    onSuccess: async (result) => {
+      await queryClient.invalidateQueries({ queryKey: ['parent-dashboard'] });
+      setSelectedSessionIds([]);
+      showToast({
+        type: 'success',
+        text1: 'History deleted',
+        text2: `${result.deletedCount} sessions removed`,
+        visibilityTime: 1500,
       });
     },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: ['parent-dashboard', 'history', user?.id, activeChild?.id],
-      });
+    onError: (error) => {
+      setBulkDeleteError(toApiErrorMessage(error) || 'Could not delete history. Please try again.');
     },
   });
 
+  const sessions = useMemo(() => historyQuery.data?.sessions ?? [], [historyQuery.data?.sessions]);
+  const groupedSessions = useMemo(() => groupSessionsByDay(sessions), [sessions]);
   const historyDisabled = activeChild?.rules?.conversationHistoryEnabled === false;
-  const hasFlagData = historyQuery.data?.sessions.some((session) => session.hasSafetyFlags) ?? false;
-  const effectiveFlaggedOnly = hasFlagData ? flaggedOnly : false;
-
-  const filteredSessions = useMemo(() => {
-    const sessions = historyQuery.data?.sessions ?? [];
-    const normalizedQuery = searchValue.trim().toLowerCase();
-
-    return sessions.filter((session) => {
-      const matchesRange = isWithinRange(session.lastMessageAt, rangeDays);
-      const matchesFlagged = !effectiveFlaggedOnly || session.hasSafetyFlags;
-      const searchableText = [
-        session.title,
-        session.preview,
-        ...session.messages.map((message) => message.body),
-      ]
-        .join(' ')
-        .toLowerCase();
-      const matchesSearch = normalizedQuery.length === 0 || searchableText.includes(normalizedQuery);
-
-      return matchesRange && matchesFlagged && matchesSearch;
-    });
-  }, [effectiveFlaggedOnly, historyQuery.data?.sessions, rangeDays, searchValue]);
-
-  const groupedSessions = useMemo(() => groupSessionsByDay(filteredSessions), [filteredSessions]);
+  const selectionMode = selectedSessionIds.length > 0;
 
   function handleChildSelect(childId: string) {
     selectChild(childId);
-    setExpandedIds([]);
+    setSelectedSessionIds([]);
     void router.replace(`/(tabs)/chat?childId=${encodeURIComponent(childId)}` as never);
   }
 
-  function toggleExpanded(sessionId: string) {
-    setExpandedIds((current) =>
+  function toggleSelection(sessionId: string) {
+    setSelectedSessionIds((current) =>
       current.includes(sessionId)
         ? current.filter((entry) => entry !== sessionId)
         : [...current, sessionId],
     );
   }
 
-  function confirmDeleteSession(sessionId: string, title: string) {
-    Alert.alert(
-      'Delete session?',
-      `This will remove "${title}" from this child's stored conversation history.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            deleteSessionMutation.mutate(sessionId);
-          },
+  function enterSelectionMode(sessionId: string) {
+    setSelectedSessionIds((current) => (current.includes(sessionId) ? current : [...current, sessionId]));
+  }
+
+  function confirmBulkDelete(sessionIds: string[], title: string, message: string) {
+    if (sessionIds.length === 0 || bulkDeleteMutation.isPending) {
+      return;
+    }
+
+    Alert.alert(title, message, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => {
+          bulkDeleteMutation.mutate(sessionIds);
         },
-      ],
+      },
+    ]);
+  }
+
+  function handleDeleteSelected() {
+    confirmBulkDelete(
+      selectedSessionIds,
+      'Delete selected sessions?',
+      `This will remove ${selectedSessionIds.length} selected sessions from this child's history.`,
+    );
+  }
+
+  function handleDeleteAllVisible() {
+    const sessionIds = sessions.map((session) => session.sessionId);
+    confirmBulkDelete(
+      sessionIds,
+      'Delete all visible history?',
+      `This will remove ${sessionIds.length} sessions from the current history results.`,
     );
   }
 
@@ -310,6 +328,7 @@ export default function ConversationHistoryScreen({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Toggle history date range"
+            disabled={historyQuery.isFetching}
             onPress={() => setRangeDays((current) => (current === 7 ? 30 : 7))}
             style={({ pressed }) => [styles.filterChipPrimary, pressed ? styles.pressed : null]}
           >
@@ -319,21 +338,60 @@ export default function ConversationHistoryScreen({
           <Pressable
             accessibilityRole="switch"
             accessibilityLabel="Flagged conversations only"
-            accessibilityState={{ checked: effectiveFlaggedOnly, disabled: !hasFlagData }}
-            disabled={!hasFlagData}
+            accessibilityState={{ checked: flaggedOnly }}
+            disabled={historyQuery.isFetching}
             onPress={() => setFlaggedOnly((current) => !current)}
             style={({ pressed }) => [
               styles.filterChip,
-              effectiveFlaggedOnly ? styles.filterChipActive : null,
-              !hasFlagData ? styles.filterChipDisabled : null,
+              flaggedOnly ? styles.filterChipActive : null,
               pressed ? styles.pressed : null,
             ]}
           >
-            <Text style={[styles.filterChipLabel, effectiveFlaggedOnly ? styles.filterChipLabelActive : null]}>
+            <Text style={[styles.filterChipLabel, flaggedOnly ? styles.filterChipLabelActive : null]}>
               Flagged only
             </Text>
           </Pressable>
         </ScrollView>
+
+        {selectionMode ? (
+          <View style={styles.selectionBar}>
+            <Text style={styles.selectionCount}>{selectedSessionIds.length} selected</Text>
+            <View style={styles.selectionActions}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Delete selected sessions"
+                disabled={bulkDeleteMutation.isPending}
+                onPress={handleDeleteSelected}
+                style={({ pressed }) => [
+                  styles.selectionActionButton,
+                  bulkDeleteMutation.isPending ? styles.disabledSection : null,
+                  pressed ? styles.pressed : null,
+                ]}
+              >
+                {bulkDeleteMutation.isPending ? (
+                  <ActivityIndicator color={Colors.errorText} size="small" />
+                ) : (
+                  <Text style={styles.selectionDeleteLabel}>Delete Selected</Text>
+                )}
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Cancel session selection"
+                disabled={bulkDeleteMutation.isPending}
+                onPress={() => setSelectedSessionIds([])}
+              >
+                <Text style={styles.selectionCancelLabel}>Cancel</Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
+
+        {bulkDeleteError ? (
+          <View style={styles.errorCard}>
+            <MaterialCommunityIcons color={Colors.errorText} name="alert-circle-outline" size={18} />
+            <Text style={styles.errorCardText}>{bulkDeleteError}</Text>
+          </View>
+        ) : null}
 
         {historyDisabled ? (
           <View style={styles.infoCard}>
@@ -344,23 +402,14 @@ export default function ConversationHistoryScreen({
           </View>
         ) : null}
 
-        {!hasFlagData && params.flaggedOnly === 'true' ? (
-          <View style={styles.infoCard}>
-            <MaterialCommunityIcons color={Colors.textSecondary} name="information-outline" size={18} />
-            <Text style={styles.infoCardText}>
-              Safety flags are not included in the current history payload, so flagged filtering is unavailable for now.
-            </Text>
-          </View>
-        ) : null}
-
         {groupedSessions.length === 0 ? (
           <View style={styles.emptyCard}>
             <MaterialCommunityIcons color={Colors.textSecondary} name="magnify-close" size={32} />
             <Text style={styles.emptyTitle}>
-              {historyQuery.data?.sessions.length ? 'No matching conversations' : 'No saved conversations yet'}
+              {historyQuery.data?.totalCount ? 'No matching conversations' : 'No saved conversations yet'}
             </Text>
             <Text style={styles.emptyBody}>
-              {historyQuery.data?.sessions.length
+              {historyQuery.data?.totalCount
                 ? 'Try another search or switch the date range.'
                 : 'Once tutoring sessions are completed, they will show up here automatically.'}
             </Text>
@@ -372,86 +421,51 @@ export default function ConversationHistoryScreen({
 
               <View style={styles.threadList}>
                 {group.sessions.map((session) => {
-                  const expanded = expandedIds.includes(session.id);
+                  const selected = selectedSessionIds.includes(session.sessionId);
 
                   return (
-                    <View key={session.id} style={styles.threadCard}>
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={`${expanded ? 'Collapse' : 'Expand'} ${session.title}`}
-                        onPress={() => toggleExpanded(session.id)}
-                        style={({ pressed }) => [styles.threadHeader, pressed ? styles.threadHeaderPressed : null]}
-                      >
-                        <View style={styles.threadHeaderLeft}>
-                          <View style={styles.threadIconWrap}>
-                            <MaterialCommunityIcons
-                              color={session.hasSafetyFlags ? Colors.errorText : Colors.primary}
-                              name={session.hasSafetyFlags ? 'alert-outline' : 'message-text-outline'}
-                              size={18}
-                            />
-                          </View>
+                    <Pressable
+                      key={session.sessionId}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${selected ? 'Deselect' : 'Select'} ${getSessionTitle(session)}`}
+                      onLongPress={() => enterSelectionMode(session.sessionId)}
+                      onPress={() => {
+                        if (selectionMode) {
+                          toggleSelection(session.sessionId);
+                        }
+                      }}
+                      style={({ pressed }) => [
+                        styles.threadCard,
+                        selected ? styles.threadCardSelected : null,
+                        pressed ? styles.threadHeaderPressed : null,
+                      ]}
+                    >
+                      <View style={styles.threadHeader}>
+                        {selectionMode ? (
+                          <MaterialCommunityIcons
+                            color={selected ? Colors.primary : Colors.textSecondary}
+                            name={selected ? 'checkbox-marked-circle' : 'checkbox-blank-circle-outline'}
+                            size={22}
+                          />
+                        ) : null}
 
-                          <View style={styles.threadCopy}>
-                            <Text style={styles.threadTitle}>{session.title}</Text>
-                            <Text style={styles.threadMeta}>{formatSessionMeta(session)}</Text>
-                            <Text numberOfLines={2} style={styles.threadPreview}>
-                              {session.preview}
-                            </Text>
-                          </View>
+                        <View style={styles.threadIconWrap}>
+                          <MaterialCommunityIcons
+                            color={session.hasFlaggedContent ? Colors.errorText : Colors.primary}
+                            name={session.hasFlaggedContent ? 'alert-outline' : 'message-text-outline'}
+                            size={18}
+                          />
                         </View>
 
-                        <MaterialCommunityIcons
-                          color={Colors.textSecondary}
-                          name={expanded ? 'chevron-up' : 'chevron-down'}
-                          size={22}
-                        />
-                      </Pressable>
-
-                      {expanded ? (
-                        <View style={styles.messagesColumn}>
-                          {session.messages.map((message) => (
-                            <View
-                              key={message.id}
-                              style={message.sender === 'child' ? styles.childMessageGroup : styles.aiMessageGroup}
-                            >
-                              {message.safetyFlagDescription ? (
-                                <SafetyFlagAnnotation description={message.safetyFlagDescription} />
-                              ) : null}
-
-                              <View
-                                style={[
-                                  styles.messageBubble,
-                                  message.sender === 'child' ? styles.childBubble : styles.aiBubble,
-                                ]}
-                              >
-                                <Text style={styles.messageText}>{message.body}</Text>
-                              </View>
-
-                              {message.sender === 'child' ? (
-                                <Image contentFit="cover" source={getChildAvatarSource(activeChild)} style={styles.messageAvatar} />
-                              ) : null}
-                            </View>
-                          ))}
-
-                          <View style={styles.cardActions}>
-                            <Pressable
-                              accessibilityRole="button"
-                              accessibilityLabel={`Delete ${session.title}`}
-                              disabled={deleteSessionMutation.isPending}
-                              onPress={() => confirmDeleteSession(session.id, session.title)}
-                              style={({ pressed }) => [
-                                styles.deleteButton,
-                                deleteSessionMutation.isPending ? styles.filterChipDisabled : null,
-                                pressed ? styles.pressed : null,
-                              ]}
-                            >
-                              <MaterialCommunityIcons color={Colors.errorText} name="trash-can-outline" size={16} />
-                              <Text style={styles.deleteButtonLabel}>Delete Session</Text>
-                            </Pressable>
-                          </View>
+                        <View style={styles.threadCopy}>
+                          <Text style={styles.threadTitle}>{getSessionTitle(session)}</Text>
+                          <Text style={styles.threadMeta}>{formatSessionMeta(session)}</Text>
+                          <Text numberOfLines={2} style={styles.threadPreview}>
+                            {session.preview.trim() || 'No preview available.'}
+                          </Text>
                         </View>
-                      ) : null}
-                    </View>
+                      </View>
+                    </Pressable>
                   );
                 })}
               </View>
@@ -465,8 +479,31 @@ export default function ConversationHistoryScreen({
             <Text style={styles.privacyTitle}>History & Privacy</Text>
           </View>
           <Text style={styles.privacyBody}>
-            Sessions shown here come from the existing chat history endpoint. Export and bulk-delete controls stay disabled until the API supports them.
+            Search, flagged-only, and date filters are applied by the parent history endpoint.
           </Text>
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Delete all visible history"
+            disabled={sessions.length === 0 || bulkDeleteMutation.isPending}
+            onPress={handleDeleteAllVisible}
+            style={({ pressed }) => [
+              styles.linkRow,
+              sessions.length === 0 || bulkDeleteMutation.isPending ? styles.disabledSection : null,
+              pressed ? styles.pressed : null,
+            ]}
+          >
+            <View style={styles.inlineTitleRow}>
+              <MaterialCommunityIcons color={Colors.errorText} name="trash-can-outline" size={18} />
+              <Text style={styles.destructiveLabel}>Delete all history</Text>
+            </View>
+            {bulkDeleteMutation.isPending ? (
+              <ActivityIndicator color={Colors.errorText} size="small" />
+            ) : (
+              <Text style={styles.privacyLink}>{sessions.length} sessions</Text>
+            )}
+          </Pressable>
+
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Open parental controls"
@@ -490,26 +527,6 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.sm,
     paddingBottom: Spacing.xxxl + Spacing.xxl,
     gap: Spacing.md,
-  },
-  topRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: Spacing.sm,
-  },
-  parentHubTitle: {
-    ...Typography.captionMedium,
-    color: Colors.textSecondary,
-  },
-  iconButton: {
-    width: 44,
-    height: 44,
-    borderRadius: Radii.full,
-    borderWidth: 1,
-    borderColor: Colors.outline,
-    backgroundColor: Colors.surfaceContainerLowest,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   heroWrap: {
     flexDirection: 'row',
@@ -582,14 +599,42 @@ const styles = StyleSheet.create({
     borderColor: Colors.primary,
     backgroundColor: Colors.primaryFixed,
   },
-  filterChipDisabled: {
-    opacity: 0.5,
-  },
   filterChipLabel: {
     ...Typography.captionMedium,
     color: Colors.textSecondary,
   },
   filterChipLabelActive: {
+    color: Colors.primary,
+  },
+  selectionBar: {
+    borderRadius: Radii.xl,
+    borderWidth: 1,
+    borderColor: Colors.outline,
+    backgroundColor: Colors.surfaceContainerLowest,
+    padding: Spacing.md,
+    gap: Spacing.sm,
+    ...Shadows.card,
+  },
+  selectionCount: {
+    ...Typography.bodySemiBold,
+    color: Colors.text,
+  },
+  selectionActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.md,
+  },
+  selectionActionButton: {
+    minHeight: 40,
+    justifyContent: 'center',
+  },
+  selectionDeleteLabel: {
+    ...Typography.captionMedium,
+    color: Colors.errorText,
+  },
+  selectionCancelLabel: {
+    ...Typography.captionMedium,
     color: Colors.primary,
   },
   infoCard: {
@@ -603,6 +648,19 @@ const styles = StyleSheet.create({
   infoCardText: {
     ...Typography.caption,
     color: Colors.textSecondary,
+    flex: 1,
+  },
+  errorCard: {
+    borderRadius: Radii.lg,
+    backgroundColor: Colors.errorContainer,
+    padding: Spacing.md,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.sm,
+  },
+  errorCardText: {
+    ...Typography.caption,
+    color: Colors.errorText,
     flex: 1,
   },
   groupBlock: {
@@ -623,27 +681,24 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     ...Shadows.card,
   },
+  threadCardSelected: {
+    borderColor: Colors.primary,
+    backgroundColor: Colors.primaryFixed,
+  },
   threadHeader: {
     padding: Spacing.md,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: Spacing.md,
+    gap: Spacing.sm,
   },
   threadHeaderPressed: {
     backgroundColor: Colors.surfaceContainerLow,
-  },
-  threadHeaderLeft: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
   },
   threadIconWrap: {
     width: 40,
     height: 40,
     borderRadius: Radii.full,
-    backgroundColor: Colors.primaryFixed,
+    backgroundColor: Colors.surfaceContainerLow,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -662,58 +717,6 @@ const styles = StyleSheet.create({
   threadPreview: {
     ...Typography.caption,
     color: Colors.textSecondary,
-  },
-  messagesColumn: {
-    paddingHorizontal: Spacing.md,
-    paddingBottom: Spacing.md,
-    gap: Spacing.sm,
-  },
-  aiMessageGroup: {
-    alignItems: 'flex-start',
-    gap: Spacing.xs,
-  },
-  childMessageGroup: {
-    alignItems: 'flex-end',
-    gap: Spacing.xs,
-  },
-  messageBubble: {
-    maxWidth: '88%',
-    borderRadius: Radii.xl,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-  },
-  aiBubble: {
-    backgroundColor: Colors.surfaceContainerLow,
-  },
-  childBubble: {
-    backgroundColor: Colors.primaryFixed,
-  },
-  messageText: {
-    ...Typography.body,
-    color: Colors.text,
-  },
-  messageAvatar: {
-    width: 24,
-    height: 24,
-    borderRadius: Radii.full,
-  },
-  cardActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-  },
-  deleteButton: {
-    minHeight: 40,
-    borderRadius: Radii.full,
-    borderWidth: 1,
-    borderColor: Colors.errorText,
-    paddingHorizontal: Spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-  },
-  deleteButtonLabel: {
-    ...Typography.captionMedium,
-    color: Colors.errorText,
   },
   privacyCard: {
     borderRadius: Radii.xl,
@@ -736,6 +739,22 @@ const styles = StyleSheet.create({
   privacyBody: {
     ...Typography.body,
     color: Colors.textSecondary,
+  },
+  linkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
+    paddingVertical: Spacing.xs,
+  },
+  inlineTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  destructiveLabel: {
+    ...Typography.bodySemiBold,
+    color: Colors.errorText,
   },
   privacyLink: {
     ...Typography.bodySemiBold,
@@ -810,6 +829,9 @@ const styles = StyleSheet.create({
     height: 176,
     borderRadius: Radii.xl,
     backgroundColor: Colors.surfaceContainerHigh,
+  },
+  disabledSection: {
+    opacity: 0.5,
   },
   pressed: {
     transform: [{ scale: 0.99 }],

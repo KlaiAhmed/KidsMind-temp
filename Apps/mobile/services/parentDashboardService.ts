@@ -1,10 +1,13 @@
 import { apiRequest } from '@/services/apiClient';
 import type {
+  AuditEntry,
+  BulkDeleteResult,
   ChildProfile,
+  ExportResponse,
   NotificationPrefs,
   ParentHistory,
   ParentOverview,
-  ParentProgress,
+  ProgressDashboard,
 } from '@/types/child';
 
 interface AvatarDownloadApiResponse {
@@ -259,22 +262,30 @@ export async function clearConversationSession(params: {
   );
 }
 
-interface ParentOverviewStatsApiResponse {
-  total_sessions: number;
-  total_messages: number;
-  total_exercises_completed: number;
-  total_xp: number;
-  streak_days: number;
-  flagged_message_count: number;
-  last_active_at: string | null;
+interface ParentOverviewApiResponse {
+  screen_time_today_seconds?: number;
+  exercises_today?: number;
+  avg_score?: number | null;
+  daily_streak?: number;
+  streak_personal_best?: number;
+  stats?: {
+    total_exercises_completed?: number;
+    streak_days?: number;
+  };
 }
 
-interface ParentOverviewApiResponse {
-  child_id: string;
-  child_nickname: string;
-  child_xp: number;
-  child_level: number;
-  stats: ParentOverviewStatsApiResponse;
+interface ProgressSessionActivityApiResponse {
+  date: string;
+  sessions: number;
+  messages: number;
+  duration_seconds?: number;
+}
+
+interface ProgressResultApiResponse {
+  quiz_id: string;
+  score: number;
+  submitted_at: string;
+  subject: string;
 }
 
 interface DailyUsagePointApiResponse {
@@ -307,11 +318,13 @@ interface SessionMetadataApiResponse {
 }
 
 interface ParentProgressApiResponse {
-  child_id: string;
-  daily_usage: DailyUsagePointApiResponse[];
-  subject_mastery: SubjectMasteryItemApiResponse[];
-  weekly_insight: WeeklyInsightApiResponse;
-  recent_sessions: SessionMetadataApiResponse[];
+  session_activity?: ProgressSessionActivityApiResponse[];
+  results?: ProgressResultApiResponse[];
+  subject_mastery?: SubjectMasteryItemApiResponse[];
+  weekly_insight?: string | null | WeeklyInsightApiResponse;
+  child_id?: string;
+  daily_usage?: DailyUsagePointApiResponse[];
+  recent_sessions?: SessionMetadataApiResponse[];
 }
 
 interface ParentHistorySessionApiResponse {
@@ -333,77 +346,115 @@ interface ParentHistoryApiResponse {
   has_more: boolean;
 }
 
-export async function getParentOverview(childId: string): Promise<ParentOverview> {
+function numberOrZero(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+function nullableNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function normalizeWeeklyInsight(value: ParentProgressApiResponse['weekly_insight']): string | null {
+  if (typeof value === 'string') {
+    const normalized = value.trim();
+    return normalized.length > 0 ? normalized : null;
+  }
+
+  if (isRecord(value)) {
+    return normalizeOptionalString(value.summary);
+  }
+
+  return null;
+}
+
+export async function getParentOverview(
+  _userId: number | string,
+  childId: string,
+): Promise<ParentOverview> {
   const response = await apiRequest<ParentOverviewApiResponse>(
     `/api/v1/children/${encodeURIComponent(childId)}/dashboard/overview`,
     { method: 'GET' },
   );
+  const stats = isRecord(response.stats) ? response.stats : {};
+  const dailyStreak = numberOrZero(response.daily_streak ?? stats.streak_days);
 
   return {
-    childId: response.child_id,
-    childNickname: response.child_nickname,
-    childXp: response.child_xp,
-    childLevel: response.child_level,
-    stats: {
-      totalSessions: response.stats.total_sessions,
-      totalMessages: response.stats.total_messages,
-      totalExercisesCompleted: response.stats.total_exercises_completed,
-      totalXp: response.stats.total_xp,
-      streakDays: response.stats.streak_days,
-      flaggedMessageCount: response.stats.flagged_message_count,
-      lastActiveAt: response.stats.last_active_at,
-    },
+    screenTimeTodaySeconds: numberOrZero(response.screen_time_today_seconds),
+    exercisesToday: numberOrZero(response.exercises_today ?? stats.total_exercises_completed),
+    avgScore: nullableNumber(response.avg_score),
+    dailyStreak,
+    streakPersonalBest: numberOrZero(response.streak_personal_best ?? dailyStreak),
   };
 }
 
-export async function getParentProgress(childId: string): Promise<ParentProgress> {
+export async function getParentProgress(
+  _userId: number | string,
+  childId: string,
+): Promise<ProgressDashboard> {
   const response = await apiRequest<ParentProgressApiResponse>(
     `/api/v1/children/${encodeURIComponent(childId)}/dashboard/progress`,
     { method: 'GET' },
   );
+  const sessionActivity = Array.isArray(response.session_activity)
+    ? response.session_activity
+    : (response.daily_usage ?? []).map((entry) => ({
+        date: entry.date,
+        sessions: entry.sessions,
+        messages: entry.messages,
+        duration_seconds: 0,
+      }));
 
   return {
-    childId: response.child_id,
-    dailyUsage: response.daily_usage.map((d) => ({
+    sessionActivity: sessionActivity.map((d) => ({
       date: d.date,
-      sessions: d.sessions,
-      messages: d.messages,
-      xpGained: d.xp_gained,
+      sessions: numberOrZero(d.sessions),
+      messages: numberOrZero(d.messages),
+      durationSeconds: numberOrZero(d.duration_seconds),
     })),
-    subjectMastery: response.subject_mastery.map((s) => ({
+    results: (response.results ?? []).map((result) => ({
+      quizId: result.quiz_id,
+      score: numberOrZero(result.score),
+      submittedAt: result.submitted_at,
+      subject: result.subject,
+    })),
+    subjectMastery: (response.subject_mastery ?? []).map((s) => ({
       subject: s.subject,
-      sessions: s.sessions,
-      messages: s.messages,
-      xp: s.xp,
+      sessions: numberOrZero(s.sessions),
+      messages: numberOrZero(s.messages),
+      xp: numberOrZero(s.xp),
     })),
-    weeklyInsight: {
-      summary: response.weekly_insight.summary,
-      topSubject: response.weekly_insight.top_subject,
-      engagementLevel: response.weekly_insight.engagement_level,
-    },
-    recentSessions: response.recent_sessions.map((s) => ({
-      sessionId: s.session_id,
-      startedAt: s.started_at,
-      endedAt: s.ended_at,
-      messageCount: s.message_count,
-      hasFlaggedContent: s.has_flagged_content,
-      subjects: s.subjects,
-    })),
+    weeklyInsight: normalizeWeeklyInsight(response.weekly_insight),
   };
 }
 
-export async function getParentHistory(params: {
-  childId: string;
-  flaggedOnly?: boolean;
-  limit?: number;
-  offset?: number;
-  dateFrom?: string;
-  dateTo?: string;
-}): Promise<ParentHistory> {
+export async function getParentHistory(
+  _userId: number | string,
+  childId: string,
+  params: {
+    flaggedOnly?: boolean;
+    limit?: number;
+    offset?: number;
+    search?: string;
+    days?: 7 | 30;
+    dateFrom?: string;
+    dateTo?: string;
+  } = {},
+): Promise<ParentHistory> {
   const searchParams = new URLSearchParams();
 
   if (params.flaggedOnly) {
     searchParams.set('flagged_only', 'true');
+  }
+  if (params.search) {
+    searchParams.set('search', params.search);
+  }
+  if (params.days != null) {
+    searchParams.set('days', `${params.days}`);
+    const dateFrom = new Date();
+    dateFrom.setDate(dateFrom.getDate() - (params.days - 1));
+    dateFrom.setHours(0, 0, 0, 0);
+    searchParams.set('date_from', dateFrom.toISOString());
+    searchParams.set('date_to', new Date().toISOString());
   }
   if (params.limit != null) {
     searchParams.set('limit', `${params.limit}`);
@@ -419,7 +470,7 @@ export async function getParentHistory(params: {
   }
 
   const qs = searchParams.toString();
-  const url = `/api/v1/children/${encodeURIComponent(params.childId)}/dashboard/history${qs ? `?${qs}` : ''}`;
+  const url = `/api/v1/children/${encodeURIComponent(childId)}/dashboard/history${qs ? `?${qs}` : ''}`;
 
   const response = await apiRequest<ParentHistoryApiResponse>(url, { method: 'GET' });
 
@@ -447,9 +498,10 @@ interface BulkDeleteApiResponse {
 }
 
 export async function bulkDeleteSessions(
+  _userId: number | string,
   childId: string,
   sessionIds: string[],
-): Promise<import('@/types/child').BulkDeleteResult> {
+): Promise<BulkDeleteResult> {
   const response = await apiRequest<BulkDeleteApiResponse>(
     `/api/v1/children/${encodeURIComponent(childId)}/dashboard/history/bulk-delete`,
     {
@@ -465,26 +517,36 @@ export async function bulkDeleteSessions(
 }
 
 interface HistoryExportApiResponse {
-  child_id: string;
-  export_format: string;
-  download_url: string | null;
-  total_sessions: number;
-  total_messages: number;
+  child_id?: string;
+  export_format?: string;
+  download_url?: string | null;
+  url?: string | null;
+  total_sessions?: number;
+  total_messages?: number;
 }
 
 export async function exportHistory(
+  _userId: number | string,
   childId: string,
   exportFormat: string = 'json',
-): Promise<import('@/types/child').HistoryExport> {
-  const response = await apiRequest<HistoryExportApiResponse>(
+): Promise<ExportResponse> {
+  const response = await apiRequest<HistoryExportApiResponse | string>(
     `/api/v1/children/${encodeURIComponent(childId)}/dashboard/history/export?export_format=${encodeURIComponent(exportFormat)}`,
     { method: 'GET' },
   );
 
+  if (typeof response === 'string') {
+    return {
+      childId,
+      url: normalizeOptionalString(response),
+      exportFormat,
+    };
+  }
+
   return {
-    childId: response.child_id,
-    exportFormat: response.export_format,
-    downloadUrl: response.download_url,
+    childId: response.child_id ?? childId,
+    url: normalizeOptionalString(response.url) ?? normalizeOptionalString(response.download_url),
+    exportFormat: response.export_format ?? exportFormat,
     totalSessions: response.total_sessions,
     totalMessages: response.total_messages,
   };
@@ -514,69 +576,62 @@ export async function resumeChild(childId: string): Promise<import('@/types/chil
 }
 
 interface NotificationPrefsApiResponse {
-  daily_summary_enabled: boolean;
-  safety_alerts_enabled: boolean;
-  weekly_report_enabled: boolean;
-  session_start_enabled: boolean;
-  session_end_enabled: boolean;
-  streak_milestone_enabled: boolean;
-  email_channel: boolean;
-  push_channel: boolean;
+  limitAlerts?: boolean;
+  flaggedContentAlerts?: boolean;
+  limit_alerts?: boolean;
+  flagged_content_alerts?: boolean;
+  daily_summary_enabled?: boolean;
+  safety_alerts_enabled?: boolean;
 }
 
-export async function getNotificationPrefs(): Promise<import('@/types/child').NotificationPrefs> {
+function normalizeNotificationPrefs(response: NotificationPrefsApiResponse): NotificationPrefs {
+  return {
+    limitAlerts: Boolean(response.limitAlerts ?? response.limit_alerts ?? response.daily_summary_enabled),
+    flaggedContentAlerts: Boolean(
+      response.flaggedContentAlerts ?? response.flagged_content_alerts ?? response.safety_alerts_enabled,
+    ),
+  };
+}
+
+export async function getNotificationPrefs(
+  _userId: number | string,
+): Promise<NotificationPrefs> {
   const response = await apiRequest<NotificationPrefsApiResponse>(
     '/api/v1/children/dashboard/notification-prefs',
     { method: 'GET' },
   );
 
-  return {
-    dailySummaryEnabled: response.daily_summary_enabled,
-    safetyAlertsEnabled: response.safety_alerts_enabled,
-    weeklyReportEnabled: response.weekly_report_enabled,
-    sessionStartEnabled: response.session_start_enabled,
-    sessionEndEnabled: response.session_end_enabled,
-    streakMilestoneEnabled: response.streak_milestone_enabled,
-    emailChannel: response.email_channel,
-    pushChannel: response.push_channel,
-  };
+  return normalizeNotificationPrefs(response);
 }
 
 export async function updateNotificationPrefs(
-  input: import('@/types/child').NotificationPrefsUpdate,
-): Promise<import('@/types/child').NotificationPrefs> {
+  _userId: number | string,
+  input: Partial<NotificationPrefs>,
+): Promise<NotificationPrefs> {
   const body: Record<string, boolean> = {};
-  if (input.dailySummaryEnabled != null) body.daily_summary_enabled = input.dailySummaryEnabled;
-  if (input.safetyAlertsEnabled != null) body.safety_alerts_enabled = input.safetyAlertsEnabled;
-  if (input.weeklyReportEnabled != null) body.weekly_report_enabled = input.weeklyReportEnabled;
-  if (input.sessionStartEnabled != null) body.session_start_enabled = input.sessionStartEnabled;
-  if (input.sessionEndEnabled != null) body.session_end_enabled = input.sessionEndEnabled;
-  if (input.streakMilestoneEnabled != null) body.streak_milestone_enabled = input.streakMilestoneEnabled;
-  if (input.emailChannel != null) body.email_channel = input.emailChannel;
-  if (input.pushChannel != null) body.push_channel = input.pushChannel;
+  if (input.limitAlerts != null) {
+    body.limitAlerts = input.limitAlerts;
+    body.daily_summary_enabled = input.limitAlerts;
+  }
+  if (input.flaggedContentAlerts != null) {
+    body.flaggedContentAlerts = input.flaggedContentAlerts;
+    body.safety_alerts_enabled = input.flaggedContentAlerts;
+  }
 
   const response = await apiRequest<NotificationPrefsApiResponse>(
     '/api/v1/children/dashboard/notification-prefs',
     { method: 'PATCH', body },
   );
 
-  return {
-    dailySummaryEnabled: response.daily_summary_enabled,
-    safetyAlertsEnabled: response.safety_alerts_enabled,
-    weeklyReportEnabled: response.weekly_report_enabled,
-    sessionStartEnabled: response.session_start_enabled,
-    sessionEndEnabled: response.session_end_enabled,
-    streakMilestoneEnabled: response.streak_milestone_enabled,
-    emailChannel: response.email_channel,
-    pushChannel: response.push_channel,
-  };
+  return normalizeNotificationPrefs(response);
 }
 
 interface ControlAuditEntryApiResponse {
   action: string;
-  actor_id: string;
-  target_child_id: string;
-  detail: string;
+  actor_id?: string;
+  target_child_id?: string;
+  detail?: string | null;
+  details?: string | null;
   timestamp: string | null;
 }
 
@@ -587,11 +642,14 @@ interface ControlAuditApiResponse {
   offset: number;
 }
 
-export async function getControlAudit(params?: {
-  childId?: string;
-  limit?: number;
-  offset?: number;
-}): Promise<import('@/types/child').ControlAuditLog> {
+export async function getControlAudit(
+  _userId: number | string,
+  params?: {
+    childId?: string;
+    limit?: number;
+    offset?: number;
+  },
+): Promise<AuditEntry[]> {
   const searchParams = new URLSearchParams();
   if (params?.childId) searchParams.set('child_id', params.childId);
   if (params?.limit != null) searchParams.set('limit', `${params.limit}`);
@@ -600,18 +658,12 @@ export async function getControlAudit(params?: {
   const qs = searchParams.toString();
   const url = `/api/v1/children/dashboard/control-audit${qs ? `?${qs}` : ''}`;
 
-  const response = await apiRequest<ControlAuditApiResponse>(url, { method: 'GET' });
+  const response = await apiRequest<ControlAuditApiResponse | ControlAuditEntryApiResponse[]>(url, { method: 'GET' });
+  const entries = Array.isArray(response) ? response : response.entries;
 
-  return {
-    entries: response.entries.map((e) => ({
-      action: e.action,
-      actorId: e.actor_id,
-      targetChildId: e.target_child_id,
-      detail: e.detail,
-      timestamp: e.timestamp,
-    })),
-    totalCount: response.total_count,
-    limit: response.limit,
-    offset: response.offset,
-  };
+  return entries.map((entry) => ({
+    action: entry.action,
+    details: normalizeOptionalString(entry.details) ?? normalizeOptionalString(entry.detail),
+    timestamp: entry.timestamp,
+  }));
 }
