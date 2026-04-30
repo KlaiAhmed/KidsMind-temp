@@ -14,6 +14,7 @@ export interface Message {
   content: string;
   safetyFlags: SafetyFlag[];
   createdAt: string;
+  triggeredBy?: string;
 }
 
 export interface Session {
@@ -81,6 +82,16 @@ export interface ChatQuizQuestion {
   options: string[] | null;
   answer: string;
   explanation: string;
+  userAnswer?: string;
+  isCorrect?: boolean;
+  xpEarned?: number;
+}
+
+export interface QuizSummary {
+  correctCount: number;
+  totalQuestions: number;
+  totalXp: number;
+  scorePercentage: number;
 }
 
 export interface ChatQuizResponse {

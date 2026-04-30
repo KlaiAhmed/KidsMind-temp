@@ -6,6 +6,7 @@ import type {
   ChatQuizResponse,
   ChatRequestPayload,
   QuizRequestPayload,
+  QuizSummary,
   Session,
 } from '@/types/chat';
 
@@ -250,6 +251,64 @@ export async function sendChatMessage(payload: ChatRequestPayload): Promise<Chat
       ? normalizedResponse.safety_flags.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
       : [],
     createdAt: new Date().toISOString(),
+  };
+}
+
+interface QuizSubmitAnswer {
+  question_id: number;
+  answer: string;
+}
+
+interface QuizSubmitPayload {
+  quiz_id: string;
+  answers: QuizSubmitAnswer[];
+  duration_seconds?: number;
+  subject?: string;
+}
+
+interface QuizSubmitApiResponse {
+  correct_count?: unknown;
+  total_questions?: unknown;
+  score_percentage?: unknown;
+  gamification?: unknown;
+  newly_earned_badges?: unknown;
+}
+
+export async function submitQuizAnswers(
+  childId: string,
+  payload: QuizSubmitPayload,
+): Promise<QuizSummary> {
+  const response = await apiRequest<QuizSubmitApiResponse>(
+    `/api/v1/quizzes/${encodeURIComponent(childId)}/submit`,
+    {
+      method: 'POST',
+      body: {
+        quiz_id: payload.quiz_id,
+        answers: payload.answers,
+        duration_seconds: payload.duration_seconds,
+        subject: payload.subject,
+      },
+    },
+  );
+
+  const correctCount =
+    typeof response.correct_count === 'number' ? response.correct_count : 0;
+  const totalQuestions =
+    typeof response.total_questions === 'number' ? response.total_questions : 0;
+  const scorePercentage =
+    typeof response.score_percentage === 'number' ? response.score_percentage : 0;
+
+  const gamification = response.gamification as Record<string, unknown> | undefined;
+  const xpAwarded =
+    gamification && typeof gamification.xp_awarded === 'number'
+      ? gamification.xp_awarded
+      : correctCount * 10;
+
+  return {
+    correctCount,
+    totalQuestions,
+    totalXp: xpAwarded,
+    scorePercentage,
   };
 }
 

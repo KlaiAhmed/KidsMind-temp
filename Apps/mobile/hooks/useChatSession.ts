@@ -4,26 +4,38 @@ import {
   sendChatMessage,
   sendQuizRequest as requestQuiz,
   startChatSession,
+  submitQuizAnswers,
 } from '@/services/chatService';
 import { transcribeVoiceRecording } from '@/services/voiceService';
 import type { AgeGroup } from '@/types/child';
 import type {
   ChatInputSource,
+  ChatQuizQuestion,
   ChatQuizResponse,
   ChatState,
   ConversationContextEntry,
   Message,
   QuizLevel,
+  QuizSummary,
   Session,
 } from '@/types/chat';
 
 const MAX_CONTEXT_MESSAGES = 20;
 const MIN_TYPING_INDICATOR_MS = 500;
+const XP_PER_CORRECT = 10;
 
 interface SubjectContext {
   subjectId?: string;
   subjectName?: string;
   topicId?: string;
+}
+
+interface ActiveQuizState {
+  quizId: string;
+  subject: string;
+  questions: ChatQuizQuestion[];
+  answeredQuestionIds: Set<number>;
+  startedAt: number;
 }
 
 interface UseChatSessionOptions {
@@ -32,6 +44,7 @@ interface UseChatSessionOptions {
   gradeLevel: string;
   subjectContext?: SubjectContext;
   dailyLimitMinutes?: number;
+  onQuizComplete?: (summary: QuizSummary) => void;
 }
 
 interface UseChatSessionResult {
@@ -42,10 +55,14 @@ interface UseChatSessionResult {
   startSession: () => Promise<Session | null>;
   endSession: () => Promise<void>;
   sendMessage: (text: string, inputSource?: ChatInputSource) => Promise<void>;
+  retryMessage: (aiMessageId: string) => Promise<void>;
   sendQuizRequest: (topic: string) => Promise<void>;
+  submitQuizAnswer: (questionId: number, answer: string) => void;
+  resetQuizMode: () => void;
   transcribeRecording: (audioUri: string) => Promise<string>;
   setInputText: (text: string) => void;
   clearError: () => void;
+  onQuizSummaryDismissed?: () => void;
 }
 
 function waitMs(durationMs: number): Promise<void> {
@@ -94,15 +111,6 @@ function getQuizLevel(ageGroup: AgeGroup): QuizLevel {
   return 'medium';
 }
 
-function formatQuizResponse(response: ChatQuizResponse): string {
-  const questionLines = response.questions.map((question, index) => {
-    const options = question.options?.length ? `\n${question.options.map((option) => `- ${option}`).join('\n')}` : '';
-    return `${index + 1}. ${question.prompt}${options}`;
-  });
-
-  return [`Quiz: ${response.topic}`, response.intro, ...questionLines].filter(Boolean).join('\n\n');
-}
-
 function buildInitialChatState(): ChatState {
   return {
     sessionId: null,
@@ -115,12 +123,22 @@ function buildInitialChatState(): ChatState {
   };
 }
 
+function normalizeAnswerForComparison(answer: string, questionType: string): string {
+  const normalized = answer.trim().toLowerCase();
+  if (questionType === 'true_false') {
+    if (['true', 'vrai', 'yes', 'oui', '1', 'correct'].includes(normalized)) return 'true';
+    if (['false', 'faux', 'no', 'non', '0', 'incorrect', 'wrong'].includes(normalized)) return 'false';
+  }
+  return normalized;
+}
+
 export function useChatSession({
   childId,
   ageGroup,
   gradeLevel,
   subjectContext,
   dailyLimitMinutes,
+  onQuizComplete,
 }: UseChatSessionOptions): UseChatSessionResult {
   const [state, setState] = useState<ChatState>(buildInitialChatState);
   const [session, setSession] = useState<Session | null>(null);
@@ -130,6 +148,7 @@ export function useChatSession({
   const sessionRef = useRef<Session | null>(null);
   const messagesRef = useRef<Message[]>([]);
   const endingRef = useRef<boolean>(false);
+  const activeQuizRef = useRef<ActiveQuizState | null>(null);
 
   useEffect(() => {
     return () => {
@@ -323,14 +342,15 @@ export function useChatSession({
           return;
         }
 
-        const aiMessage: Message = {
-          id: response.messageId,
-          sessionId: activeSession.id,
-          sender: 'ai',
-          content: response.content,
-          safetyFlags: response.safetyFlags,
-          createdAt: response.createdAt,
-        };
+      const aiMessage: Message = {
+        id: response.quizId,
+        sessionId: activeSession.id,
+        sender: 'ai',
+        content: formatQuizResponse(response),
+        safetyFlags: [],
+        createdAt: new Date().toISOString(),
+        triggeredBy: optimisticMessage.id,
+      };
 
         const nextMessages = [...messagesRef.current, aiMessage];
         messagesRef.current = nextMessages;
@@ -359,6 +379,145 @@ export function useChatSession({
       }
     },
     [ageGroup, childId, gradeLevel, startSession, subjectContext?.subjectId, subjectContext?.subjectName, subjectContext?.topicId]
+  );
+
+  const buildAndAppendSummaryMessage = useCallback(
+    (quizState: ActiveQuizState) => {
+      const questions = quizState.questions;
+      const answeredIds = quizState.answeredQuestionIds;
+      let correctCount = 0;
+      let totalXp = 0;
+
+      for (const q of questions) {
+        if (!answeredIds.has(q.id)) continue;
+        if (q.isCorrect) {
+          correctCount++;
+          totalXp += q.xpEarned ?? XP_PER_CORRECT;
+        }
+      }
+
+      const totalAnswered = answeredIds.size;
+      const totalQuestions = questions.length;
+
+      if (totalAnswered < totalQuestions) return;
+
+      const summary: QuizSummary = {
+        correctCount,
+        totalQuestions,
+        totalXp,
+        scorePercentage: totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0,
+      };
+
+      const activeSession = sessionRef.current;
+      if (!activeSession) return;
+
+  const summaryMessage: Message = {
+    id: `quiz-summary-${quizState.quizId}`,
+    sessionId: activeSession.id,
+    sender: 'ai',
+    content: '',
+    quizScore: summary,
+    safetyFlags: [],
+    createdAt: new Date().toISOString(),
+    triggeredBy: optimisticMessage.id,
+  };
+
+      const nextMessages = [...messagesRef.current, summaryMessage];
+      messagesRef.current = nextMessages;
+
+      setState((current) => ({
+        ...current,
+        messages: nextMessages,
+      }));
+
+      if (onQuizComplete) {
+        onQuizComplete(summary);
+      }
+    },
+    [onQuizComplete],
+  );
+
+  const submitQuizAnswer = useCallback(
+    (questionId: number, answer: string) => {
+      const quiz = activeQuizRef.current;
+      if (!quiz || quiz.answeredQuestionIds.has(questionId)) return;
+
+      const question = quiz.questions.find((q) => q.id === questionId);
+      if (!question) return;
+
+      const isCorrect =
+        normalizeAnswerForComparison(answer, question.type) ===
+        normalizeAnswerForComparison(question.answer, question.type);
+
+      const xpEarned = isCorrect ? XP_PER_CORRECT : 0;
+
+      const updatedQuestion: ChatQuizQuestion = {
+        ...question,
+        userAnswer: answer,
+        isCorrect,
+        xpEarned,
+      };
+
+      quiz.questions = quiz.questions.map((q) => (q.id === questionId ? updatedQuestion : q));
+      quiz.answeredQuestionIds.add(questionId);
+
+      setState((current) => {
+        const nextMessages = current.messages.map((msg) => {
+          if (!msg.quiz) return msg;
+          const hasQuestion = msg.quiz.some((q) => q.id === questionId);
+          if (!hasQuestion) return msg;
+          return {
+            ...msg,
+            quiz: msg.quiz.map((q) => (q.id === questionId ? updatedQuestion : q)),
+          };
+        });
+        messagesRef.current = nextMessages;
+        return { ...current, messages: nextMessages };
+      });
+
+      const allAnswered = quiz.answeredQuestionIds.size >= quiz.questions.length;
+      if (allAnswered) {
+        buildAndAppendSummaryMessage(quiz);
+
+        const currentQuiz = quiz;
+        if (childId) {
+          void submitQuizAnswers(childId, {
+            quiz_id: currentQuiz.quizId,
+            answers: currentQuiz.questions
+          .filter((q) => q.userAnswer !== undefined)
+          .map((q) => ({ question_id: q.id, answer: q.userAnswer! })),
+            duration_seconds: (Date.now() - currentQuiz.startedAt) / 1000,
+            subject: currentQuiz.subject,
+          }).catch(() => undefined);
+        }
+      }
+    },
+    [buildAndAppendSummaryMessage, childId],
+  );
+
+  const retryMessage = useCallback(
+    async (aiMessageId: string) => {
+      const currentMessages = messagesRef.current;
+      const aiIndex = currentMessages.findIndex((m) => m.id === aiMessageId);
+      if (aiIndex === -1) return;
+
+      const aiMsg = currentMessages[aiIndex];
+      if (aiMsg.sender !== 'ai' || !aiMsg.triggeredBy) return;
+
+      const childMsg = currentMessages.find((m) => m.id === aiMsg.triggeredBy);
+      if (!childMsg) return;
+
+      const filtered = currentMessages.filter((m) => m.id !== aiMessageId);
+      messagesRef.current = filtered;
+
+      setState((current) => ({
+        ...current,
+        messages: filtered,
+      }));
+
+      await sendMessage(childMsg.content, 'keyboard');
+    },
+    [sendMessage],
   );
 
   const sendQuizRequest = useCallback(
@@ -428,14 +587,24 @@ export function useChatSession({
           return;
         }
 
-        const aiMessage: Message = {
-          id: response.quizId,
-          sessionId: activeSession.id,
-          sender: 'ai',
-          content: formatQuizResponse(response),
-          safetyFlags: [],
-          createdAt: new Date().toISOString(),
+        activeQuizRef.current = {
+          quizId: response.quizId,
+          subject: response.subject,
+          questions: response.questions.map((q) => ({ ...q })),
+          answeredQuestionIds: new Set(),
+          startedAt: Date.now(),
         };
+
+  const aiMessage: Message = {
+    id: response.quizId,
+    sessionId: activeSession.id,
+    sender: 'ai',
+    content: response.intro,
+    quiz: response.questions.map((q) => ({ ...q })),
+    safetyFlags: [],
+    createdAt: new Date().toISOString(),
+    triggeredBy: optimisticMessage.id,
+  };
 
         const nextMessages = [...messagesRef.current, aiMessage];
         messagesRef.current = nextMessages;
@@ -466,6 +635,10 @@ export function useChatSession({
     [ageGroup, childId, gradeLevel, startSession, subjectContext?.subjectId, subjectContext?.subjectName, subjectContext?.topicId]
   );
 
+  const resetQuizMode = useCallback(() => {
+    activeQuizRef.current = null;
+  }, []);
+
   const transcribeRecording = useCallback(
     async (audioUri: string): Promise<string> => {
       if (!childId) {
@@ -495,6 +668,7 @@ export function useChatSession({
       setState(buildInitialChatState());
       setElapsedSeconds(0);
       endingRef.current = false;
+      activeQuizRef.current = null;
       return;
     }
 
@@ -537,7 +711,10 @@ export function useChatSession({
     startSession,
     endSession,
     sendMessage,
+    retryMessage,
     sendQuizRequest,
+    submitQuizAnswer,
+    resetQuizMode,
     transcribeRecording,
     setInputText,
     clearError,

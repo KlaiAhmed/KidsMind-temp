@@ -57,6 +57,7 @@ export interface User {
   username?: string;
   fullName?: string;
   pinConfigured: boolean;
+  timezone?: string | null;
 }
 
 const BOOTSTRAP_TIMEOUT_MS = 15000;
@@ -103,6 +104,7 @@ interface AuthContextValue extends SessionAuthState, ChildState {
   refreshChildData: (preferredChildId?: string | null) => Promise<void>;
   markSubjectAccess: (subjectId: string) => void;
   completeTopic: (topicId: string) => void;
+  addQuizXp: (xpAmount: number) => void;
 }
 
 // ─── Context ──────────────────────────────────────────────────────
@@ -297,6 +299,7 @@ function toUser(authUser: AuthUser): User {
     username: authUser.username,
     fullName: authUser.fullName,
     pinConfigured: Boolean(authUser.pin_configured),
+    timezone: authUser.timezone ?? null,
   };
 }
 
@@ -649,7 +652,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     const nextPinConfigured = currentUserSummaryQuery.data.pin_configured;
-    if (sessionUser && sessionUser.pin_configured === nextPinConfigured) {
+    const nextTimezone = currentUserSummaryQuery.data.timezone ?? null;
+    const pinUnchanged = sessionUser && sessionUser.pin_configured === nextPinConfigured;
+    const timezoneUnchanged = sessionUser && sessionUser.timezone === nextTimezone;
+
+    if (pinUnchanged && timezoneUnchanged) {
       return;
     }
 
@@ -659,12 +666,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             ...sessionUser,
             username: currentUserSummaryQuery.data.username,
             pin_configured: nextPinConfigured,
+            timezone: nextTimezone,
           }
         : {
             id: currentUserSummaryQuery.data.id,
             email: currentUserSummaryQuery.data.email,
             username: currentUserSummaryQuery.data.username,
             pin_configured: nextPinConfigured,
+            timezone: nextTimezone,
           }
     );
   }, [currentUserSummaryQuery.data, sessionUser, setUser]);
@@ -972,10 +981,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         childProfile: updatedChildProfile,
         recentActivity: [nextActivity, ...current.recentActivity].slice(0, 10),
       };
-    });
-  }, []);
+});
+}, []);
 
-  return (
+const addQuizXp = useCallback((xpAmount: number) => {
+  if (xpAmount <= 0) return;
+
+  setChildState((current) => {
+    if (!current.childProfile) return current;
+
+    const nextXp = current.childProfile.xp + xpAmount;
+    const { level, xpToNextLevel } = buildLevelProgress(nextXp);
+    const nextProfile = {
+      ...current.childProfile,
+      xp: nextXp,
+      level,
+      xpToNextLevel,
+      totalExercisesCompleted: current.childProfile.totalExercisesCompleted + 1,
+    };
+
+    return {
+      ...current,
+      childProfiles: current.childProfiles.map((p) =>
+        p.id === nextProfile.id ? nextProfile : p,
+      ),
+      childProfile: nextProfile,
+    };
+  });
+}, []);
+
+return (
     <AuthContext.Provider
       value={{
         isLoading,
@@ -1001,6 +1036,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         refreshChildData,
         markSubjectAccess,
         completeTopic,
+        addQuizXp,
       }}
     >
       {children}

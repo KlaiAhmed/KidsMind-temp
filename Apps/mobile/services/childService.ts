@@ -57,6 +57,8 @@ interface ChildProfileApiResponse {
   rules: ChildRulesApiResponse | null;
   allowed_subjects: string[];
   week_schedule: ChildWeekScheduleApiResponse[];
+  screen_time_today_seconds?: number;
+  timezone?: string | null;
   created_at: string;
   updated_at: string;
   age: number;
@@ -443,6 +445,10 @@ function normalizeChildProfile(data: ChildProfileApiResponse): ChildProfile {
     streakDays: 0,
     dailyGoalMinutes,
     dailyCompletedMinutes: 0,
+    todayUsageSeconds: typeof data.screen_time_today_seconds === 'number' && data.screen_time_today_seconds >= 0
+      ? data.screen_time_today_seconds
+      : 0,
+    timezone: normalizeOptionalString(data.timezone),
     totalSubjectsExplored: subjectIds.length,
     totalExercisesCompleted: 0,
     totalBadgesEarned: 0,

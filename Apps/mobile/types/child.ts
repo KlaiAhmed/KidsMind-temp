@@ -82,6 +82,8 @@ export interface ChildProfile {
   streakDays: number;
   dailyGoalMinutes: number;
   dailyCompletedMinutes: number;
+  todayUsageSeconds: number;
+  timezone: string | null;
   totalSubjectsExplored: number;
   totalExercisesCompleted: number;
   totalBadgesEarned: number;
@@ -247,6 +249,27 @@ export interface ChildPauseState {
   childId: string;
   isPaused: boolean;
 }
+
+export type SessionGateStatus =
+  | 'ACTIVE'
+  | 'EXCEEDED_DURATION'
+  | 'OUTSIDE_WINDOW'
+  | 'NO_ACCESS_TODAY'
+  | 'NO_SCHEDULE';
+
+export interface AccessWindowSlot {
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  dailyCapSeconds: number;
+}
+
+export type SessionGateState =
+  | { status: 'ACTIVE' }
+  | { status: 'EXCEEDED_DURATION'; dailyCapSeconds: number; todayUsageSeconds: number }
+  | { status: 'OUTSIDE_WINDOW'; nextStart: string; nextDayName: string | null; secondsUntilStart: number }
+  | { status: 'NO_ACCESS_TODAY'; nextDay: string; nextStart: string }
+  | { status: 'NO_SCHEDULE' };
 
 export interface NotificationPrefs {
   limitAlerts: boolean;

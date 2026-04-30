@@ -14,6 +14,7 @@ import * as Haptics from 'expo-haptics';
 import { ChildBottomNavContainer } from '@/components/navigation/ChildBottomNavContainer';
 import { Colors } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
+import { useChildSessionGate } from '@/hooks/useChildSessionGate';
 import { verifyParentPin } from '@/services/parentAccessService';
 import { showToast } from '@/services/toastClient';
 import { ChildSpaceBoundaryProvider } from '@/src/components/spaceSwitch/ChildSpaceBoundary';
@@ -62,6 +63,12 @@ export default function ChildTabLayout() {
     selectChild,
     user,
   } = useAuth();
+
+  const { gateState } = useChildSessionGate(childProfile?.id ?? null, {
+    weekSchedule: childProfile?.rules?.weekSchedule ?? null,
+    todayUsageSeconds: childProfile?.todayUsageSeconds,
+    timeZone: childProfile?.timezone ?? null,
+  });
 
   const params = useLocalSearchParams<{ childId?: string }>();
   const routeChildId = typeof params.childId === 'string' ? params.childId.trim() : '';
@@ -197,6 +204,7 @@ export default function ChildTabLayout() {
             childId={childProfile?.id ?? null}
             ageGroup={childProfile?.ageGroup}
             voiceEnabled={Boolean(childProfile?.rules?.voiceModeEnabled)}
+            gateState={gateState}
           />
         )}
       >

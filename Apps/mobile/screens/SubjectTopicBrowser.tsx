@@ -12,7 +12,7 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { SessionGateOverlay } from '@/components/session/SessionGateOverlay';
+import { GateMessageScreen } from '@/components/session/GateMessageScreen';
 import { Colors, Radii, Spacing, Typography } from '@/constants/theme';
 import { SearchBar } from '@/components/browser/SearchBar';
 import { SubjectCard } from '@/components/browser/SubjectCard';
@@ -54,21 +54,19 @@ export default function SubjectTopicBrowser() {
   const insets = useSafeAreaInsets();
   const { profile } = useChildProfile();
   const childTabSceneBottomPadding = getChildTabSceneBottomPadding(insets.bottom);
-  const { isSessionActive, nextSessionTimeLabel } = useChildSessionGate(profile?.id ?? null, {
+  const { gateState } = useChildSessionGate(profile?.id ?? null, {
     weekSchedule: profile?.rules?.weekSchedule ?? null,
+    todayUsageSeconds: profile?.todayUsageSeconds,
+    timeZone: profile?.timezone ?? null,
   });
 
-  if (!isSessionActive) {
+  if (gateState.status !== 'ACTIVE') {
     return (
-      <SessionGateOverlay
-        illustration="🕐"
-        title="Not available right now"
-        subtitle={
-          nextSessionTimeLabel
-            ? `Come back at ${nextSessionTimeLabel} to keep learning!`
-            : 'Come back when your learning time opens to keep learning!'
-        }
+      <GateMessageScreen
+        gateState={gateState}
+        childName={profile?.nickname ?? profile?.name ?? undefined}
         bottomPadding={childTabSceneBottomPadding}
+        variant="learn"
       />
     );
   }

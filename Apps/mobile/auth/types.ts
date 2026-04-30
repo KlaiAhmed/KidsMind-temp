@@ -4,6 +4,7 @@ export interface AuthUser {
   username?: string;
   fullName?: string;
   pin_configured: boolean;
+  timezone?: string | null;
 }
 
 export interface LoginRequest {
@@ -43,6 +44,7 @@ export interface UserSummaryResponse {
   is_verified: boolean;
   is_active: boolean;
   pin_configured: boolean;
+  timezone?: string | null;
 }
 
 export interface ParentPinSetupResponse {

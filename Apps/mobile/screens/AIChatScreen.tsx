@@ -1,5 +1,4 @@
-// Apps/mobile/screens/AIChatScreen.tsx
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   FlatList,
   KeyboardAvoidingView,
@@ -19,13 +18,14 @@ import { Colors, Radii, Spacing, Typography } from '@/constants/theme';
 import { ChatInput } from '@/components/chat/ChatInput';
 import { MessageBubble } from '@/components/chat/MessageBubble';
 import { SessionHeader } from '@/components/chat/SessionHeader';
-import { SessionGateOverlay } from '@/components/session/SessionGateOverlay';
+import { GateMessageScreen } from '@/components/session/GateMessageScreen';
 import { useChatSession } from '@/hooks/useChatSession';
 import { useChildProfile } from '@/hooks/useChildProfile';
 import { useChildSessionGate } from '@/hooks/useChildSessionGate';
 import { useSubjects } from '@/hooks/useSubjects';
+import { useAuth } from '@/contexts/AuthContext';
 import { getChildTabSceneBottomPadding } from '@/components/navigation/bottomNavTokens';
-import type { ChildProfile } from '@/types/child';
+import type { ChildProfile, SessionGateState } from '@/types/child';
 import type { Message } from '@/types/chat';
 
 interface ChatRouteParams {
@@ -52,15 +52,19 @@ export default function AIChatScreen() {
   const params = useLocalSearchParams() as ChatRouteParams;
   const { profile } = useChildProfile();
   const childTabSceneBottomPadding = getChildTabSceneBottomPadding(insets.bottom);
-  const { isSessionActive, nextSessionTimeLabel } = useChildSessionGate(profile?.id ?? null, {
+  const { gateState } = useChildSessionGate(profile?.id ?? null, {
     weekSchedule: profile?.rules?.weekSchedule ?? null,
+    todayUsageSeconds: profile?.todayUsageSeconds,
+    timeZone: profile?.timezone ?? null,
   });
 
-  if (!isSessionActive) {
+  if (gateState.status !== 'ACTIVE') {
     return (
-      <QubieGateOverlay
+      <GateMessageScreen
+        gateState={gateState}
+        childName={profile?.nickname ?? profile?.name ?? undefined}
         bottomPadding={childTabSceneBottomPadding}
-        nextSessionTimeLabel={nextSessionTimeLabel}
+        variant="qubie"
       />
     );
   }
@@ -70,33 +74,6 @@ export default function AIChatScreen() {
       childTabSceneBottomPadding={childTabSceneBottomPadding}
       params={params}
       profile={profile}
-    />
-  );
-}
-
-interface QubieGateOverlayProps {
-  bottomPadding: number;
-  dailyLimitReached?: boolean;
-  nextSessionTimeLabel: string | null;
-}
-
-function QubieGateOverlay({
-  bottomPadding,
-  dailyLimitReached,
-  nextSessionTimeLabel,
-}: QubieGateOverlayProps) {
-  const subtitle = dailyLimitReached
-    ? 'Your learning time for today is done! Great job! 🌟'
-    : nextSessionTimeLabel
-      ? `You can chat at ${nextSessionTimeLabel}. See you soon!`
-      : 'You can chat when your learning time opens. See you soon!';
-
-  return (
-    <SessionGateOverlay
-      illustration="🤖"
-      title="Qubie is resting right now"
-      subtitle={subtitle}
-      bottomPadding={bottomPadding}
     />
   );
 }
@@ -114,6 +91,7 @@ function AIChatSessionGate({
 }: AIChatSessionGateProps) {
   const navigation = useNavigation();
   const { getSubjectById } = useSubjects();
+  const { addQuizXp, refreshChildData } = useAuth();
 
   const resolvedSubjectName =
     params.subjectName ??
@@ -124,117 +102,48 @@ function AIChatSessionGate({
       ? profile.rules.dailyLimitMinutes
       : undefined;
 
+  const handleQuizComplete = useCallback(
+    (summary: { totalXp: number }) => {
+      addQuizXp(summary.totalXp);
+      void refreshChildData().catch(() => undefined);
+    },
+    [addQuizXp, refreshChildData],
+  );
+
   const {
     state,
     elapsedSeconds,
     minutesRemaining,
     sendMessage,
+    retryMessage,
     sendQuizRequest,
+    submitQuizAnswer,
+    resetQuizMode,
     transcribeRecording,
     setInputText,
-    endSession,
     clearError,
-  } =
-    useChatSession({
-      childId: profile?.id ?? null,
-      ageGroup: profile?.ageGroup ?? '7-11',
-      gradeLevel: profile?.gradeLevel ?? 'Grade 4',
-      subjectContext: {
-        subjectId: params.subjectId,
-        subjectName: resolvedSubjectName,
-        topicId: params.topicId,
-      },
-      dailyLimitMinutes,
-    });
-  const sessionGate = useChildSessionGate(profile?.id ?? null, {
-    weekSchedule: profile?.rules?.weekSchedule ?? null,
-    minutesRemaining,
+  } = useChatSession({
+    childId: profile?.id ?? null,
+    ageGroup: profile?.ageGroup ?? '7-11',
+    gradeLevel: profile?.gradeLevel ?? 'Grade 4',
+    subjectContext: {
+      subjectId: params.subjectId,
+      subjectName: resolvedSubjectName,
+      topicId: params.topicId,
+    },
+    dailyLimitMinutes,
+    onQuizComplete: handleQuizComplete,
   });
 
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('beforeRemove', () => {
-      void endSession();
-    });
-
-    return unsubscribe;
-  }, [endSession, navigation]);
+  const flatListRef = useRef<FlatList<ChatListItem>>(null);
 
   useEffect(() => {
-    return () => {
-      void endSession();
-    };
-  }, [endSession]);
-
-  useEffect(() => {
-    if (!sessionGate.isSessionActive && !sessionGate.isLoading) {
-      void endSession();
+    if (state.messages.length > 0) {
+      requestAnimationFrame(() => {
+        flatListRef.current?.scrollToOffset?.({ offset: 0, animated: true });
+      });
     }
-  }, [endSession, sessionGate.isLoading, sessionGate.isSessionActive]);
-
-  if (!sessionGate.isSessionActive) {
-    return (
-      <QubieGateOverlay
-        bottomPadding={childTabSceneBottomPadding}
-        dailyLimitReached={sessionGate.isDailyLimitReached}
-        nextSessionTimeLabel={sessionGate.nextSessionTimeLabel}
-      />
-    );
-  }
-
-  return (
-    <AIChatInteractiveContent
-      chatSession={{
-        state,
-        elapsedSeconds,
-        minutesRemaining,
-        sendMessage,
-        sendQuizRequest,
-        transcribeRecording,
-        setInputText,
-        clearError,
-      }}
-      childTabSceneBottomPadding={childTabSceneBottomPadding}
-      profile={profile}
-      resolvedSubjectName={resolvedSubjectName}
-    />
-  );
-}
-
-type AIChatSessionController = Pick<
-  ReturnType<typeof useChatSession>,
-  | 'state'
-  | 'elapsedSeconds'
-  | 'minutesRemaining'
-  | 'sendMessage'
-  | 'sendQuizRequest'
-  | 'transcribeRecording'
-  | 'setInputText'
-  | 'clearError'
->;
-
-interface AIChatInteractiveContentProps {
-  chatSession: AIChatSessionController;
-  childTabSceneBottomPadding: number;
-  profile: ChildProfile | null;
-  resolvedSubjectName: string | undefined;
-}
-
-function AIChatInteractiveContent({
-  chatSession,
-  childTabSceneBottomPadding,
-  profile,
-  resolvedSubjectName,
-}: AIChatInteractiveContentProps) {
-  const {
-    state,
-    elapsedSeconds,
-    minutesRemaining,
-    sendMessage,
-    sendQuizRequest,
-    transcribeRecording,
-    setInputText,
-    clearError,
-  } = chatSession;
+  }, [state.messages.length]);
 
   const listData = useMemo<ChatListItem[]>(() => {
     const messageItems = [...state.messages].reverse().map((message) => ({
@@ -284,16 +193,28 @@ function AIChatInteractiveContent({
     [sendQuizRequest]
   );
 
+  const handleRetryAiMessage = useCallback(
+    (aiMessageId: string) => {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+      void retryMessage(aiMessageId);
+    },
+    [retryMessage],
+  );
+
   const handleLongPressMessage = useCallback((content: string) => {
     void Haptics.selectionAsync().catch(() => undefined);
-
-    const webClipboard = (globalThis as { navigator?: { clipboard?: { writeText?: (value: string) => Promise<void> } } })
-      .navigator?.clipboard;
-
-    if (Platform.OS === 'web' && typeof webClipboard?.writeText === 'function') {
-      void webClipboard.writeText(content);
-    }
   }, []);
+
+  const handleQuizAnswer = useCallback(
+    (questionId: number, answer: string) => {
+      submitQuizAnswer(questionId, answer);
+    },
+    [submitQuizAnswer],
+  );
+
+  const handleQuizTryAnother = useCallback(() => {
+    resetQuizMode();
+  }, [resetQuizMode]);
 
   const renderItem: ListRenderItem<ChatListItem> = ({ item }) => {
     if (item.type === 'typing') {
@@ -305,6 +226,9 @@ function AIChatInteractiveContent({
         message={item.message}
         ageGroup={profile?.ageGroup}
         onLongPressMessage={handleLongPressMessage}
+        onRetryAiMessage={handleRetryAiMessage}
+        onQuizAnswer={handleQuizAnswer}
+        onQuizTryAnother={handleQuizTryAnother}
       />
     );
   };
@@ -329,8 +253,9 @@ function AIChatInteractiveContent({
             </Pressable>
           ) : null}
 
-          <FlatList
-            data={listData}
+        <FlatList
+          ref={flatListRef}
+          data={listData}
             keyExtractor={(item) => item.id}
             renderItem={renderItem}
             inverted

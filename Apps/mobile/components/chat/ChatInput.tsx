@@ -1,7 +1,56 @@
+/**
+ * Migration Notes — expo-av → expo-audio
+ *
+ * Replaced:
+ *   - `import { Audio } from 'expo-av'` → named imports from `expo-audio`
+ *   - `Audio.requestPermissionsAsync()` → `requestRecordingPermissionsAsync()`
+ *   - `Audio.setAudioModeAsync({allowsRecordingIOS, playsInSilentModeIOS, ...})` →
+ *     `setAudioModeAsync({allowsRecording, playsInSilentMode, ...})`
+ *     - `allowsRecordingIOS: true/false` → `allowsRecording: true/false`
+ *     - `playsInSilentModeIOS: true` → `playsInSilentMode: true`
+ *     - `shouldDuckAndroid: true` → `interruptionMode: 'duckOthers'`
+ *     - `staysActiveInBackground: false` → `shouldPlayInBackground: false`
+ *     - `playThroughEarpieceAndroid: false` → `shouldRouteThroughEarpiece: false`
+ *   - `new Audio.Recording()` + ref → `useAudioRecorder(RecordingPresets.HIGH_QUALITY, statusListener)`
+ *   - `recording.setProgressUpdateInterval(70)` → `useAudioRecorderState(recorder, 70)`
+ *   - `recording.setOnRecordingStatusUpdate(cb)` → `statusListener` param + `useAudioRecorderState`
+ *   - `recording.prepareToRecordAsync(opts)` → `recorder.prepareToRecordAsync()`
+ *   - `recording.startAsync()` → `recorder.record()`
+ *   - `recording.stopAndUnloadAsync()` → `recorder.stop()`
+ *   - `recording.getURI()` → `recorder.uri`
+ *   - `Audio.RecordingOptionsPresets.HIGH_QUALITY` → `RecordingPresets.HIGH_QUALITY`
+ *   - Manual cleanup in useEffect unmount → automatic via `useAudioRecorder` hook
+ *
+ * Behavioral differences:
+ *   - expo-audio's `useAudioRecorder` hook manages the recorder lifecycle (auto-release on unmount).
+ *     The previous manual cleanup (setOnRecordingStatusUpdate(null), stopAndUnloadAsync) is no longer needed.
+ *   - `RecordingStatus` (event-based, from statusListener) does NOT contain `metering`.
+ *     Metering is only available on `RecorderState` via `useAudioRecorderState(recorder, interval)`,
+ *     which polls at the specified interval (70ms). This is functionally equivalent to the previous
+ *     setProgressUpdateInterval(70) + setOnRecordingStatusUpdate pattern.
+ *   - `setAudioModeAsync` in expo-audio uses `Partial<AudioMode>`, so only specified properties are updated.
+ *     The `interruptionMode` property replaces the separate `shouldDuckAndroid` flag.
+ *   - `recorder.stop()` returns `Promise<void>` and the URI is available on `recorder.uri` afterward.
+ *     The previous `recording.getURI()` was synchronous; now we read the `uri` property after `stop()` resolves.
+ *   - expo-audio requires the `expo-audio` config plugin in app.json for
+ *     `microphonePermission` (iOS NSMicrophoneUsageDescription). This was previously
+ *     handled by expo-av's plugin. The plugin entry must be added to app.json plugins array.
+ *
+ * Limitations discovered:
+ *   - None. All expo-av features used have direct expo-audio equivalents.
+ */
+
 import { memo, useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Audio } from 'expo-av';
+import {
+  useAudioRecorder,
+  useAudioRecorderState,
+  RecordingPresets,
+  setAudioModeAsync,
+  requestRecordingPermissionsAsync,
+} from 'expo-audio';
+import type { AudioRecorder } from 'expo-audio';
 import * as Haptics from 'expo-haptics';
 import Animated, {
   Easing,
@@ -22,8 +71,9 @@ type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
 const MIN_CHILD_TAP_TARGET = 56;
 const MAX_MESSAGE_LENGTH = 500;
 const DEFAULT_METERING = -160;
+const METERING_POLL_INTERVAL_MS = 70;
 const RECORDING_OPTIONS = {
-  ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
+  ...RecordingPresets.HIGH_QUALITY,
   isMeteringEnabled: true,
 };
 
@@ -58,11 +108,6 @@ interface IconButtonProps {
   disabled?: boolean;
   solid?: boolean;
   onPress: () => void;
-}
-
-interface RecordingStatusUpdate {
-  isRecording?: boolean;
-  metering?: number;
 }
 
 function inputReducer(state: InputState, action: InputAction): InputState {
@@ -165,62 +210,80 @@ function ChatInputComponent({
     isTranscribing: false,
   });
   const [metering, setMetering] = useState(DEFAULT_METERING);
-  const recordingRef = useRef<Audio.Recording | null>(null);
+  const recorderRef = useRef<AudioRecorder | null>(null);
+
+  const recorder = useAudioRecorder(RECORDING_OPTIONS, (status) => {
+    if (status.hasError) {
+      recorderRef.current = null;
+      void setAudioModeAsync({
+        allowsRecording: false,
+        playsInSilentMode: true,
+      }).catch(() => undefined);
+      dispatch({ type: 'exit_recording' });
+      dispatch({ type: 'set_feedback', message: 'Voice recording could not start. Please try again.' });
+    }
+  });
+
+  const recorderState = useAudioRecorderState(recorder, METERING_POLL_INTERVAL_MS);
 
   const quizActive = isQuizMode(inputState.mode);
   const recordingActive = isRecordingMode(inputState.mode);
   const busy = isLoading || inputState.isTranscribing;
   const canSendText = !recordingActive && value.trim().length > 0 && !busy;
 
+  useEffect(() => {
+    if (recorderState.isRecording && typeof recorderState.metering === 'number') {
+      setMetering(recorderState.metering);
+    }
+  }, [recorderState.isRecording, recorderState.metering]);
+
   const restoreAudioMode = useCallback(async () => {
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: false,
-      playsInSilentModeIOS: true,
+    await setAudioModeAsync({
+      allowsRecording: false,
+      playsInSilentMode: true,
     }).catch(() => undefined);
   }, []);
 
   const stopActiveRecording = useCallback(async (): Promise<string | null> => {
-    const recording = recordingRef.current;
-    if (!recording) {
+    const activeRecorder = recorderRef.current;
+    if (!activeRecorder) {
       return null;
     }
 
-    recordingRef.current = null;
-    recording.setOnRecordingStatusUpdate(null);
+    recorderRef.current = null;
 
     try {
-      await recording.stopAndUnloadAsync();
+      await activeRecorder.stop();
     } catch {
       await restoreAudioMode();
       return null;
     }
 
-    const uri = recording.getURI();
+    const uri = activeRecorder.uri;
     await restoreAudioMode();
     return uri;
   }, [restoreAudioMode]);
 
   useEffect(() => {
     return () => {
-      const recording = recordingRef.current;
-      recordingRef.current = null;
+      const activeRecorder = recorderRef.current;
+      recorderRef.current = null;
 
-      if (recording) {
-        recording.setOnRecordingStatusUpdate(null);
-        void recording.stopAndUnloadAsync().catch(() => undefined);
+      if (activeRecorder) {
+        void activeRecorder.stop().catch(() => undefined);
       }
     };
   }, []);
 
   const beginRecording = useCallback(async () => {
-    if (busy || recordingRef.current) {
+    if (busy || recorderRef.current) {
       return;
     }
 
     dispatch({ type: 'set_feedback', message: null });
     await Haptics.selectionAsync().catch(() => undefined);
 
-    const permission = await Audio.requestPermissionsAsync();
+    const permission = await requestRecordingPermissionsAsync();
     if (!permission.granted) {
       dispatch({
         type: 'set_feedback',
@@ -230,34 +293,26 @@ function ChatInputComponent({
     }
 
     try {
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-        shouldDuckAndroid: true,
-        staysActiveInBackground: false,
-        playThroughEarpieceAndroid: false,
+      await setAudioModeAsync({
+        allowsRecording: true,
+        playsInSilentMode: true,
+        interruptionMode: 'duckOthers',
+        shouldPlayInBackground: false,
+        shouldRouteThroughEarpiece: false,
       });
 
-      const recording = new Audio.Recording();
-      recording.setProgressUpdateInterval(70);
-      recording.setOnRecordingStatusUpdate((status: RecordingStatusUpdate) => {
-        if (status.isRecording && typeof status.metering === 'number') {
-          setMetering(status.metering);
-        }
-      });
-
-      await recording.prepareToRecordAsync(RECORDING_OPTIONS);
-      await recording.startAsync();
-      recordingRef.current = recording;
+      await recorder.prepareToRecordAsync();
+      recorder.record();
+      recorderRef.current = recorder;
       setMetering(DEFAULT_METERING);
       dispatch({ type: 'enter_recording' });
     } catch {
-      recordingRef.current = null;
+      recorderRef.current = null;
       await restoreAudioMode();
       dispatch({ type: 'exit_recording' });
       dispatch({ type: 'set_feedback', message: 'Voice recording could not start. Please try again.' });
     }
-  }, [busy, restoreAudioMode]);
+  }, [busy, recorder, restoreAudioMode]);
 
   const handleCancelRecording = useCallback(async () => {
     if (inputState.isTranscribing) {

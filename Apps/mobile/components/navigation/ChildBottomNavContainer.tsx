@@ -19,7 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BottomNavTokens } from '@/components/navigation/bottomNavTokens';
 import { Colors } from '@/constants/theme';
-import type { AgeGroup } from '@/types/child';
+import type { AgeGroup, SessionGateState } from '@/types/child';
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -40,6 +40,7 @@ interface ChildBottomNavContainerProps extends BottomTabBarProps {
   ageGroup?: AgeGroup;
   voiceEnabled?: boolean;
   hidden?: boolean;
+  gateState?: SessionGateState;
 }
 
 interface ChildBottomNavItemProps {
@@ -48,6 +49,7 @@ interface ChildBottomNavItemProps {
   activeIcon: IconName;
   isActive: boolean;
   isQubie: boolean;
+  isLocked: boolean;
   showLiveDot: boolean;
   onPress: () => void;
   onLongPress?: () => void;
@@ -63,6 +65,7 @@ function ChildBottomNavItem({
   activeIcon,
   isActive,
   isQubie,
+  isLocked,
   showLiveDot,
   onPress,
   onLongPress,
@@ -125,20 +128,16 @@ function ChildBottomNavItem({
   };
 
   const handlePress = () => {
+    if (isLocked) {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => undefined);
+      return;
+    }
+
     if (isQubie) {
       bounceScale.value = withSequence(
-        withTiming(0.92, {
-          duration: 90,
-          easing: Easing.out(Easing.cubic),
-        }),
-        withTiming(1.05, {
-          duration: 120,
-          easing: Easing.out(Easing.cubic),
-        }),
-        withTiming(1, {
-          duration: 120,
-          easing: Easing.out(Easing.cubic),
-        }),
+        withTiming(0.92, { duration: 90, easing: Easing.out(Easing.cubic) }),
+        withTiming(1.05, { duration: 120, easing: Easing.out(Easing.cubic) }),
+        withTiming(1, { duration: 120, easing: Easing.out(Easing.cubic) }),
       );
     }
 
@@ -179,14 +178,14 @@ function ChildBottomNavItem({
     };
   });
 
-  const iconColor = isActive ? BottomNavTokens.colors.active : BottomNavTokens.colors.inactive;
-  const iconName = isActive ? activeIcon : inactiveIcon;
+  const iconColor = isActive && !isLocked ? BottomNavTokens.colors.active : BottomNavTokens.colors.inactive;
+  const iconName = isActive && !isLocked ? activeIcon : inactiveIcon;
 
   return (
     <Pressable
       accessibilityRole="tab"
-      accessibilityLabel={accessibilityLabel ?? label}
-      accessibilityState={{ selected: isActive }}
+      accessibilityLabel={isLocked ? `${accessibilityLabel ?? label} — locked` : (accessibilityLabel ?? label)}
+      accessibilityState={{ selected: isActive, disabled: isLocked }}
       hitSlop={8}
       onLongPress={onLongPress}
       onPress={handlePress}
@@ -195,20 +194,21 @@ function ChildBottomNavItem({
       style={styles.pressable}
       testID={testID}
     >
-      <Animated.View style={[styles.itemShell, interactionAnimatedStyle]}>
+      <Animated.View style={[styles.itemShell, isLocked && styles.itemShellLocked, interactionAnimatedStyle]}>
         <View style={styles.content}>
           <View style={styles.iconWrap}>
-            {isQubie && isActive ? <Animated.View style={[styles.qubiePulseRing, pulseRingAnimatedStyle]} /> : null}
-            <AnimatedIcon name={iconName} color={iconColor} size={BottomNavTokens.size.icon} />
-            {isQubie && showLiveDot ? <Animated.View style={[styles.liveDot, liveDotAnimatedStyle]} /> : null}
+            {isQubie && isActive && !isLocked ? <Animated.View style={[styles.qubiePulseRing, pulseRingAnimatedStyle]} /> : null}
+            <AnimatedIcon name={isLocked ? 'lock-outline' : iconName} color={iconColor} size={BottomNavTokens.size.icon} />
+            {isQubie && showLiveDot && !isLocked ? <Animated.View style={[styles.liveDot, liveDotAnimatedStyle]} /> : null}
           </View>
 
           <Animated.Text
             numberOfLines={1}
             style={[
               styles.label,
+              isLocked && styles.labelLocked,
               {
-                fontFamily: isActive
+                fontFamily: isActive && !isLocked
                   ? BottomNavTokens.text.activeFontFamily
                   : BottomNavTokens.text.inactiveFontFamily,
               },
@@ -230,6 +230,7 @@ export function ChildBottomNavContainer({
   ageGroup,
   voiceEnabled = false,
   hidden,
+  gateState = { status: 'ACTIVE' },
 }: ChildBottomNavContainerProps) {
   const insets = useSafeAreaInsets();
 
@@ -241,6 +242,13 @@ export function ChildBottomNavContainer({
       easing: Easing.out(Easing.cubic),
     });
   }, [hidden, hiddenProgress]);
+
+  const isGateBlocking = gateState.status !== 'ACTIVE';
+
+  const lockedSlots = useMemo<Set<ChildTabSlot>>(() => {
+    if (!isGateBlocking) return new Set();
+    return new Set<ChildTabSlot>(['learn', 'qubie']);
+  }, [isGateBlocking]);
 
   const navItems = useMemo<ChildTabConfig[]>(
     () => [
@@ -311,6 +319,7 @@ export function ChildBottomNavContainer({
 
           const descriptor = descriptors[route.key];
           const isFocused = route.key === currentRouteKey;
+          const isLocked = lockedSlots.has(item.slot);
 
           const onPress = () => {
             const event = navigation.emit({
@@ -347,6 +356,7 @@ export function ChildBottomNavContainer({
               activeIcon={item.activeIcon}
               isActive={isFocused}
               isQubie={item.slot === 'qubie'}
+              isLocked={isLocked}
               showLiveDot={item.slot === 'qubie' && isFocused && showLiveVoiceDot}
               accessibilityLabel={
                 descriptor.options.tabBarAccessibilityLabel
@@ -400,6 +410,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  itemShellLocked: {
+    opacity: 0.45,
+  },
   content: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -433,5 +446,8 @@ const styles = StyleSheet.create({
     fontSize: BottomNavTokens.text.fontSize,
     lineHeight: BottomNavTokens.text.lineHeight,
     textAlign: 'center',
+  },
+  labelLocked: {
+    opacity: 0.6,
   },
 });
