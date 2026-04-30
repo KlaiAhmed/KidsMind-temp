@@ -460,11 +460,6 @@ export default function ParentalControlsScreen({
   return (
     <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
-        <View style={styles.topRow}>
-          <Text style={styles.parentHubTitle}>Parent Hub</Text>
-          {rulesMutation.isPending ? <MaterialCommunityIcons color={Colors.primary} name="progress-clock" size={20} /> : null}
-        </View>
-
         <View style={styles.heroCard}>
           <View style={styles.heroCopy}>
             <Text style={styles.screenTitle}>Settings for {firstName(activeChild.nickname ?? activeChild.name)}</Text>

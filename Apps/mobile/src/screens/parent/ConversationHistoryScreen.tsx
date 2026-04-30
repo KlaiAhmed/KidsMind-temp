@@ -273,18 +273,6 @@ export default function ConversationHistoryScreen({
   return (
     <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
-        <View style={styles.topRow}>
-          <Text style={styles.parentHubTitle}>Parent Hub</Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Open controls for ${activeChild.nickname ?? activeChild.name}`}
-            onPress={() => router.push(`/(tabs)/profile?childId=${encodeURIComponent(activeChild.id)}` as never)}
-            style={({ pressed }) => [styles.iconButton, pressed ? styles.pressed : null]}
-          >
-            <MaterialCommunityIcons color={Colors.text} name="cog-outline" size={20} />
-          </Pressable>
-        </View>
-
         <View style={styles.heroWrap}>
           <View style={styles.heroCopy}>
             <Text style={styles.screenTitle}>Conversation History</Text>
