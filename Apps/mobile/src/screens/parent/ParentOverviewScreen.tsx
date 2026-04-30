@@ -381,28 +381,13 @@ export default function ParentOverviewScreen({ initialState }: ParentOverviewScr
       </Pressable>
         </View>
 
-      <ParentChildSwitcher
-        activeChildId={selectedChildId}
-        profiles={children}
-        getAvatarSource={getChildAvatarSource}
-        onAddChild={children.length < 5 ? handleAddChild : undefined}
-        onSelectChild={handleSelectChild}
-      />
-
-        <View style={styles.heroCard}>
-          <View style={styles.heroRow}>
-            <View style={styles.heroCopy}>
-              <Text style={styles.heroTitle}>{activeChild.nickname ?? activeChild.name}</Text>
-              <Text style={styles.heroSubtitle}>{activeChild.gradeLevel}</Text>
-            </View>
-
-            {historyQuery.isFetching ? <ActivityIndicator color={Colors.primary} size="small" /> : null}
-          </View>
-
-          <Text style={styles.heroBody}>
-            Review live controls, recent conversations, and learning setup for {activeChild.nickname ?? activeChild.name}.
-          </Text>
-        </View>
+<ParentChildSwitcher
+          activeChildId={selectedChildId}
+          profiles={children}
+          getAvatarSource={getChildAvatarSource}
+          onAddChild={children.length < 5 ? handleAddChild : undefined}
+          onSelectChild={handleSelectChild}
+        />
 
         <View style={styles.metricsGrid}>
           {overviewMetrics.map((metric) => (
