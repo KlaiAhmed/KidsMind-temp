@@ -1,27 +1,30 @@
-from .access_window import AccessWindow
-from .access_window_subject import AccessWindowSubject
-from .avatar import Avatar
-from .avatar_tier_threshold import AvatarTier
-from .badge import Badge, ChildBadge
-from .chat_history import ChatHistory
-from .chat_session import ChatSession
-from .child_allowed_subject import ChildAllowedSubject
-from .child_gamification_stats import ChildGamificationStats
-from .child_profile import ChildProfile
-from .child_rules import ChildRules
-from .media_asset import MediaType
-from .notification_prefs import ParentNotificationPrefs
-from .parent_badge_notification import ParentBadgeNotification
-from .quiz import Quiz
-from .quiz_question import QuizQuestion
-from .quiz_result import QuizResult
-from .refresh_token_session import RefreshTokenSession
-from .user import User, UserRole
-from .voice_transcription import VoiceTranscription
+from .audit.audit_log import AuditLog, AuditActorRole
+from .auth.refresh_token_session import RefreshTokenSession
+from .user.user import User, UserRole
+from .child.child_profile import ChildProfile
+from .child.child_rules import ChildRules
+from .child.child_allowed_subject import ChildAllowedSubject
+from .child.access_window import AccessWindow
+from .child.access_window_subject import AccessWindowSubject
+from .chat.chat_history import ChatHistory
+from .chat.chat_session import ChatSession
+from .quiz.quiz import Quiz
+from .quiz.quiz_question import QuizQuestion
+from .quiz.quiz_result import QuizResult
+from .gamification.badge import Badge, ChildBadge
+from .gamification.child_gamification_stats import ChildGamificationStats
+from .gamification.parent_badge_notification import ParentBadgeNotification
+from .gamification.notification_prefs import ParentNotificationPrefs
+from .media.avatar import Avatar
+from .media.avatar_tier_threshold import AvatarTier
+from .media.media_asset import MediaType
+from .voice.voice_transcription import VoiceTranscription
 
 __all__ = [
     "AccessWindow",
     "AccessWindowSubject",
+    "AuditActorRole",
+    "AuditLog",
     "Avatar",
     "AvatarTier",
     "Badge",

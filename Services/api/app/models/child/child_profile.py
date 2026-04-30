@@ -11,7 +11,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from core.database import Base
-from utils.child_profile_logic import EducationStage
+from utils.child.child_profile_logic import EducationStage
 
 
 class ChildProfile(Base):
