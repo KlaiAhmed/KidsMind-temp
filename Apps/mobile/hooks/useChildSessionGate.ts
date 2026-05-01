@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 
+import { triggerHaptic } from '@/src/utils/haptics';
 import type { DaySchedule, SessionGateState, WeekSchedule, WeekdayKey } from '@/types/child';
 import {
   buildAccessWindowSlots,
@@ -247,6 +248,21 @@ export function useChildSessionGate(
       usageRef.current,
     );
   }, [currentMinuteTick, hasError, weekSchedule, normalizedTimeZone, todayUsageSeconds]);
+
+  // --- Haptic: time limit hard stop (fires once when gate becomes EXCEEDED_DURATION) ---
+  const exceededHapticFiredRef = useRef(false);
+  useEffect(() => {
+    if (gateState.status === 'EXCEEDED_DURATION') {
+      if (!exceededHapticFiredRef.current) {
+        exceededHapticFiredRef.current = true;
+        triggerHaptic('timeLimitReached');
+      }
+    } else {
+      // Reset if status leaves EXCEEDED_DURATION (e.g., parent changes cap mid-day)
+      exceededHapticFiredRef.current = false;
+    }
+  }, [gateState.status]);
+  // --- end haptic ---
 
   return useMemo(
     () => ({

@@ -1,7 +1,7 @@
-import { memo } from 'react';
+import { memo, useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import Animated, { FadeIn, useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import { Colors, Radii, Shadows, Spacing, Typography } from '@/constants/theme';
 import type { QuizSummary } from '@/types/chat';
 
@@ -20,15 +20,17 @@ function getMotivationalMessage(scorePercentage: number): string {
 function XpBadge({ totalXp }: { totalXp: number }) {
   const scale = useSharedValue(0);
 
+  useEffect(() => {
+    scale.value = withSpring(1, { damping: 8, stiffness: 200, overshootClamping: false });
+  }, [scale]);
+
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
   }));
 
   return (
     <Animated.View
-      entering={FadeIn.duration(400).withCallback(() => {
-        scale.value = withSpring(1, { damping: 8, stiffness: 200 });
-      })}
+      entering={FadeIn.duration(180).easing(Easing.out(Easing.ease))}
       style={animatedStyle}
     >
       <View style={styles.xpBadgeContainer}>
@@ -64,6 +66,7 @@ function QuizSummaryCardComponent({ summary, onTryAnother }: QuizSummaryCardProp
           onPress={onTryAnother}
           style={({ pressed }) => [styles.tryAgainButton, pressed && styles.tryAgainPressed]}
         >
+          {/* a11y: Retry-style quiz action is exposed as a named button. */}
           <MaterialCommunityIcons name="refresh" size={18} color={Colors.primary} />
           <Text style={styles.tryAgainText}>Try another quiz</Text>
         </Pressable>

@@ -25,6 +25,7 @@ import { useChildSessionGate } from '@/hooks/useChildSessionGate';
 import { useSubjects } from '@/hooks/useSubjects';
 import { useAuth } from '@/contexts/AuthContext';
 import { getChildTabSceneBottomPadding } from '@/components/navigation/bottomNavTokens';
+import { showToast } from '@/services/toastClient';
 import type { ChildProfile, SessionGateState } from '@/types/child';
 import type { Message } from '@/types/chat';
 
@@ -47,6 +48,23 @@ type ChatListItem =
 
 const TYPING_PLACEHOLDER_ID = 'typing-placeholder';
 
+function isNetworkOffline(): boolean {
+  const navigatorLike = globalThis as typeof globalThis & {
+    navigator?: { onLine?: boolean };
+  };
+
+  return navigatorLike.navigator?.onLine === false;
+}
+
+function showOfflineToast() {
+  showToast({
+    type: 'info',
+    text1: 'No internet connection',
+    text2: 'Try again when you are back online.',
+    visibilityTime: 3000,
+  });
+}
+
 export default function AIChatScreen() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams() as ChatRouteParams;
@@ -58,20 +76,10 @@ export default function AIChatScreen() {
     timeZone: profile?.timezone ?? null,
   });
 
-  if (gateState.status !== 'ACTIVE') {
-    return (
-      <GateMessageScreen
-        gateState={gateState}
-        childName={profile?.nickname ?? profile?.name ?? undefined}
-        bottomPadding={childTabSceneBottomPadding}
-        variant="qubie"
-      />
-    );
-  }
-
   return (
     <AIChatSessionGate
       childTabSceneBottomPadding={childTabSceneBottomPadding}
+      gateState={gateState}
       params={params}
       profile={profile}
     />
@@ -80,12 +88,14 @@ export default function AIChatScreen() {
 
 interface AIChatSessionGateProps {
   childTabSceneBottomPadding: number;
+  gateState: SessionGateState;
   params: ChatRouteParams;
   profile: ChildProfile | null;
 }
 
 function AIChatSessionGate({
   childTabSceneBottomPadding,
+  gateState,
   params,
   profile,
 }: AIChatSessionGateProps) {
@@ -133,6 +143,7 @@ function AIChatSessionGate({
     },
     dailyLimitMinutes,
     onQuizComplete: handleQuizComplete,
+    autoStart: gateState.status === 'ACTIVE',
   });
 
   const flatListRef = useRef<FlatList<ChatListItem>>(null);
@@ -179,6 +190,11 @@ function AIChatSessionGate({
 
   const handleSend = useCallback(
     async (text: string, inputSource: 'keyboard' | 'voice' = 'keyboard') => {
+      if (isNetworkOffline()) {
+        showOfflineToast();
+        return false;
+      }
+
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
       await sendMessage(text, inputSource);
     },
@@ -187,6 +203,11 @@ function AIChatSessionGate({
 
   const handleSendQuiz = useCallback(
     async (topic: string) => {
+      if (isNetworkOffline()) {
+        showOfflineToast();
+        return false;
+      }
+
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
       await sendQuizRequest(topic);
     },
@@ -216,7 +237,7 @@ function AIChatSessionGate({
     resetQuizMode();
   }, [resetQuizMode]);
 
-  const renderItem: ListRenderItem<ChatListItem> = ({ item }) => {
+  const renderItem = useCallback<ListRenderItem<ChatListItem>>(({ item }) => {
     if (item.type === 'typing') {
       return <MessageBubble message={typingPlaceholderMessage} isTypingPlaceholder ageGroup={profile?.ageGroup} />;
     }
@@ -231,7 +252,27 @@ function AIChatSessionGate({
         onQuizTryAnother={handleQuizTryAnother}
       />
     );
-  };
+  }, [
+    handleLongPressMessage,
+    handleQuizAnswer,
+    handleQuizTryAnother,
+    handleRetryAiMessage,
+    profile?.ageGroup,
+    typingPlaceholderMessage,
+  ]);
+
+  const keyExtractor = useCallback((item: ChatListItem) => item.id, []);
+
+  if (gateState.status !== 'ACTIVE' && !state.isAwaitingResponse) {
+    return (
+      <GateMessageScreen
+        gateState={gateState}
+        childName={profile?.nickname ?? profile?.name ?? undefined}
+        bottomPadding={childTabSceneBottomPadding}
+        variant="qubie"
+      />
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
@@ -247,25 +288,33 @@ function AIChatSessionGate({
           />
 
           {state.error ? (
-            <Pressable onPress={clearError} style={styles.errorBanner}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Dismiss chat error"
+              onPress={clearError}
+              style={styles.errorBanner}
+            >
+              {/* a11y: Error banner can be dismissed by tapping it. */}
               <MaterialCommunityIcons name="alert-circle-outline" size={18} color={Colors.errorText} />
               <Text style={styles.errorText}>{state.error}</Text>
             </Pressable>
           ) : null}
 
-        <FlatList
-          ref={flatListRef}
-          data={listData}
-            keyExtractor={(item) => item.id}
+          <FlatList
+            ref={flatListRef}
+            data={listData}
+            keyExtractor={keyExtractor}
             renderItem={renderItem}
             inverted
+            removeClippedSubviews
+            maxToRenderPerBatch={10}
+            windowSize={5}
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={styles.messagesContainer}
             ListEmptyComponent={
               <View style={styles.emptyState}>
                 <MaterialCommunityIcons name="robot-happy-outline" size={44} color={Colors.primary} />
-                <Text style={styles.emptyTitle}>Ask your first question</Text>
-                <Text style={styles.emptySubtitle}>I can help with math, reading, science, and more.</Text>
+                <Text style={styles.emptySubtitle}>Ask Qubie anything! 🤖 I'm here to help you learn.</Text>
               </View>
             }
           />

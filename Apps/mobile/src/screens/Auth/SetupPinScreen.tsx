@@ -19,6 +19,7 @@ import { Colors, Spacing, Shadows, Typography } from '@/constants/theme';
 import { toApiErrorMessage, useAuth } from '@/contexts/AuthContext';
 import { setupParentPin } from '@/services/authApi';
 import { PinInput, type PinInputHandle } from '@/src/components/PinInput';
+import { triggerHaptic } from '@/src/utils/haptics';
 
 const PIN_LENGTH = 4;
 
@@ -143,6 +144,7 @@ export default function SetupPinScreen() {
     if (parentPin !== confirmPin) {
       setErrorMessage('PINs do not match — please try again.');
       playMismatchShake();
+      triggerHaptic('wrongPinSetup');
       return;
     }
 

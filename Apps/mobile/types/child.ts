@@ -59,6 +59,12 @@ export interface ChildRules {
   audioStorageEnabled: boolean;
   conversationHistoryEnabled: boolean;
   contentSafetyLevel: ContentSafetyLevel;
+  /**
+   * Controls whether haptic feedback is enabled for this child's session.
+   * Defaults to true. Backend field `haptic_feedback_enabled` is pending.
+   * TODO: Wire to parental controls UI and API once backend supports it.
+   */
+  hapticFeedbackEnabled?: boolean;
 }
 
 export interface ChildProfile {

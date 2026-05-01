@@ -59,6 +59,10 @@ import Animated, {
   LinearTransition,
   SlideInRight,
   SlideInUp,
+  useAnimatedStyle,
+  useSharedValue,
+  withSequence,
+  withTiming,
 } from 'react-native-reanimated';
 import { AudioWaveform } from '@/components/chat/AudioWaveform';
 import { Colors, Radii, Spacing, Typography } from '@/constants/theme';
@@ -96,8 +100,8 @@ interface ChatInputProps {
   ageGroup: AgeGroup;
   isLoading: boolean;
   onChangeText: (text: string) => void;
-  onSend: (text: string, inputSource?: ChatInputSource) => Promise<void> | void;
-  onSendQuiz: (topic: string) => Promise<void> | void;
+  onSend: (text: string, inputSource?: ChatInputSource) => Promise<boolean | void> | boolean | void;
+  onSendQuiz: (topic: string) => Promise<boolean | void> | boolean | void;
   onTranscribeAudio: (audioUri: string) => Promise<string>;
 }
 
@@ -107,6 +111,7 @@ interface IconButtonProps {
   active?: boolean;
   disabled?: boolean;
   solid?: boolean;
+  springOnPress?: boolean;
   onPress: () => void;
 }
 
@@ -166,7 +171,37 @@ function getPlaceholder(ageGroup: AgeGroup): string {
   return 'Ask me anything!';
 }
 
-function IconButton({ name, label, active = false, disabled = false, solid = false, onPress }: IconButtonProps) {
+function IconButton({
+  name,
+  label,
+  active = false,
+  disabled = false,
+  solid = false,
+  springOnPress = false,
+  onPress,
+}: IconButtonProps) {
+  const pressScale = useSharedValue(1);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: pressScale.value }],
+  }));
+
+  const handlePress = useCallback(() => {
+    if (disabled) {
+      return;
+    }
+
+    if (springOnPress) {
+      pressScale.value = withSequence(
+        withTiming(0.9, { duration: 60, easing: Easing.out(Easing.ease) }),
+        withTiming(1.05, { duration: 70, easing: Easing.out(Easing.ease) }),
+        withTiming(1, { duration: 70, easing: Easing.out(Easing.ease) }),
+      );
+    }
+
+    onPress();
+  }, [disabled, onPress, pressScale, springOnPress]);
+
   const iconColor = disabled
     ? Colors.placeholder
     : solid
@@ -176,22 +211,25 @@ function IconButton({ name, label, active = false, disabled = false, solid = fal
         : Colors.textTertiary;
 
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityState={{ disabled }}
-      disabled={disabled}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.iconButton,
-        solid ? styles.iconButtonSolid : null,
-        active && !solid ? styles.iconButtonActive : null,
-        disabled ? styles.iconButtonDisabled : null,
-        pressed && !disabled ? styles.iconButtonPressed : null,
-      ]}
-    >
-      <MaterialCommunityIcons name={name} size={22} color={iconColor} />
-    </Pressable>
+    <Animated.View style={animatedStyle}>
+      {/* a11y: Icon buttons expose purpose-specific labels supplied by the caller. */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        accessibilityState={{ disabled }}
+        disabled={disabled}
+        onPress={handlePress}
+        style={({ pressed }) => [
+          styles.iconButton,
+          solid ? styles.iconButtonSolid : null,
+          active && !solid ? styles.iconButtonActive : null,
+          disabled ? styles.iconButtonDisabled : null,
+          pressed && !disabled ? styles.iconButtonPressed : null,
+        ]}
+      >
+        <MaterialCommunityIcons name={name} size={22} color={iconColor} />
+      </Pressable>
+    </Animated.View>
   );
 }
 
@@ -271,9 +309,10 @@ function ChatInputComponent({
 
       if (activeRecorder) {
         void activeRecorder.stop().catch(() => undefined);
+        void restoreAudioMode();
       }
     };
-  }, []);
+  }, [restoreAudioMode]);
 
   const beginRecording = useCallback(async () => {
     if (busy || recorderRef.current) {
@@ -334,13 +373,11 @@ function ChatInputComponent({
     dispatch({ type: 'set_feedback', message: null });
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
 
-    if (quizActive) {
-      await onSendQuiz(text);
-    } else {
-      await onSend(text, 'keyboard');
-    }
+    const didSend = quizActive ? await onSendQuiz(text) : await onSend(text, 'keyboard');
 
-    onChangeText('');
+    if (didSend !== false) {
+      onChangeText('');
+    }
   }, [busy, onChangeText, onSend, onSendQuiz, quizActive, value]);
 
   const handleConfirmRecording = useCallback(async () => {
@@ -372,13 +409,13 @@ function ChatInputComponent({
 
       onChangeText(transcript);
 
-      if (shouldSendQuiz) {
-        await onSendQuiz(transcript);
-      } else {
-        await onSend(transcript, 'voice');
-      }
+      const didSend = shouldSendQuiz
+        ? await onSendQuiz(transcript)
+        : await onSend(transcript, 'voice');
 
-      onChangeText('');
+      if (didSend !== false) {
+        onChangeText('');
+      }
     } catch {
       dispatch({
         type: 'set_feedback',
@@ -409,20 +446,27 @@ function ChatInputComponent({
     }
 
     await Haptics.selectionAsync().catch(() => undefined);
-    console.log('S2S mode');
+    dispatch({
+      type: 'set_feedback',
+      message: 'Speech-to-speech is coming soon. Use the microphone button for voice.',
+    });
   }, [busy]);
 
   return (
     <Animated.View layout={LinearTransition.duration(120)} style={styles.container}>
       {quizActive ? (
         <Animated.View
-          entering={SlideInUp.duration(80).easing(Easing.out(Easing.cubic))}
-          exiting={FadeOut.duration(60)}
+          entering={SlideInUp.duration(150).easing(Easing.out(Easing.ease)).withInitialValues({
+            opacity: 0,
+            transform: [{ translateY: 8 }],
+          })}
+          exiting={FadeOut.duration(150).easing(Easing.out(Easing.ease))}
           style={styles.quizPillShell}
         >
-          <Animated.View entering={FadeIn.duration(80)} style={styles.quizPill}>
+          <Animated.View entering={FadeIn.duration(150).easing(Easing.out(Easing.ease))} style={styles.quizPill}>
             <MaterialCommunityIcons name="comment-question-outline" size={16} color={Colors.primary} />
             <Text style={styles.quizPillText}>Quiz Mode</Text>
+            {/* a11y: Close button exits quiz mode without sending text. */}
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Exit quiz mode"
@@ -441,15 +485,15 @@ function ChatInputComponent({
       {recordingActive ? (
         <Animated.View
           key="recording"
-          entering={SlideInRight.duration(120).withInitialValues({
+          entering={SlideInRight.duration(150).easing(Easing.out(Easing.ease)).withInitialValues({
             opacity: 0,
             transform: [{ translateX: 8 }],
           })}
-          exiting={FadeOut.duration(100)}
+          exiting={FadeOut.duration(150).easing(Easing.out(Easing.ease))}
           layout={LinearTransition.duration(120)}
           style={styles.inputShell}
         >
-          <Animated.View entering={FadeIn.duration(120)} style={styles.waveformSlot}>
+          <Animated.View entering={FadeIn.duration(150).easing(Easing.out(Easing.ease))} style={styles.waveformSlot}>
             <AudioWaveform metering={metering} />
           </Animated.View>
           <IconButton
@@ -470,12 +514,14 @@ function ChatInputComponent({
       ) : (
         <Animated.View
           key={quizActive ? 'quiz-text' : 'text'}
-          entering={FadeIn.duration(120)}
-          exiting={FadeOut.duration(100)}
+          entering={FadeIn.duration(150).easing(Easing.out(Easing.ease))}
+          exiting={FadeOut.duration(150).easing(Easing.out(Easing.ease))}
           layout={LinearTransition.duration(120)}
           style={styles.inputShell}
         >
+          {/* a11y: Text input label changes when quiz mode is active. */}
           <TextInput
+            accessibilityLabel={quizActive ? 'Quiz topic' : 'Message to Qubie'}
             multiline
             maxLength={MAX_MESSAGE_LENGTH}
             value={value}
@@ -512,6 +558,7 @@ function ChatInputComponent({
             solid
             disabled={!canSendText}
             onPress={handleSubmitText}
+            springOnPress
           />
         </Animated.View>
       )}

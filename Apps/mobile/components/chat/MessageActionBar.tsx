@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet } from 'react-native';
-import Animated, { FadeIn } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, FadeOut } from 'react-native-reanimated';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { Colors, Spacing } from '@/constants/theme';
@@ -57,20 +57,28 @@ export function MessageActionBar({
   const iconSize = isYoung ? 20 : 18;
 
   return (
-    <Animated.View entering={FadeIn.duration(200)} style={styles.container}>
+    <Animated.View entering={FadeIn.duration(180).easing(Easing.out(Easing.ease))} style={styles.container}>
+      {/* a11y: Copy action announces its purpose and keeps visual state separate. */}
       <Pressable
         onPress={handleCopy}
         style={styles.action}
         accessibilityRole="button"
         accessibilityLabel="Copy message"
       >
-        <MaterialCommunityIcons
-          name={copied ? 'check' : 'content-copy'}
-          size={iconSize}
-          color={copied ? Colors.success : Colors.textTertiary}
-        />
+        <Animated.View
+          key={copied ? 'copied' : 'copy'}
+          entering={FadeIn.duration(150).easing(Easing.out(Easing.ease))}
+          exiting={FadeOut.duration(150).easing(Easing.out(Easing.ease))}
+        >
+          <MaterialCommunityIcons
+            name={copied ? 'check' : 'content-copy'}
+            size={iconSize}
+            color={copied ? Colors.success : Colors.textTertiary}
+          />
+        </Animated.View>
       </Pressable>
 
+      {/* a11y: Retry action is available for a completed AI response. */}
       <Pressable
         onPress={handleRetry}
         style={styles.action}
@@ -84,11 +92,12 @@ export function MessageActionBar({
         />
       </Pressable>
 
+      {/* a11y: TTS action names both read and stop states. */}
       <Pressable
         onPress={handleVoice}
         style={[styles.action, isYoung && styles.actionLarge]}
         accessibilityRole="button"
-        accessibilityLabel={isSpeaking ? 'Stop speaking' : 'Listen to message'}
+        accessibilityLabel={isSpeaking ? 'Stop reading' : 'Read aloud'}
       >
         <MaterialCommunityIcons
           name={isSpeaking ? 'stop' : 'volume-high'}

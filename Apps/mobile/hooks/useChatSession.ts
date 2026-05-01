@@ -7,11 +7,11 @@ import {
   submitQuizAnswers,
 } from '@/services/chatService';
 import { transcribeVoiceRecording } from '@/services/voiceService';
+import { triggerHaptic } from '@/src/utils/haptics';
 import type { AgeGroup } from '@/types/child';
 import type {
   ChatInputSource,
   ChatQuizQuestion,
-  ChatQuizResponse,
   ChatState,
   ConversationContextEntry,
   Message,
@@ -36,6 +36,7 @@ interface ActiveQuizState {
   questions: ChatQuizQuestion[];
   answeredQuestionIds: Set<number>;
   startedAt: number;
+  triggerMessageId: string;
 }
 
 interface UseChatSessionOptions {
@@ -45,6 +46,7 @@ interface UseChatSessionOptions {
   subjectContext?: SubjectContext;
   dailyLimitMinutes?: number;
   onQuizComplete?: (summary: QuizSummary) => void;
+  autoStart?: boolean;
 }
 
 interface UseChatSessionResult {
@@ -139,6 +141,7 @@ export function useChatSession({
   subjectContext,
   dailyLimitMinutes,
   onQuizComplete,
+  autoStart = true,
 }: UseChatSessionOptions): UseChatSessionResult {
   const [state, setState] = useState<ChatState>(buildInitialChatState);
   const [session, setSession] = useState<Session | null>(null);
@@ -225,7 +228,7 @@ export function useChatSession({
         sessionId: localSession.id,
         sessionStartedAt: localSession.startedAt,
         isLoading: false,
-        error: 'Live session could not be started. Messages may not sync until connection returns.',
+        error: 'I am having trouble connecting right now. Please try again soon.',
       }));
       return localSession;
     }
@@ -302,6 +305,7 @@ export function useChatSession({
         content: text,
         safetyFlags: [],
         createdAt: new Date().toISOString(),
+        status: 'sent',
       };
 
       const contextualMessages = [...messagesRef.current, optimisticMessage];
@@ -342,15 +346,16 @@ export function useChatSession({
           return;
         }
 
-      const aiMessage: Message = {
-        id: response.quizId,
-        sessionId: activeSession.id,
-        sender: 'ai',
-        content: formatQuizResponse(response),
-        safetyFlags: [],
-        createdAt: new Date().toISOString(),
-        triggeredBy: optimisticMessage.id,
-      };
+        const aiMessage: Message = {
+          id: response.messageId,
+          sessionId: activeSession.id,
+          sender: 'ai',
+          content: response.content || 'I need a moment to explain that. Please try again.',
+          safetyFlags: response.safetyFlags,
+          createdAt: response.createdAt,
+          triggeredBy: optimisticMessage.id,
+          status: 'sent',
+        };
 
         const nextMessages = [...messagesRef.current, aiMessage];
         messagesRef.current = nextMessages;
@@ -371,10 +376,25 @@ export function useChatSession({
           return;
         }
 
+        const failedMessage: Message = {
+          id: `ai-error-${optimisticMessage.id}`,
+          sessionId: activeSession.id,
+          sender: 'ai',
+          content: 'I lost connection before I could answer. Tap retry and I will try again.',
+          safetyFlags: [],
+          createdAt: new Date().toISOString(),
+          triggeredBy: optimisticMessage.id,
+          status: 'error',
+        };
+
+        const nextMessages = [...messagesRef.current, failedMessage];
+        messagesRef.current = nextMessages;
+
         setState((current) => ({
           ...current,
+          messages: nextMessages,
           isAwaitingResponse: false,
-          error: 'I had trouble reaching your AI tutor. Please try sending your message again.',
+          error: null,
         }));
       }
     },
@@ -411,16 +431,17 @@ export function useChatSession({
       const activeSession = sessionRef.current;
       if (!activeSession) return;
 
-  const summaryMessage: Message = {
-    id: `quiz-summary-${quizState.quizId}`,
-    sessionId: activeSession.id,
-    sender: 'ai',
-    content: '',
-    quizScore: summary,
-    safetyFlags: [],
-    createdAt: new Date().toISOString(),
-    triggeredBy: optimisticMessage.id,
-  };
+      const summaryMessage: Message = {
+        id: `quiz-summary-${quizState.quizId}`,
+        sessionId: activeSession.id,
+        sender: 'ai',
+        content: '',
+        quizScore: summary,
+        safetyFlags: [],
+        createdAt: new Date().toISOString(),
+        triggeredBy: quizState.triggerMessageId,
+        status: 'sent',
+      };
 
       const nextMessages = [...messagesRef.current, summaryMessage];
       messagesRef.current = nextMessages;
@@ -507,7 +528,7 @@ export function useChatSession({
       const childMsg = currentMessages.find((m) => m.id === aiMsg.triggeredBy);
       if (!childMsg) return;
 
-      const filtered = currentMessages.filter((m) => m.id !== aiMessageId);
+      const filtered = currentMessages.filter((m) => m.id !== aiMessageId && m.id !== childMsg.id);
       messagesRef.current = filtered;
 
       setState((current) => ({
@@ -543,6 +564,7 @@ export function useChatSession({
         content: `Quiz me about ${topic}`,
         safetyFlags: [],
         createdAt: new Date().toISOString(),
+        status: 'sent',
       };
 
       const contextualMessages = [...messagesRef.current, optimisticMessage];
@@ -593,18 +615,20 @@ export function useChatSession({
           questions: response.questions.map((q) => ({ ...q })),
           answeredQuestionIds: new Set(),
           startedAt: Date.now(),
+          triggerMessageId: optimisticMessage.id,
         };
 
-  const aiMessage: Message = {
-    id: response.quizId,
-    sessionId: activeSession.id,
-    sender: 'ai',
-    content: response.intro,
-    quiz: response.questions.map((q) => ({ ...q })),
-    safetyFlags: [],
-    createdAt: new Date().toISOString(),
-    triggeredBy: optimisticMessage.id,
-  };
+        const aiMessage: Message = {
+          id: response.quizId,
+          sessionId: activeSession.id,
+          sender: 'ai',
+          content: response.intro,
+          quiz: response.questions.map((q) => ({ ...q })),
+          safetyFlags: [],
+          createdAt: new Date().toISOString(),
+          triggeredBy: optimisticMessage.id,
+          status: 'sent',
+        };
 
         const nextMessages = [...messagesRef.current, aiMessage];
         messagesRef.current = nextMessages;
@@ -625,10 +649,25 @@ export function useChatSession({
           return;
         }
 
+        const failedMessage: Message = {
+          id: `quiz-error-${optimisticMessage.id}`,
+          sessionId: activeSession.id,
+          sender: 'ai',
+          content: 'I could not make that quiz just now. Tap retry and I will try again.',
+          safetyFlags: [],
+          createdAt: new Date().toISOString(),
+          triggeredBy: optimisticMessage.id,
+          status: 'error',
+        };
+
+        const nextMessages = [...messagesRef.current, failedMessage];
+        messagesRef.current = nextMessages;
+
         setState((current) => ({
           ...current,
+          messages: nextMessages,
           isAwaitingResponse: false,
-          error: 'I had trouble making that quiz. Please try again.',
+          error: null,
         }));
       }
     },
@@ -672,8 +711,10 @@ export function useChatSession({
       return;
     }
 
-    void startSession();
-  }, [childId, startSession]);
+    if (autoStart) {
+      void startSession();
+    }
+  }, [autoStart, childId, startSession]);
 
   useEffect(() => {
     if (!session?.startedAt || session.endedAt) {
@@ -702,6 +743,23 @@ export function useChatSession({
     const usedMinutes = Math.floor(elapsedSeconds / 60);
     return Math.max(0, dailyLimitMinutes - usedMinutes);
   }, [dailyLimitMinutes, elapsedSeconds]);
+
+  // --- Haptic: time limit warning (fires once per session at ≤5 min remaining) ---
+  const warningHapticFiredRef = useRef(false);
+  useEffect(() => {
+    if (minutesRemaining === null || minutesRemaining === undefined) return;
+    if (warningHapticFiredRef.current) return;
+    // Convert to seconds for precision: warn when ≤ 300 s (5 min) remain
+    const remainingSeconds =
+      dailyLimitMinutes !== null && dailyLimitMinutes !== undefined
+        ? dailyLimitMinutes * 60 - elapsedSeconds
+        : null;
+    if (remainingSeconds !== null && remainingSeconds <= 300 && remainingSeconds > 0) {
+      warningHapticFiredRef.current = true;
+      triggerHaptic('timeLimitWarning');
+    }
+  }, [minutesRemaining, dailyLimitMinutes, elapsedSeconds]);
+  // --- end haptic ---
 
   return {
     state,

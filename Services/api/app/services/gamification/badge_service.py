@@ -65,17 +65,17 @@ class BadgeService:
             if earned:
                 total_earned += 1
 
-        items.append(
-            BadgeCatalogItem(
-                id=badge.id,
-                name=badge.name,
-                description=badge.description,
-                earned=earned,
-                earned_at=child_badge.earned_at if child_badge and child_badge.earned else None,
-                file_path=badge.file_path,
-                condition=badge.condition,
+            items.append(
+                BadgeCatalogItem(
+                    id=badge.id,
+                    name=badge.name,
+                    description=badge.description,
+                    earned=earned,
+                    earned_at=child_badge.earned_at if child_badge and child_badge.earned else None,
+                    file_path=badge.file_path,
+                    condition=badge.condition,
+                )
             )
-        )
 
         return BadgeCatalogResponse(
             items=items,

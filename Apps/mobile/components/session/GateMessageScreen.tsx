@@ -179,8 +179,8 @@ export function GateMessageScreen({
 
   useEffect(() => {
     contentScale.value = withTiming(1, {
-      duration: 300,
-      easing: Easing.out(Easing.cubic),
+      duration: 180,
+      easing: Easing.out(Easing.ease),
     });
   }, [contentScale]);
 
@@ -197,7 +197,7 @@ export function GateMessageScreen({
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
       <Animated.View
-        entering={FadeIn.duration(300).easing(Easing.out(Easing.cubic))}
+        entering={FadeIn.duration(180).easing(Easing.out(Easing.ease))}
         style={[styles.overlay, { paddingBottom: bottomPadding }]}
       >
         <Animated.View style={[styles.card, contentAnimatedStyle]}>
@@ -230,6 +230,7 @@ export function GateMessageScreen({
               pressed ? styles.dismissButtonPressed : null,
             ]}
           >
+            {/* a11y: Dismiss action is labeled with the same child-facing button text. */}
             <Text style={styles.dismissButtonText}>{dismissLabel}</Text>
           </Pressable>
         </Animated.View>

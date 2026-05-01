@@ -164,9 +164,13 @@ export default function ProfileScreen() {
       ? 'We could not refresh this week\'s insight right now. Keep learning and check back soon.'
       : null;
 
-  const isRefreshing = overviewQuery.isRefetching || progressQuery.isRefetching;
+  const isRefreshing = overviewQuery.isRefetching || progressQuery.isRefetching || badgesLoading;
 
   const handleRefresh = useCallback(() => {
+    if (isRefreshing || isProfileLoading || childDataLoading) {
+      return;
+    }
+
     const refreshes: Promise<unknown>[] = [
       overviewQuery.refetch(),
       progressQuery.refetch(),
@@ -180,7 +184,16 @@ export default function ProfileScreen() {
     void Promise.all(refreshes).then(() => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
     });
-  }, [overviewQuery, progressQuery, refreshBadges, activeProfile?.id, refreshChildData]);
+  }, [
+    activeProfile?.id,
+    childDataLoading,
+    isProfileLoading,
+    isRefreshing,
+    overviewQuery,
+    progressQuery,
+    refreshBadges,
+    refreshChildData,
+  ]);
 
   return (
     <SafeAreaView edges={['top']} style={styles.screen}>

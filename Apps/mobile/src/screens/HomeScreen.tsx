@@ -40,6 +40,10 @@ export default function HomeScreen() {
   const isRefreshing = overviewQuery.isRefetching || progressQuery.isRefetching;
 
   const handleRefresh = useCallback(() => {
+    if (isRefreshing) {
+      return;
+    }
+
     const refreshes: Promise<unknown>[] = [
       overviewQuery.refetch(),
       progressQuery.refetch(),
@@ -52,7 +56,7 @@ export default function HomeScreen() {
     void Promise.all(refreshes).then(() => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
     });
-  }, [overviewQuery, progressQuery, profile?.id, refreshChildData]);
+  }, [isRefreshing, overviewQuery, progressQuery, profile?.id, refreshChildData]);
 
   return (
     <SafeAreaView edges={['top']} style={styles.safeArea}>

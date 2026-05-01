@@ -59,7 +59,7 @@ export function RecentBadges({
         </ScrollView>
       ) : (
         <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>No badges yet - keep learning!</Text>
+          <Text style={styles.emptyText}>Start learning to earn your first badge! 🏅</Text>
         </View>
       )}
     </View>

@@ -9,6 +9,7 @@ interface VerifyParentPinRequest {
 interface VerifyParentPinResponse {
   message: string;
   is_valid: boolean;
+  isValid?: boolean;
 }
 
 /**
@@ -31,7 +32,7 @@ export async function verifyParentPin(pin: string): Promise<boolean> {
       },
     );
 
-    return response.isValid;
+    return response.isValid ?? response.is_valid;
   } catch (error) {
     // Re-throw ApiClientError for consistent error handling
     throw error;

@@ -20,6 +20,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { PrimaryButton } from '@/components/ui/PrimaryButton';
 import { FormTextInput } from '@/components/ui/FormTextInput';
 import { PasswordInput } from '@/components/ui/PasswordInput';
+import { useEffect, useRef } from 'react';
+import { triggerHaptic } from '@/src/utils/haptics';
 
 const googleIcon = require('@/assets/icons/google-48.png');
 
@@ -42,6 +44,23 @@ export default function LoginScreen() {
     resolver: zodResolver(loginSchema),
     defaultValues: { email: '', password: '' },
   });
+
+  // --- Haptic: wrong password ---
+  const prevLoginErrorRef = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    // Fire only when error transitions from null/undefined to a new message.
+    // Prevents firing on mount (prevLoginErrorRef starts as undefined sentinel).
+    if (
+      prevLoginErrorRef.current !== undefined &&
+      error !== null &&
+      error !== undefined &&
+      error !== prevLoginErrorRef.current
+    ) {
+      triggerHaptic('wrongPassword');
+    }
+    prevLoginErrorRef.current = error;
+  }, [error]);
+  // --- end haptic ---
 
   async function onSubmit(data: LoginFormData) {
     clearError();

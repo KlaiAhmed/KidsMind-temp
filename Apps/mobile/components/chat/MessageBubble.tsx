@@ -6,7 +6,7 @@ import { MessageActionBar } from '@/components/chat/MessageActionBar';
 import { QuizQuestionCard } from '@/components/chat/QuizQuestionCard';
 import { QuizSummaryCard } from '@/components/chat/QuizSummaryCard';
 import { SafetyFlagBanner } from '@/components/chat/SafetyFlagBanner';
-import { TypingIndicator } from '@/components/chat/TypingIndicator';
+import { ThinkingIndicator } from '@/components/chat/ThinkingIndicator';
 import type { ChatQuizQuestion, Message, QuizSummary } from '@/types/chat';
 import type { AgeGroup } from '@/types/child';
 
@@ -45,6 +45,7 @@ function MessageBubbleComponent({
   const hasSafetyFlags = message.safetyFlags.length > 0;
   const hasQuiz = Boolean(message.quiz && message.quiz.length > 0);
   const hasQuizScore = Boolean(message.quizScore);
+  const isErrorMessage = message.status === 'error';
   const senderLabel = isAiMessage ? 'AI' : 'Child';
 
   const bubbleTextSizeStyle =
@@ -103,6 +104,7 @@ function MessageBubbleComponent({
 
   const showActionBar =
     isAiMessage &&
+    !isErrorMessage &&
     !isTypingPlaceholder &&
     !hasSafetyFlags &&
     !hasQuiz &&
@@ -118,7 +120,34 @@ function MessageBubbleComponent({
           </View>
         ) : null}
 
-        <Pressable
+        {isErrorMessage ? (
+          <View
+            accessibilityRole="text"
+            accessibilityLabel={`${senderLabel} had trouble answering: ${message.content}`}
+            style={[styles.bubble, styles.aiBubble, styles.errorBubble]}
+          >
+            <View style={styles.errorRow}>
+              <MaterialCommunityIcons name="wifi-alert" size={18} color={Colors.errorText} />
+              <Text allowFontScaling style={[bubbleTextSizeStyle, styles.errorText]}>
+                {message.content}
+              </Text>
+            </View>
+            {onRetryAiMessage ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Retry response"
+                onPress={() => onRetryAiMessage(message.id)}
+                style={({ pressed }) => [styles.retryButton, pressed ? styles.retryButtonPressed : null]}
+              >
+                {/* a11y: Retry button is exposed inside failed AI messages. */}
+                <MaterialCommunityIcons name="refresh" size={16} color={Colors.white} />
+                <Text style={styles.retryText}>Retry</Text>
+              </Pressable>
+            ) : null}
+            <Text style={styles.timeText}>{formatTimeLabel(message.createdAt)}</Text>
+          </View>
+        ) : (
+          <Pressable
           accessibilityRole="text"
           accessibilityLabel={
             hasSafetyFlags
@@ -133,7 +162,7 @@ function MessageBubbleComponent({
           style={[styles.bubble, isAiMessage ? styles.aiBubble : styles.childBubble]}
         >
           {isTypingPlaceholder ? (
-            <TypingIndicator />
+            <ThinkingIndicator />
           ) : hasSafetyFlags ? (
             <SafetyFlagBanner flags={message.safetyFlags} />
           ) : (
@@ -146,7 +175,8 @@ function MessageBubbleComponent({
           )}
 
           <Text style={styles.timeText}>{formatTimeLabel(message.createdAt)}</Text>
-        </Pressable>
+          </Pressable>
+        )}
       </View>
 
       {showActionBar ? (
@@ -161,7 +191,35 @@ function MessageBubbleComponent({
   );
 }
 
-export const MessageBubble = memo(MessageBubbleComponent);
+function areMessageBubblePropsEqual(previous: MessageBubbleProps, next: MessageBubbleProps) {
+  if (previous.message.id !== next.message.id) return false;
+  if (previous.message.content !== next.message.content) return false;
+  if (previous.message.status !== next.message.status) return false;
+  if (previous.isTypingPlaceholder !== next.isTypingPlaceholder) return false;
+  if (previous.ageGroup !== next.ageGroup) return false;
+
+  const hasStructuredContent =
+    previous.message.quiz ||
+    next.message.quiz ||
+    previous.message.quizScore ||
+    next.message.quizScore ||
+    previous.message.safetyFlags.length > 0 ||
+    next.message.safetyFlags.length > 0 ||
+    previous.message.safetyFlags.length !== next.message.safetyFlags.length;
+
+  if (hasStructuredContent) {
+    return previous.message === next.message;
+  }
+
+  return (
+    previous.onLongPressMessage === next.onLongPressMessage &&
+    previous.onRetryAiMessage === next.onRetryAiMessage &&
+    previous.onQuizAnswer === next.onQuizAnswer &&
+    previous.onQuizTryAnother === next.onQuizTryAnother
+  );
+}
+
+export const MessageBubble = memo(MessageBubbleComponent, areMessageBubblePropsEqual);
 
 const styles = StyleSheet.create({
   outer: {
@@ -201,6 +259,10 @@ const styles = StyleSheet.create({
     opacity: 0.75,
     borderTopLeftRadius: Radii.sm,
   },
+  errorBubble: {
+    backgroundColor: Colors.errorContainer,
+    opacity: 1,
+  },
   childBubble: {
     backgroundColor: Colors.primary,
     borderTopRightRadius: Radii.sm,
@@ -232,5 +294,34 @@ const styles = StyleSheet.create({
   quizCardWrapper: {
     maxWidth: '88%',
     gap: Spacing.sm,
+  },
+  errorRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.xs,
+  },
+  errorText: {
+    color: Colors.errorText,
+    flex: 1,
+  },
+  retryButton: {
+    alignSelf: 'flex-start',
+    minHeight: 36,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    borderRadius: Radii.full,
+    backgroundColor: Colors.primary,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+  },
+  retryButtonPressed: {
+    transform: [{ scale: 0.96 }],
+    opacity: 0.9,
+  },
+  retryText: {
+    ...Typography.captionMedium,
+    color: Colors.white,
   },
 });

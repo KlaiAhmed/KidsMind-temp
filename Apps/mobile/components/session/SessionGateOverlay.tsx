@@ -29,7 +29,7 @@ export function SessionGateOverlay({
   useEffect(() => {
     contentScale.value = withTiming(1, {
       duration: 150,
-      easing: Easing.out(Easing.cubic),
+      easing: Easing.out(Easing.ease),
     });
   }, [contentScale]);
 
@@ -40,12 +40,17 @@ export function SessionGateOverlay({
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
       <Animated.View
-        entering={FadeIn.duration(150).easing(Easing.out(Easing.cubic))}
+        entering={FadeIn.duration(150).easing(Easing.out(Easing.ease))}
         style={[styles.overlay, { paddingBottom: bottomPadding }]}
       >
         <Animated.View style={[styles.card, contentAnimatedStyle]}>
           <View style={styles.illustrationBubble}>
-            <Text accessibilityRole="image" style={styles.illustration}>
+            {/* a11y: Emoji illustration gets a semantic label instead of being read literally. */}
+            <Text
+              accessibilityLabel={`${title} illustration`}
+              accessibilityRole="image"
+              style={styles.illustration}
+            >
               {illustration}
             </Text>
           </View>

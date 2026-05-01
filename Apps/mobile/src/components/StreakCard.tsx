@@ -1,5 +1,6 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StyleSheet, Text, View } from 'react-native';
+
 import { Colors } from '@/constants/theme';
 
 interface StreakCardProps {
@@ -7,14 +8,16 @@ interface StreakCardProps {
 }
 
 export function StreakCard({ days }: StreakCardProps) {
-  const streakLabel = `${days} Day${days === 1 ? '' : 's'} Streak! 🔥`;
+  const streakLabel = days > 0
+    ? `${days} Day${days === 1 ? '' : 's'} Streak! 🔥`
+    : 'Start your streak today! Learn something new. 🔥';
 
   return (
     <View style={styles.streakCard}>
       <View style={styles.streakTopRow}>
         <Text style={styles.streakLabel}>DAILY STREAK</Text>
         <View style={styles.streakIconCircle}>
-          <MaterialCommunityIcons color="#FFFFFF" name="fire" size={18} />
+          <MaterialCommunityIcons color={Colors.white} name="fire" size={18} />
         </View>
       </View>
 
@@ -22,7 +25,7 @@ export function StreakCard({ days }: StreakCardProps) {
         <Text style={styles.streakText}>{streakLabel}</Text>
       </View>
 
-      <MaterialCommunityIcons color="rgba(255,255,255,0.10)" name="fire" size={86} style={styles.ghostFlame} />
+      <MaterialCommunityIcons color={Colors.white} name="fire" size={86} style={styles.ghostFlame} />
     </View>
   );
 }
@@ -46,15 +49,16 @@ const styles = StyleSheet.create({
   streakLabel: {
     fontFamily: 'PlusJakartaSans_700Bold',
     fontSize: 10,
-    letterSpacing: 1.4,
-    color: 'rgba(255,255,255,0.70)',
+    letterSpacing: 0,
+    color: Colors.white,
+    opacity: 0.7,
     textTransform: 'uppercase',
   },
   streakIconCircle: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: Colors.tertiary,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -73,5 +77,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: -10,
     bottom: -10,
+    opacity: 0.1,
   },
 });

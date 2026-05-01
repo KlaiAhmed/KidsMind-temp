@@ -17,6 +17,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useChildSessionGate } from '@/hooks/useChildSessionGate';
 import { verifyParentPin } from '@/services/parentAccessService';
 import { showToast } from '@/services/toastClient';
+import { ErrorBoundary } from '@/src/components/ErrorBoundary';
 import { ChildSpaceBoundaryProvider } from '@/src/components/spaceSwitch/ChildSpaceBoundary';
 import { ParentPINGate } from '@/src/components/spaceSwitch/ParentPINGate';
 import { PINGateHeaderButton } from '@/src/components/spaceSwitch/PINGateHeaderButton';
@@ -39,6 +40,7 @@ const childTabScreenOptions = {
 function getLockedChildTabOptions(title: string) {
   return {
     title,
+    headerShown: false,
     // SECURITY: Disable gestures for all child screens.
     gestureEnabled: false,
   };
@@ -164,13 +166,7 @@ export default function ChildTabLayout() {
     setIsParentPinGateOpen(false);
   }, []);
 
-  const handleVerifyParentPin = useCallback(async (pin: string): Promise<boolean> => {
-    try {
-      return await verifyParentPin(pin);
-    } catch {
-      return false;
-    }
-  }, []);
+  const handleVerifyParentPin = useCallback((pin: string): Promise<boolean> => verifyParentPin(pin), []);
 
   const boundaryValue = useMemo(
     () => ({
@@ -198,40 +194,42 @@ export default function ChildTabLayout() {
 
   return (
     <ChildSpaceBoundaryProvider value={boundaryValue}>
-      <Tabs
-        backBehavior="none"
-        screenOptions={childTabScreenOptions}
-        tabBar={(props) => (
-          <ChildBottomNavContainer
-            {...props}
-            childId={childProfile?.id ?? null}
-            ageGroup={childProfile?.ageGroup}
-            voiceEnabled={Boolean(childProfile?.rules?.voiceModeEnabled)}
-            gateState={gateState}
+      <ErrorBoundary resetKey={pathname}>
+        <Tabs
+          backBehavior="none"
+          screenOptions={childTabScreenOptions}
+          tabBar={(props) => (
+            <ChildBottomNavContainer
+              {...props}
+              childId={childProfile?.id ?? null}
+              ageGroup={childProfile?.ageGroup}
+              voiceEnabled={Boolean(childProfile?.rules?.voiceModeEnabled)}
+              gateState={gateState}
+            />
+          )}
+        >
+          <Tabs.Screen
+            name="index"
+            options={getLockedChildTabOptions('Home')}
           />
-        )}
-      >
-<Tabs.Screen
-        name="index"
-        options={getLockedChildTabOptions('Home')}
-      />
-      <Tabs.Screen
-        name="explore"
-        options={getLockedChildTabOptions('Learn')}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={getLockedChildTabOptions('Profile')}
-      />
-      <Tabs.Screen
-        name="chat"
-        options={getLockedChildTabOptions('Qubie')}
-      />
-      <Tabs.Screen
-        name="badges"
-        options={hiddenBadgesScreenOptions}
-      />
-    </Tabs>
+          <Tabs.Screen
+            name="explore"
+            options={getLockedChildTabOptions('Learn')}
+          />
+          <Tabs.Screen
+            name="profile"
+            options={getLockedChildTabOptions('Profile')}
+          />
+          <Tabs.Screen
+            name="chat"
+            options={getLockedChildTabOptions('Qubie')}
+          />
+          <Tabs.Screen
+            name="badges"
+            options={hiddenBadgesScreenOptions}
+          />
+        </Tabs>
+      </ErrorBoundary>
 
     {showPinGate && <PINGateHeaderButton />}
 

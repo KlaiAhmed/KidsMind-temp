@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   FlatList,
   Pressable,
   ScrollView,
@@ -99,6 +100,8 @@ function SubjectTopicBrowserContent({ childTabSceneBottomPadding }: SubjectTopic
     fetchSubjectsFromApi,
     refreshChildData,
     childDataLoading,
+    childDataError,
+    allSubjects,
   } = useSubjects();
 
   const [query, setQuery] = useState('');
@@ -111,10 +114,14 @@ function SubjectTopicBrowserContent({ childTabSceneBottomPadding }: SubjectTopic
   const isRefreshing = childDataLoading;
 
   const handleRefresh = useCallback(() => {
+    if (childDataLoading) {
+      return;
+    }
+
     void Promise.all([fetchSubjectsFromApi(), refreshChildData()]).then(() => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
     });
-  }, [fetchSubjectsFromApi, refreshChildData]);
+  }, [childDataLoading, fetchSubjectsFromApi, refreshChildData]);
 
   useEffect(() => {
     if (params.subjectId) {
@@ -156,6 +163,18 @@ function SubjectTopicBrowserContent({ childTabSceneBottomPadding }: SubjectTopic
     });
   }, [activeSubjectId, filter, filterTopics, query]);
 
+  const hasAnyItems = useMemo(() => {
+    if (!activeSubjectId) {
+      return allSubjects.length > 0;
+    }
+
+    return filterTopics({
+      subjectId: activeSubjectId,
+      query: '',
+      filter: 'all',
+    }).length > 0;
+  }, [activeSubjectId, allSubjects, filterTopics]);
+
   function handleSubjectPress(subjectId: string) {
     markSubjectAccess(subjectId);
     setActiveSubjectId(subjectId);
@@ -188,13 +207,191 @@ function SubjectTopicBrowserContent({ childTabSceneBottomPadding }: SubjectTopic
     subjectScrollOffsetRef.current = event.nativeEvent.contentOffset.y;
   }
 
-const noResults = (activeSubjectId ? visibleTopics.length : visibleSubjects.length) === 0;
+  const activeListCount = activeSubjectId ? visibleTopics.length : visibleSubjects.length;
+  const isInitialLoading = childDataLoading && activeListCount === 0;
+  const hasLoadError = Boolean(childDataError) && activeListCount === 0;
+  const noResults = activeListCount === 0 && !isInitialLoading && !hasLoadError;
+
+function ListHeader({
+  query,
+  onQueryChange,
+  onClearQuery,
+  filter,
+  onFilterChange,
+  activeSubjectId,
+  activeSubject,
+  onBackToSubjects,
+}: {
+  query: string;
+  onQueryChange: (text: string) => void;
+  onClearQuery: () => void;
+  filter: TopicFilter;
+  onFilterChange: (filter: TopicFilter) => void;
+  activeSubjectId: string | null;
+  activeSubject?: Subject;
+  onBackToSubjects: () => void;
+}) {
+  return (
+    <View style={styles.listHeader}>
+      <Text style={styles.pageTitle}>Discover</Text>
+
+      <SearchBar
+        value={query}
+        onChangeText={onQueryChange}
+        onClear={onClearQuery}
+        placeholder="Search by subject or topic"
+      />
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filterRow}
+        nestedScrollEnabled
+      >
+        {FILTER_OPTIONS.map((option) => {
+          const selected = option.key === filter;
+
+          return (
+            <Pressable
+              key={option.key}
+              accessibilityRole="button"
+              accessibilityLabel={`Filter ${option.label}`}
+              accessibilityState={{ selected }}
+              onPress={() => onFilterChange(option.key)}
+              style={({ pressed }) => [
+                styles.filterChip,
+                selected ? styles.filterChipSelected : null,
+                pressed ? styles.filterChipPressed : null,
+              ]}
+            >
+              <Text style={[styles.filterChipText, selected ? styles.filterChipTextSelected : null]}>
+                {option.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+
+      {activeSubjectId ? (
+        <View style={styles.levelHeader}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Back to subjects"
+            onPress={onBackToSubjects}
+            style={({ pressed }) => [styles.backButton, pressed ? styles.backButtonPressed : null]}
+          >
+            <MaterialCommunityIcons name="arrow-left" size={20} color={Colors.text} />
+            <Text style={styles.backText}>Subjects</Text>
+          </Pressable>
+          <Text style={styles.levelTitle}>{activeSubject?.title ?? 'Topics'}</Text>
+        </View>
+      ) : (
+        <Text style={styles.levelTitle}>Subjects</Text>
+      )}
+    </View>
+  );
+}
+
+function ListState({
+  query,
+  activeSubjectId,
+  mode,
+  hasAnyItems,
+  onRetry,
+}: {
+  query: string;
+  activeSubjectId: string | null;
+  mode: 'loading' | 'error' | 'empty';
+  hasAnyItems: boolean;
+  onRetry: () => void;
+}) {
+  if (mode === 'loading') {
+    return (
+      <View style={styles.emptyState}>
+        <ActivityIndicator color={Colors.primary} size="large" />
+        <Text style={styles.emptyTitle}>Loading learning worlds...</Text>
+      </View>
+    );
+  }
+
+  if (mode === 'error') {
+    return (
+      <View style={styles.emptyState}>
+        <MaterialCommunityIcons name="cloud-alert-outline" size={42} color={Colors.errorText} />
+        <Text style={styles.emptyTitle}>We could not load subjects right now.</Text>
+        <Text style={styles.emptyBody}>Check your connection and try again.</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Retry loading subjects"
+          onPress={onRetry}
+          style={({ pressed }) => [styles.retryButton, pressed ? styles.retryButtonPressed : null]}
+        >
+          {/* a11y: Retry button gives screen-reader users the same recovery path. */}
+          <MaterialCommunityIcons name="refresh" size={16} color={Colors.white} />
+          <Text style={styles.retryText}>Try again</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  const trimmedQuery = query.trim();
+  const title = trimmedQuery
+    ? `No results for "${trimmedQuery}"`
+    : hasAnyItems
+      ? 'Nothing matches this filter yet. Try All.'
+      : activeSubjectId
+      ? 'No topics available yet. Check back soon! 📚'
+      : 'No subjects available yet. Check back soon! 📚';
+  const body = trimmedQuery || hasAnyItems ? 'Try another search term or switch filter.' : undefined;
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-      <ScrollView
-        style={[styles.container, { paddingBottom: childTabSceneBottomPadding }]}
-        contentContainerStyle={styles.scrollContent}
+    <View style={styles.emptyState}>
+      <MaterialCommunityIcons name="magnify-close" size={42} color={Colors.textSecondary} />
+      <Text style={styles.emptyTitle}>{title}</Text>
+      {body ? <Text style={styles.emptyBody}>{body}</Text> : null}
+    </View>
+  );
+}
+
+return (
+  <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+    {isInitialLoading || hasLoadError || noResults ? (
+      <View style={[styles.container, { paddingBottom: childTabSceneBottomPadding }]}>
+        <ListHeader
+          query={query}
+          onQueryChange={setQuery}
+          onClearQuery={() => setQuery('')}
+          filter={filter}
+          onFilterChange={setFilter}
+          activeSubjectId={activeSubjectId}
+          activeSubject={activeSubject}
+          onBackToSubjects={handleBackToSubjects}
+        />
+        <ListState
+          query={query}
+          activeSubjectId={activeSubjectId}
+          mode={isInitialLoading ? 'loading' : hasLoadError ? 'error' : 'empty'}
+          hasAnyItems={hasAnyItems}
+          onRetry={handleRefresh}
+        />
+      </View>
+    ) : activeSubjectId ? (
+      <FlatList
+        data={visibleTopics}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.topicsContent}
+        ListHeaderComponent={
+          <ListHeader
+            query={query}
+            onQueryChange={setQuery}
+            onClearQuery={() => setQuery('')}
+            filter={filter}
+            onFilterChange={setFilter}
+            activeSubjectId={activeSubjectId}
+            activeSubject={activeSubject}
+            onBackToSubjects={handleBackToSubjects}
+          />
+        }
         refreshControl={
           <AppRefreshControl
             onRefresh={handleRefresh}
@@ -202,108 +399,55 @@ const noResults = (activeSubjectId ? visibleTopics.length : visibleSubjects.leng
           />
         }
         showsVerticalScrollIndicator={false}
-        nestedScrollEnabled
-      >
-        <Text style={styles.pageTitle}>Discover</Text>
-
-        <SearchBar
-          value={query}
-          onChangeText={setQuery}
-          onClear={() => setQuery('')}
-          placeholder="Search by subject or topic"
-        />
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterRow}
-          nestedScrollEnabled
-        >
-          {FILTER_OPTIONS.map((option) => {
-            const selected = option.key === filter;
-
-            return (
-              <Pressable
-                key={option.key}
-                accessibilityRole="button"
-                accessibilityLabel={`Filter ${option.label}`}
-                accessibilityState={{ selected }}
-                onPress={() => setFilter(option.key)}
-                style={({ pressed }) => [
-                  styles.filterChip,
-                  selected ? styles.filterChipSelected : null,
-                  pressed ? styles.filterChipPressed : null,
-                ]}
-              >
-                <Text style={[styles.filterChipText, selected ? styles.filterChipTextSelected : null]}>
-                  {option.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-
-        {activeSubjectId ? (
-          <View style={styles.levelHeader}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Back to subjects"
-              onPress={handleBackToSubjects}
-              style={({ pressed }) => [styles.backButton, pressed ? styles.backButtonPressed : null]}
-            >
-              <MaterialCommunityIcons name="arrow-left" size={20} color={Colors.text} />
-              <Text style={styles.backText}>Subjects</Text>
-            </Pressable>
-            <Text style={styles.levelTitle}>{activeSubject?.title ?? 'Topics'}</Text>
-          </View>
-        ) : (
-          <Text style={styles.levelTitle}>Subjects</Text>
-        )}
-
-        {noResults ? (
-          <View style={styles.emptyState}>
-            <MaterialCommunityIcons name="magnify-close" size={42} color={Colors.textSecondary} />
-            <Text style={styles.emptyTitle}>No results for "{query}"</Text>
-            <Text style={styles.emptyBody}>Try another search term or switch filter.</Text>
-          </View>
-        ) : activeSubjectId ? (
-          <FlatList
-            data={visibleTopics}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={styles.topicsContent}
-            nestedScrollEnabled
-            ItemSeparatorComponent={() => <View style={{ height: Spacing.sm }} />}
-            renderItem={({ item }) => (
-              <TopicTile
-                topic={item}
-                subjectTitle={activeSubject?.title ?? 'Subject'}
-                onPress={() => handleTopicPress(item.id, item.subjectId)}
-              />
-            )}
-          />
-        ) : (
-          <FlatList
-            ref={subjectListRef}
-            data={visibleSubjects}
-            keyExtractor={(item) => item.id}
-            numColumns={2}
-            onScroll={handleSubjectListScroll}
-            scrollEventThrottle={16}
-            columnWrapperStyle={styles.subjectRow}
-            contentContainerStyle={styles.subjectsContent}
-            nestedScrollEnabled
-            renderItem={({ item }) => (
-              <SubjectCard
-                subject={item}
-                showProgress
-                onPress={() => handleSubjectPress(item.id)}
-              />
-            )}
+        ItemSeparatorComponent={() => <View style={{ height: Spacing.sm }} />}
+        renderItem={({ item }) => (
+          <TopicTile
+            topic={item}
+            subjectTitle={activeSubject?.title ?? 'Subject'}
+            onPress={() => handleTopicPress(item.id, item.subjectId)}
           />
         )}
-      </ScrollView>
-    </SafeAreaView>
-  );
+      />
+    ) : (
+      <FlatList
+        ref={subjectListRef}
+        data={visibleSubjects}
+        keyExtractor={(item) => item.id}
+        numColumns={2}
+        onScroll={handleSubjectListScroll}
+        scrollEventThrottle={16}
+        columnWrapperStyle={styles.subjectRow}
+        contentContainerStyle={styles.subjectsContent}
+        ListHeaderComponent={
+          <ListHeader
+            query={query}
+            onQueryChange={setQuery}
+            onClearQuery={() => setQuery('')}
+            filter={filter}
+            onFilterChange={setFilter}
+            activeSubjectId={activeSubjectId}
+            activeSubject={activeSubject}
+            onBackToSubjects={handleBackToSubjects}
+          />
+        }
+        refreshControl={
+          <AppRefreshControl
+            onRefresh={handleRefresh}
+            refreshing={isRefreshing}
+          />
+        }
+        showsVerticalScrollIndicator={false}
+        renderItem={({ item }) => (
+          <SubjectCard
+            subject={item}
+            showProgress
+            onPress={() => handleSubjectPress(item.id)}
+          />
+        )}
+      />
+    )}
+  </SafeAreaView>
+);
 }
 
 const styles = StyleSheet.create({
@@ -313,8 +457,9 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
+    paddingHorizontal: Spacing.md,
   },
-  scrollContent: {
+  listHeader: {
     paddingHorizontal: Spacing.md,
     gap: Spacing.sm,
   },
@@ -388,7 +533,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.xl,
     gap: Spacing.sm,
+    marginTop: Spacing.md,
   },
   emptyTitle: {
     ...Typography.bodySemiBold,
@@ -400,14 +547,37 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     textAlign: 'center',
   },
+  retryButton: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    borderRadius: Radii.full,
+    backgroundColor: Colors.primary,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+  },
+  retryButtonPressed: {
+    transform: [{ scale: 0.97 }],
+    opacity: 0.9,
+  },
+  retryText: {
+    ...Typography.captionMedium,
+    color: Colors.white,
+  },
   subjectsContent: {
     flexGrow: 1,
     gap: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    paddingBottom: Spacing.md,
   },
   subjectRow: {
     gap: Spacing.sm,
   },
   topicsContent: {
     flexGrow: 1,
+    paddingHorizontal: Spacing.md,
+    paddingBottom: Spacing.md,
   },
 });

@@ -40,6 +40,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { Colors, Radii, Sizing, Spacing, Typography } from '@/constants/theme';
+import { ApiClientError } from '@/services/apiClient';
 
 const PIN_DIGITS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'backspace'] as const;
 const MAX_PIN_ATTEMPTS = 5;
@@ -56,6 +57,23 @@ function formatLockoutRemaining(totalSeconds: number): string {
   const seconds = `${boundedSeconds % 60}`.padStart(2, '0');
 
   return `${minutes}:${seconds}`;
+}
+
+function getPinVerificationErrorStatus(error: unknown): number | null {
+  if (error instanceof ApiClientError) {
+    return error.status;
+  }
+
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'status' in error &&
+    typeof (error as { status?: unknown }).status === 'number'
+  ) {
+    return (error as { status: number }).status;
+  }
+
+  return null;
 }
 
 interface PinDotProps {
@@ -309,9 +327,21 @@ export function ParentPINGate({
               setGateState('error');
               setErrorMessage('Incorrect PIN. Please try again.');
             }
-          } catch {
+          } catch (error) {
+            const status = getPinVerificationErrorStatus(error);
+
+            if (status === 429) {
+              triggerShake();
+              startLockout();
+              return;
+            }
+
             setGateState('error');
-            setErrorMessage('Something went wrong. Please try again.');
+            setErrorMessage(
+              status === 0 || status === 408
+                ? "Couldn't verify PIN. Check your connection."
+                : "Couldn't verify PIN. Please try again.",
+            );
             triggerShake();
             setPin('');
           }
@@ -368,7 +398,7 @@ export function ParentPINGate({
     return (
       <Pressable
         key={isBackspace ? 'backspace' : digit}
-        accessibilityLabel={isBackspace ? 'Backspace' : digit}
+        accessibilityLabel={isBackspace ? 'Backspace' : `Digit ${digit}`}
         accessibilityRole="button"
         disabled={isKeyDisabled}
         onPress={() => handleDigitPress(digit)}
@@ -378,6 +408,7 @@ export function ParentPINGate({
           isKeyDisabled && styles.keyButtonDisabled,
         ]}
       >
+        {/* a11y: Digit keys announce the exact keypad action to screen readers. */}
         {isBackspace ? (
           <MaterialCommunityIcons
             color={isKeyDisabled ? Colors.textTertiary : Colors.text}
@@ -462,6 +493,7 @@ export function ParentPINGate({
             </View>
           </View>
 
+          {/* a11y: Cancel keeps the child in their current child-safe screen. */}
           <Pressable
             accessibilityLabel="Cancel and return to child space"
             accessibilityRole="button"

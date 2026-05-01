@@ -6,6 +6,7 @@ export type MessageSender = 'child' | 'ai';
 export type SafetyFlag = string;
 export type ChatInputSource = 'keyboard' | 'voice';
 export type QuizLevel = 'easy' | 'medium' | 'hard';
+export type MessageStatus = 'sent' | 'streaming' | 'error';
 
 export interface Message {
   id: string;
@@ -15,6 +16,9 @@ export interface Message {
   safetyFlags: SafetyFlag[];
   createdAt: string;
   triggeredBy?: string;
+  status?: MessageStatus;
+  quiz?: ChatQuizQuestion[];
+  quizScore?: QuizSummary;
 }
 
 export interface Session {

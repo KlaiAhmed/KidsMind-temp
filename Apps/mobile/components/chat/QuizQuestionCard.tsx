@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import Animated, {
+  Easing,
   FadeIn,
   withSpring,
   useSharedValue,
@@ -86,6 +87,7 @@ function OptionButton({
 
   return (
     <Animated.View style={animatedStyle}>
+      {/* a11y: Quiz options announce only the answer text for fast scanning. */}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={label}
@@ -136,6 +138,7 @@ function ShortAnswerSection({
     <View style={styles.shortAnswerContainer}>
       {!isLocked ? (
         <View style={styles.shortAnswerInputRow}>
+          {/* a11y: Short-answer input is labeled as an answer field. */}
           <TextInput
             style={styles.shortAnswerInput}
             placeholder="Type your answer..."
@@ -147,6 +150,7 @@ function ShortAnswerSection({
             onSubmitEditing={handleSubmit}
             accessibilityLabel="Type your answer"
           />
+          {/* a11y: Submit button is the only icon-only control in short answers. */}
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Submit answer"
@@ -210,7 +214,7 @@ function FeedbackSection({
 
   return (
     <Animated.View
-      entering={FadeIn.duration(300)}
+      entering={FadeIn.duration(180).easing(Easing.out(Easing.ease))}
       onLayout={() => {
         scale.value = withSpring(1.03, { damping: 12, stiffness: 300 }, () => {
           scale.value = withSpring(1, { damping: 15, stiffness: 200 });
