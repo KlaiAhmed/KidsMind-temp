@@ -6,6 +6,7 @@ Layer: Controller
 Domain: Chat
 """
 
+import asyncio
 import json
 import time
 from collections.abc import AsyncGenerator
@@ -605,7 +606,7 @@ async def quiz_generate_controller(
         )
     except AIRateLimitError:
         raise HTTPException(status_code=429, detail="AI service rate limit exceeded")
-    except TimeoutError:
+    except (TimeoutError, asyncio.TimeoutError):
         raise HTTPException(status_code=504, detail="Quiz generation timed out")
 
     ai_duration = time.perf_counter() - request_start

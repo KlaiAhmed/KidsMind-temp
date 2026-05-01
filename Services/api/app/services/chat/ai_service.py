@@ -124,7 +124,7 @@ class AIService:
                         nested = text_value.get("value") or text_value.get("text")
                         if isinstance(nested, str):
                             parts.append(nested)
-                        continue
+                            continue
 
                     for key in ("content", "value", "output_text"):
                         value = block.get(key)
@@ -207,6 +207,8 @@ class AIService:
             profile_context, subject, topic, level, question_count, context
         )
 
+        timeout_seconds = settings.AI_QUIZ_TIMEOUT_SECONDS
+
         logger.info(
             "AIService.generate_quiz started",
             extra={
@@ -215,6 +217,11 @@ class AIService:
                 "topic": topic,
                 "level": level,
                 "question_count": question_count,
+                "timeout_seconds": timeout_seconds,
+                "model_name": settings.MODEL_NAME,
+                "llm_timeout_seconds": settings.LLM_TIMEOUT_SECONDS,
+                "llm_max_retries": settings.LLM_MAX_RETRIES,
+                "prompt_keys": list(invoke_payload.keys()),
             },
         )
 
@@ -222,13 +229,13 @@ class AIService:
             task = asyncio.create_task(chain.ainvoke(invoke_payload))
             response = await asyncio.wait_for(
                 asyncio.shield(task),
-                timeout=settings.AI_QUIZ_TIMEOUT_SECONDS,
+                timeout=timeout_seconds,
             )
             elapsed = time.perf_counter() - timer
             logger.info(
                 "AIService.generate_quiz completed",
                 extra={
-                    "elapsed_seconds": elapsed,
+                    "elapsed_seconds": round(elapsed, 3),
                 },
             )
             if isinstance(response, dict):
@@ -251,23 +258,28 @@ class AIService:
             task.cancel()
             try:
                 await task
-            except asyncio.CancelledError:
+            except (asyncio.CancelledError, Exception):
                 pass
             elapsed = time.perf_counter() - timer
             logger.error(
                 "AIService.generate_quiz timed out",
                 extra={
-                    "elapsed_seconds": elapsed,
-                    "timeout_seconds": settings.AI_QUIZ_TIMEOUT_SECONDS,
+                    "elapsed_seconds": round(elapsed, 3),
+                    "timeout_seconds": timeout_seconds,
+                    "subject": subject,
+                    "topic": topic,
+                    "model_name": settings.MODEL_NAME,
                 },
             )
             raise
         except Exception:
+            elapsed = time.perf_counter() - timer
             logger.exception(
                 "AIService.generate_quiz failed",
                 extra={
                     "subject": subject,
                     "topic": topic,
+                    "elapsed_seconds": round(elapsed, 3),
                 },
             )
             raise
