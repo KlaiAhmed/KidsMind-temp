@@ -1,10 +1,13 @@
 import type {
   AgeGroup,
   AvatarOption,
+  ChildDashboardOverview,
+  ChildDashboardProgress,
   ChildPauseState,
   ChildProfile,
   ChildRules,
   CreateChildProfileInput,
+  Subject,
   SubjectKey,
   UpdateChildProfileInput,
   UpdateChildRulesInput,
@@ -442,7 +445,7 @@ function normalizeChildProfile(data: ChildProfileApiResponse): ChildProfile {
     xp,
     level,
     xpToNextLevel: level * 100,
-    streakDays: 0,
+    streakDays: 0, // KNOWN: backend returns 0 from child profile endpoint; use dashboard overview for real streak_days
     dailyGoalMinutes,
     dailyCompletedMinutes: 0,
     todayUsageSeconds: typeof data.screen_time_today_seconds === 'number' && data.screen_time_today_seconds >= 0
@@ -450,7 +453,7 @@ function normalizeChildProfile(data: ChildProfileApiResponse): ChildProfile {
       : 0,
     timezone: normalizeOptionalString(data.timezone),
     totalSubjectsExplored: subjectIds.length,
-    totalExercisesCompleted: 0,
+    totalExercisesCompleted: 0, // KNOWN: backend returns 0 from child profile endpoint; use dashboard overview when available
     totalBadgesEarned: 0,
     isPaused: Boolean(data.is_paused),
   };
@@ -530,27 +533,29 @@ export async function updateChildRules(
   input: UpdateChildRulesInput,
 ): Promise<ChildProfile> {
   const resolvedChildId = normalizeChildId(childId);
-  const body: Record<string, unknown> = {};
+  const rulesBody: Record<string, unknown> = {};
 
   if (input.defaultLanguage !== undefined) {
-    body.default_language = input.defaultLanguage;
+    rulesBody.default_language = input.defaultLanguage;
   }
 
   if (input.homeworkModeEnabled !== undefined) {
-    body.homework_mode_enabled = input.homeworkModeEnabled;
+    rulesBody.homework_mode_enabled = input.homeworkModeEnabled;
   }
 
   if (input.voiceModeEnabled !== undefined) {
-    body.voice_mode_enabled = input.voiceModeEnabled;
+    rulesBody.voice_mode_enabled = input.voiceModeEnabled;
   }
 
   if (input.audioStorageEnabled !== undefined) {
-    body.audio_storage_enabled = input.audioStorageEnabled;
+    rulesBody.audio_storage_enabled = input.audioStorageEnabled;
   }
 
   if (input.conversationHistoryEnabled !== undefined) {
-    body.conversation_history_enabled = input.conversationHistoryEnabled;
+    rulesBody.conversation_history_enabled = input.conversationHistoryEnabled;
   }
+
+  const body: Record<string, unknown> = { rules: rulesBody };
 
   if (input.allowedSubjects !== undefined) {
     body.allowed_subjects = input.allowedSubjects.map((subject) => ({ subject }));
@@ -683,4 +688,140 @@ export async function resumeChild(childId: string | number): Promise<ChildPauseS
     childId: response.child_id,
     isPaused: response.is_paused,
   };
+}
+
+interface DashboardOverviewApiResponse {
+  xp?: unknown;
+  level?: unknown;
+  streak_days?: unknown;
+  total_sessions?: unknown;
+  total_messages?: unknown;
+}
+
+export async function getChildDashboardOverview(childId: string | number): Promise<ChildDashboardOverview> {
+  const resolvedChildId = normalizeChildId(childId);
+  const response = await apiRequest<DashboardOverviewApiResponse>(
+    `/api/v1/children/${resolvedChildId}/dashboard/overview`,
+    { method: 'GET' },
+  );
+
+  return {
+    xp: typeof response.xp === 'number' && Number.isFinite(response.xp) ? response.xp : 0,
+    level: typeof response.level === 'number' && Number.isFinite(response.level) ? response.level : 1,
+    streakDays: typeof response.streak_days === 'number' && Number.isFinite(response.streak_days) ? response.streak_days : 0,
+    totalSessions: typeof response.total_sessions === 'number' && Number.isFinite(response.total_sessions) ? response.total_sessions : 0,
+    totalMessages: typeof response.total_messages === 'number' && Number.isFinite(response.total_messages) ? response.total_messages : 0,
+  };
+}
+
+interface DashboardProgressWeeklyInsightApiResponse {
+  summary?: unknown;
+  top_subject?: unknown;
+  engagement_level?: unknown;
+}
+
+interface DashboardProgressSubjectMasteryApiResponse {
+  subject: string;
+  sessions: number;
+  messages: number;
+  xp: number;
+}
+
+interface DashboardProgressDailyUsageApiResponse {
+  date: string;
+  sessions: number;
+  messages: number;
+  xp_gained: number;
+}
+
+interface DashboardProgressApiResponse {
+  daily_usage?: DashboardProgressDailyUsageApiResponse[];
+  subject_mastery?: DashboardProgressSubjectMasteryApiResponse[];
+  weekly_insight?: string | null | DashboardProgressWeeklyInsightApiResponse;
+}
+
+function normalizeDashboardWeeklyInsight(
+  value: DashboardProgressApiResponse['weekly_insight'],
+): ChildDashboardProgress['weeklyInsight'] {
+  if (typeof value === 'string') {
+    const normalized = value.trim();
+    return normalized.length > 0 ? { summary: normalized, topSubject: null, engagementLevel: 'moderate' } : null;
+  }
+
+  if (typeof value === 'object' && value !== null) {
+    const insight = value as DashboardProgressWeeklyInsightApiResponse;
+    const summary = typeof insight.summary === 'string' && insight.summary.trim().length > 0
+      ? insight.summary.trim()
+      : null;
+    if (!summary) return null;
+
+    return {
+      summary,
+      topSubject: typeof insight.top_subject === 'string' ? insight.top_subject : null,
+      engagementLevel: typeof insight.engagement_level === 'string' ? insight.engagement_level : 'moderate',
+    };
+  }
+
+  return null;
+}
+
+export async function getChildDashboardProgress(childId: string | number): Promise<ChildDashboardProgress> {
+  const resolvedChildId = normalizeChildId(childId);
+  const response = await apiRequest<DashboardProgressApiResponse>(
+    `/api/v1/children/${resolvedChildId}/dashboard/progress`,
+    { method: 'GET' },
+  );
+
+  return {
+    dailyUsage: Array.isArray(response.daily_usage)
+      ? response.daily_usage.map((entry) => ({
+          date: entry.date,
+          sessions: entry.sessions,
+          messages: entry.messages,
+          xpGained: entry.xp_gained,
+        }))
+      : [],
+    subjectMastery: Array.isArray(response.subject_mastery)
+      ? response.subject_mastery.map((entry) => ({
+          subject: entry.subject,
+          sessions: entry.sessions,
+          messages: entry.messages,
+          xp: entry.xp,
+        }))
+      : [],
+    weeklyInsight: normalizeDashboardWeeklyInsight(response.weekly_insight),
+  };
+}
+
+// MISSING: /api/v1/subjects endpoint not yet implemented on backend.
+// Returns empty array until backend endpoint is available.
+// Consumer code should fall back to seed data when this returns [].
+export async function getSubjects(): Promise<Subject[]> {
+  return [];
+}
+
+// MISSING: /api/v1/topics?subjectId={id} endpoint not yet implemented on backend.
+// Returns empty array until backend endpoint is available.
+// Consumer code should fall back to seed data when this returns [].
+export async function getTopicsBySubjectId(_subjectId: string): Promise<import('@/types/child').Topic[]> {
+  return [];
+}
+
+// MISSING: PATCH /api/v1/children/{id}/progress endpoint not yet implemented on backend.
+// No-op until backend endpoint is available.
+export async function markTopicComplete(
+  _childId: string,
+  _topicId: string,
+): Promise<void> {
+}
+
+// MISSING: POST /chat/{uid}/{cid}/{sid}/quiz/submit endpoint —
+// quiz submission currently uses POST /api/v1/quizzes/{childId}/submit instead.
+// This stub exists for future migration when the chat-based endpoint is implemented.
+export async function submitChatQuiz(
+  _childId: string,
+  _sessionId: string,
+  _payload: { quiz_id: string; answers: Array<{ question_id: number; answer: string }>; duration_seconds?: number },
+): Promise<{ correct_count: number; total_questions: number; score_percentage: number }> {
+  throw new Error('submitChatQuiz: endpoint not yet implemented on backend');
 }

@@ -8,7 +8,7 @@ interface VerifyParentPinRequest {
 
 interface VerifyParentPinResponse {
   message: string;
-  isValid: boolean;
+  is_valid: boolean;
 }
 
 /**

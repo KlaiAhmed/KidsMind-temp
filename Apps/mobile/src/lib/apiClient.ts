@@ -1,5 +1,17 @@
 import { BASE_URL } from '@/src/config/api.config';
 
+/**
+ * Base URL prefix strategy:
+ *   BASE_URL (from api.config.ts) is the bare origin — e.g. "http://10.0.2.2:8000".
+ *   It does NOT include "/api/v1". Every service file must therefore include the
+ *   full path prefix in its apiRequest() calls:
+ *     - Auth (mobile):  /api/mobile/auth/...
+ *     - Auth (web):     /api/web/auth/...
+ *     - General APIs:   /api/v1/...
+ *   Do NOT duplicate the prefix — paths must start with "/" and include the
+ *   version segment exactly once (e.g. "/api/v1/children", NOT "/api/v1/api/v1/children").
+ */
+
 export class ApiClientError extends Error {
   status: number;
   details?: unknown;

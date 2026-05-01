@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
+import { useRouter } from 'expo-router';
 
 import { PrimaryButton } from '@/components/ui/PrimaryButton';
 import { Colors, Spacing, Shadows, Typography } from '@/constants/theme';
@@ -23,6 +24,7 @@ const PIN_LENGTH = 4;
 
 export default function SetupPinScreen() {
   const queryClient = useQueryClient();
+  const router = useRouter();
   const { accessToken, markPinConfigured } = useAuth();
 
   const [parentPin, setParentPin] = useState('');
@@ -152,6 +154,7 @@ export default function SetupPinScreen() {
       await setupParentPin(parentPin, accessToken);
       markPinConfigured();
       void queryClient.invalidateQueries({ queryKey: ['auth', 'current-user-summary'] });
+      router.replace('/(tabs)');
     } catch (error) {
       setErrorMessage(toApiErrorMessage(error));
     } finally {
@@ -166,6 +169,7 @@ export default function SetupPinScreen() {
     parentPin,
     playMismatchShake,
     queryClient,
+    router,
   ]);
 
   const submitDisabled =

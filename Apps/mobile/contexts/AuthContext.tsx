@@ -134,6 +134,8 @@ const INITIAL_AVATARS: AvatarOption[] = [
   { id: 'fallback-0', label: 'Brainy Buddy', asset: require('../assets/images/icon.png') },
 ];
 
+// TODO: Replace with API data from GET /api/v1/subjects once backend endpoint is implemented.
+// Currently used as seed fallback in useSubjects() when the API returns [].
 const TOPIC_SEED: Topic[] = [
   {
     id: 'topic-math-1',
@@ -219,6 +221,8 @@ const TOPIC_SEED: Topic[] = [
   },
 ];
 
+// TODO: Replace with API data from GET /api/v1/subjects once backend endpoint is implemented.
+// Currently builds subjects from TOPIC_SEED as fallback in useSubjects().
 function buildSubjects(topics: Topic[]): Subject[] {
   const subjectMap: Subject[] = [
     {
@@ -450,16 +454,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const pinConfiguredFromLocal = useRef(false);
 
   const markPinConfigured = useCallback(() => {
-    if (!sessionUser) {
+    const currentUser = useAuthStore.getState().user;
+    if (!currentUser) {
       return;
     }
 
     pinConfiguredFromLocal.current = true;
     setUser({
-      ...sessionUser,
+      ...currentUser,
       pin_configured: true,
     });
-  }, [sessionUser, setUser]);
+  }, [setUser]);
 
   const refreshMutation = useMutation({
     mutationFn: refreshTokenRequest,

@@ -1,13 +1,31 @@
-import { Redirect, Tabs } from 'expo-router';
-import React from 'react';
+import { Redirect, Tabs, usePathname } from 'expo-router';
+import React, { useMemo } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { BottomNavContainer } from '@/components/navigation/BottomNavContainer';
+import type { BottomNavSlot } from '@/components/navigation/bottomNavConfig';
 import { useAuth } from '@/contexts/AuthContext';
 import { Colors } from '@/constants/theme';
 
+const LOCKED_SLOTS: BottomNavSlot[] = ['history', 'progress', 'controls'];
+
 export default function TabLayout() {
   const { isLoading, isAuthenticated, childProfileStatus, childProfile } = useAuth();
+  const pathname = usePathname();
+
+  const noChildProfiles = childProfileStatus === 'missing';
+
+  const lockedSlots = useMemo<Partial<Record<BottomNavSlot, boolean>>>(
+    () => {
+      if (!noChildProfiles) return {};
+      const map: Partial<Record<BottomNavSlot, boolean>> = {};
+      for (const slot of LOCKED_SLOTS) {
+        map[slot] = true;
+      }
+      return map;
+    },
+    [noChildProfiles],
+  );
 
   if (isLoading || (isAuthenticated && childProfileStatus === 'unknown')) {
     return (
@@ -21,6 +39,10 @@ export default function TabLayout() {
     return <Redirect href="/splash" />;
   }
 
+  if (noChildProfiles && pathname !== '/') {
+    return <Redirect href="/" />;
+  }
+
   return (
     <Tabs
       tabBar={(props) => (
@@ -28,6 +50,7 @@ export default function TabLayout() {
           {...props}
           mode="parent"
           ageGroup={childProfile?.ageGroup}
+          lockedSlots={lockedSlots}
         />
       )}
       screenOptions={{

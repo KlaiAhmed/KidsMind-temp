@@ -21,7 +21,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import { Colors, Radii, Shadows, Spacing, Typography } from '@/constants/theme';
+import { Colors, Radii, Spacing, Typography } from '@/constants/theme';
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 type TrendDirection = 'up' | 'down' | 'flat';
@@ -627,10 +627,11 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: Spacing.xxxl + Spacing.xxl + Spacing.xl + Spacing.md,
     borderRadius: Radii.xl,
-    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.outline,
+    backgroundColor: Colors.surfaceContainerLowest,
     padding: Spacing.lg,
     gap: Spacing.md,
-    ...Shadows.card,
   },
   metricTitleRow: {
     flexDirection: 'row',
@@ -711,7 +712,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     padding: Spacing.lg,
     gap: Spacing.lg,
-    ...Shadows.card,
   },
   usageTitle: {
     ...Typography.title,

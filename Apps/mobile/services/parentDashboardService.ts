@@ -3,7 +3,7 @@ import type {
   AuditEntry,
   BulkDeleteResult,
   ChildProfile,
-  ExportResponse,
+  HistoryExportResult,
   NotificationPrefs,
   ParentHistory,
   ParentOverview,
@@ -529,27 +529,19 @@ export async function exportHistory(
   _userId: number | string,
   childId: string,
   exportFormat: string = 'json',
-): Promise<ExportResponse> {
+): Promise<HistoryExportResult> {
   const response = await apiRequest<HistoryExportApiResponse | string>(
     `/api/v1/children/${encodeURIComponent(childId)}/dashboard/history/export?export_format=${encodeURIComponent(exportFormat)}`,
     { method: 'GET' },
   );
 
   if (typeof response === 'string') {
-    return {
-      childId,
-      url: normalizeOptionalString(response),
-      exportFormat,
-    };
+    return { downloadUrl: normalizeOptionalString(response) };
   }
 
-  return {
-    childId: response.child_id ?? childId,
-    url: normalizeOptionalString(response.url) ?? normalizeOptionalString(response.download_url),
-    exportFormat: response.export_format ?? exportFormat,
-    totalSessions: response.total_sessions,
-    totalMessages: response.total_messages,
-  };
+  const resolvedUrl = normalizeOptionalString(response.url) ?? normalizeOptionalString(response.download_url);
+
+  return { downloadUrl: resolvedUrl };
 }
 
 interface ChildPauseApiResponse {

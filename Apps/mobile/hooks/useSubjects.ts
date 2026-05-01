@@ -1,6 +1,7 @@
-import { useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import type { BrowserSubjectMatch, Topic, TopicFilter } from '@/types/child';
+import { getSubjects } from '@/services/childService';
+import type { BrowserSubjectMatch, Subject, Topic, TopicFilter } from '@/types/child';
 
 function normalizeText(value: string): string {
   return value.trim().toLowerCase();
@@ -52,7 +53,7 @@ function topicMatchesFilter(topic: Topic, filter: TopicFilter): boolean {
 export function useSubjects() {
   const {
     childProfile,
-    subjects,
+    subjects: seedSubjects,
     topics,
     recentActivity,
     childDataLoading,
@@ -61,6 +62,34 @@ export function useSubjects() {
     markSubjectAccess,
     completeTopic,
   } = useAuth();
+
+  const [apiSubjects, setApiSubjects] = useState<Subject[]>([]);
+  const [apiSubjectsLoading, setApiSubjectsLoading] = useState(false);
+
+  const subjects = useMemo(
+    () => (apiSubjects.length > 0 ? apiSubjects : seedSubjects),
+    [apiSubjects, seedSubjects],
+  );
+
+  const fetchSubjectsFromApi = useCallback(async () => {
+    if (!childProfile?.id) return;
+
+    setApiSubjectsLoading(true);
+    try {
+      const result = await getSubjects();
+      if (result.length > 0) {
+        setApiSubjects(result);
+      }
+    } catch {
+      // FALLBACK: seed data from AuthContext will be used
+    } finally {
+      setApiSubjectsLoading(false);
+    }
+  }, [childProfile?.id]);
+
+  useEffect(() => {
+    void fetchSubjectsFromApi();
+  }, [fetchSubjectsFromApi]);
 
   const selectedSubjects = useMemo(() => {
     if (!childProfile) {
@@ -148,7 +177,7 @@ export function useSubjects() {
     selectedSubjects,
     topics,
     activity,
-    childDataLoading,
+    childDataLoading: childDataLoading || apiSubjectsLoading,
     childDataError,
     getSubjectById,
     getTopicsBySubject,
@@ -157,5 +186,6 @@ export function useSubjects() {
     refreshChildData,
     markSubjectAccess,
     completeTopic,
+    fetchSubjectsFromApi,
   };
 }

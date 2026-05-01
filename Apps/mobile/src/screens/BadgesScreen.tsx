@@ -1,6 +1,6 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { Image } from 'expo-image';
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -9,10 +9,12 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as Haptics from 'expo-haptics';
 
 import { useBadges } from '@/hooks/useBadges';
 import { useChildProfile } from '@/hooks/useChildProfile';
 import { useRouter } from 'expo-router';
+import { AppRefreshControl } from '@/src/components/AppRefreshControl';
 import { BadgeCard as GalleryBadgeCard } from '@/components/badges/BadgeCard';
 import { ProfileSkeletonBlock } from '@/src/components/profile/ProfileSkeletonBlock';
 import { ProfileColors, profileCardShadow } from '@/src/components/profile/profileTokens';
@@ -43,6 +45,8 @@ export default function BadgesScreen() {
     lockedBadges,
     isLoading,
     error,
+    refresh,
+    clearError,
   } = useBadges();
   const { activeChild, getChildAvatarSource } = useParentDashboardChild();
 
@@ -55,6 +59,15 @@ export default function BadgesScreen() {
     [badges.length, earnedBadges.length, lockedBadges.length],
   );
 
+  const isRefreshing = isLoading && badges.length > 0;
+
+  const handleRefresh = useCallback(() => {
+    clearError();
+    void refresh().then(() => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+    });
+  }, [refresh, clearError]);
+
   function handleBack() {
     // SECURITY: Child badge navigation never uses history back because prior stack entries may be parent routes.
     router.replace('/(child-tabs)/profile' as never);
@@ -65,6 +78,12 @@ export default function BadgesScreen() {
       <ScrollView
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <AppRefreshControl
+            onRefresh={handleRefresh}
+            refreshing={isRefreshing}
+          />
+        }
       >
         <View style={styles.headerRow}>
           <Pressable

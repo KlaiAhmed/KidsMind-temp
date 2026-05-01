@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   FlatList,
   Pressable,
@@ -12,7 +12,10 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
+
 import { GateMessageScreen } from '@/components/session/GateMessageScreen';
+import { AppRefreshControl } from '@/src/components/AppRefreshControl';
 import { Colors, Radii, Spacing, Typography } from '@/constants/theme';
 import { SearchBar } from '@/components/browser/SearchBar';
 import { SubjectCard } from '@/components/browser/SubjectCard';
@@ -22,6 +25,8 @@ import { useChildSessionGate } from '@/hooks/useChildSessionGate';
 import { useSubjects } from '@/hooks/useSubjects';
 import { getChildTabSceneBottomPadding } from '@/components/navigation/bottomNavTokens';
 import type { Subject, TopicFilter } from '@/types/child';
+
+const HEADER_CONTENT_HEIGHT = 140;
 
 const FILTER_OPTIONS: Array<{ key: TopicFilter; label: string }> = [
   { key: 'all', label: 'All' },
@@ -91,6 +96,9 @@ function SubjectTopicBrowserContent({ childTabSceneBottomPadding }: SubjectTopic
     getRankedSubjects,
     filterTopics,
     markSubjectAccess,
+    fetchSubjectsFromApi,
+    refreshChildData,
+    childDataLoading,
   } = useSubjects();
 
   const [query, setQuery] = useState('');
@@ -99,6 +107,14 @@ function SubjectTopicBrowserContent({ childTabSceneBottomPadding }: SubjectTopic
 
   const subjectListRef = useRef<FlatList<Subject>>(null);
   const subjectScrollOffsetRef = useRef(0);
+
+  const isRefreshing = childDataLoading;
+
+  const handleRefresh = useCallback(() => {
+    void Promise.all([fetchSubjectsFromApi(), refreshChildData()]).then(() => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+    });
+  }, [fetchSubjectsFromApi, refreshChildData]);
 
   useEffect(() => {
     if (params.subjectId) {
@@ -172,11 +188,22 @@ function SubjectTopicBrowserContent({ childTabSceneBottomPadding }: SubjectTopic
     subjectScrollOffsetRef.current = event.nativeEvent.contentOffset.y;
   }
 
-  const noResults = (activeSubjectId ? visibleTopics.length : visibleSubjects.length) === 0;
+const noResults = (activeSubjectId ? visibleTopics.length : visibleSubjects.length) === 0;
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-      <View style={[styles.container, { paddingBottom: childTabSceneBottomPadding }]}>
+      <ScrollView
+        style={[styles.container, { paddingBottom: childTabSceneBottomPadding }]}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <AppRefreshControl
+            onRefresh={handleRefresh}
+            refreshing={isRefreshing}
+          />
+        }
+        showsVerticalScrollIndicator={false}
+        nestedScrollEnabled
+      >
         <Text style={styles.pageTitle}>Discover</Text>
 
         <SearchBar
@@ -190,6 +217,7 @@ function SubjectTopicBrowserContent({ childTabSceneBottomPadding }: SubjectTopic
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.filterRow}
+          nestedScrollEnabled
         >
           {FILTER_OPTIONS.map((option) => {
             const selected = option.key === filter;
@@ -243,6 +271,7 @@ function SubjectTopicBrowserContent({ childTabSceneBottomPadding }: SubjectTopic
             data={visibleTopics}
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.topicsContent}
+            nestedScrollEnabled
             ItemSeparatorComponent={() => <View style={{ height: Spacing.sm }} />}
             renderItem={({ item }) => (
               <TopicTile
@@ -262,6 +291,7 @@ function SubjectTopicBrowserContent({ childTabSceneBottomPadding }: SubjectTopic
             scrollEventThrottle={16}
             columnWrapperStyle={styles.subjectRow}
             contentContainerStyle={styles.subjectsContent}
+            nestedScrollEnabled
             renderItem={({ item }) => (
               <SubjectCard
                 subject={item}
@@ -271,7 +301,7 @@ function SubjectTopicBrowserContent({ childTabSceneBottomPadding }: SubjectTopic
             )}
           />
         )}
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -283,6 +313,8 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
+  },
+  scrollContent: {
     paddingHorizontal: Spacing.md,
     gap: Spacing.sm,
   },

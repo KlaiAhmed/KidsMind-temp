@@ -59,6 +59,10 @@ export function useBadges() {
     [earnedBadges]
   );
 
+  const clearError = useCallback(() => {
+    setError(null);
+  }, []);
+
   return {
     badges,
     earnedBadges,
@@ -67,5 +71,6 @@ export function useBadges() {
     isLoading,
     error,
     refresh,
+    clearError,
   };
 }
