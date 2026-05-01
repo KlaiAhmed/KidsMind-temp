@@ -1,6 +1,7 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useCallback, useEffect, type ComponentProps } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import Animated, {
   Easing,
   interpolate,
@@ -20,6 +21,7 @@ interface BottomNavItemProps {
   activeIcon: IconName;
   isActive: boolean;
   isDisabled?: boolean;
+  isLocked?: boolean;
   onPress: () => void;
   onLongPress?: () => void;
   accessibilityLabel?: string;
@@ -34,23 +36,24 @@ export function BottomNavItem({
   activeIcon,
   isActive,
   isDisabled,
+  isLocked,
   onPress,
   onLongPress,
   accessibilityLabel,
   testID,
 }: BottomNavItemProps) {
   const pressProgress = useSharedValue(0);
-  const activeProgress = useSharedValue(isActive ? 1 : 0);
+  const activeProgress = useSharedValue(isActive && !isLocked ? 1 : 0);
 
   useEffect(() => {
-    activeProgress.value = withTiming(isActive ? 1 : 0, {
+    activeProgress.value = withTiming(isActive && !isLocked ? 1 : 0, {
       duration: 190,
       easing: Easing.out(Easing.cubic),
     });
-  }, [activeProgress, isActive]);
+  }, [activeProgress, isActive, isLocked]);
 
   const handlePressIn = useCallback(() => {
-    if (isDisabled) {
+    if (isDisabled || isLocked) {
       return;
     }
 
@@ -58,7 +61,7 @@ export function BottomNavItem({
       duration: 90,
       easing: Easing.out(Easing.cubic),
     });
-  }, [isDisabled, pressProgress]);
+  }, [isDisabled, isLocked, pressProgress]);
 
   const handlePressOut = useCallback(() => {
     pressProgress.value = withTiming(0, {
@@ -66,6 +69,14 @@ export function BottomNavItem({
       easing: Easing.out(Easing.cubic),
     });
   }, [pressProgress]);
+
+  const handlePress = useCallback(() => {
+    if (isLocked) {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => undefined);
+      return;
+    }
+    onPress();
+  }, [isLocked, onPress]);
 
   const interactionAnimatedStyle = useAnimatedStyle(() => {
     const pressedScale = interpolate(pressProgress.value, [0, 1], [1, 0.92]);
@@ -88,28 +99,32 @@ export function BottomNavItem({
 
   const iconColor = isDisabled
     ? BottomNavTokens.colors.disabled
-    : isActive
-      ? BottomNavTokens.colors.active
-      : BottomNavTokens.colors.inactive;
+    : isLocked
+      ? BottomNavTokens.colors.inactive
+      : isActive
+        ? BottomNavTokens.colors.active
+        : BottomNavTokens.colors.inactive;
+
+  const iconName = isLocked ? 'lock-outline' : (isActive ? activeIcon : inactiveIcon);
 
   return (
     <Pressable
       accessibilityRole="tab"
-      accessibilityLabel={accessibilityLabel ?? label}
-      accessibilityState={{ selected: isActive, disabled: isDisabled }}
+      accessibilityLabel={isLocked ? `${accessibilityLabel ?? label} — locked` : (accessibilityLabel ?? label)}
+      accessibilityState={{ selected: isActive && !isLocked, disabled: isDisabled || isLocked }}
       testID={testID}
       disabled={isDisabled}
-      onPress={onPress}
-      onLongPress={onLongPress}
+      onPress={handlePress}
+      onLongPress={isLocked ? undefined : onLongPress}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
       style={styles.pressable}
       hitSlop={8}
     >
-      <Animated.View style={[styles.itemShell, interactionAnimatedStyle]}>
+      <Animated.View style={[styles.itemShell, isLocked && styles.itemShellLocked, interactionAnimatedStyle]}>
         <View style={styles.content}>
           <AnimatedIcon
-            name={isActive ? activeIcon : inactiveIcon}
+            name={iconName}
             color={iconColor}
             size={BottomNavTokens.size.icon}
           />
@@ -117,7 +132,12 @@ export function BottomNavItem({
             numberOfLines={1}
             style={[
               styles.label,
-              { fontFamily: isActive ? BottomNavTokens.text.activeFontFamily : BottomNavTokens.text.inactiveFontFamily },
+              isLocked && styles.labelLocked,
+              {
+                fontFamily: isActive && !isLocked
+                  ? BottomNavTokens.text.activeFontFamily
+                  : BottomNavTokens.text.inactiveFontFamily,
+              },
               tintAnimatedStyle,
             ]}
           >
@@ -142,6 +162,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  itemShellLocked: {
+    opacity: 0.45,
+  },
   content: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -152,5 +175,8 @@ const styles = StyleSheet.create({
     fontSize: BottomNavTokens.text.fontSize,
     lineHeight: BottomNavTokens.text.lineHeight,
     textAlign: 'center',
+  },
+  labelLocked: {
+    opacity: 0.6,
   },
 });
