@@ -58,6 +58,12 @@ export interface ChatRequestPayload {
   inputSource?: ChatInputSource;
 }
 
+/**
+ * ChatMessageResponse — normalized shape returned by sendChatMessage().
+ * Currently the backend returns flat JSON when stream:false.
+ * When SSE streaming is enabled (stream:true), the service layer will
+ * consume the event stream and emit this same shape for each complete message.
+ */
 export interface ChatMessageResponse {
   messageId: string;
   content: string;

@@ -1,3 +1,17 @@
+/**
+ * Chat service contract (current):
+ *   POST /api/v1/chat/sessions                     → start session
+ *   POST /api/v1/chat/sessions/{sid}/close          → end session
+ *   POST /api/v1/chat/{uid}/{cid}/{sid}/message     → send message (SSE-capable; currently called with stream:false, returns flat JSON)
+ *   POST /api/v1/chat/{uid}/{cid}/{sid}/quiz        → request quiz generation
+ *   POST /api/v1/quizzes/{childId}/submit           → submit quiz answers
+ *   GET  /api/v1/chat/history/{uid}/{cid}           → parent conversation history
+ *   DELETE /api/v1/chat/history/{uid}/{cid}/{sid}   → delete session history
+ *
+ * The deprecated endpoint POST /api/v1/chat/text/{uid}/{cid}/{sid} has been removed.
+ * The current message endpoint returns a flat JSON response when stream:false.
+ * SSE streaming support will be added in a future iteration.
+ */
 import { apiRequest } from '@/services/apiClient';
 import { useAuthStore } from '@/store/authStore';
 import type {
