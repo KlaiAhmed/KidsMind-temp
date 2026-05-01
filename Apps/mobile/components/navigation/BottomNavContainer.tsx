@@ -26,6 +26,7 @@ interface BottomNavContainerProps extends BottomTabBarProps {
   ageGroup?: AgeGroup;
   hidden?: boolean;
   blockedSlots?: Partial<Record<BottomNavSlot, boolean>>;
+  lockedSlots?: Partial<Record<BottomNavSlot, boolean>>;
   iconOverrides?: Partial<Record<BottomNavSlot, BottomNavIconPair>>;
 }
 
@@ -37,6 +38,7 @@ export function BottomNavContainer({
   ageGroup,
   hidden,
   blockedSlots,
+  lockedSlots,
   iconOverrides,
 }: BottomNavContainerProps) {
   const insets = useSafeAreaInsets();
@@ -77,65 +79,67 @@ export function BottomNavContainer({
       pointerEvents={hidden ? 'none' : 'box-none'}
     >
       <Animated.View style={[styles.container, shellAnimatedStyle]}>
-        {navItems.map((item) => {
-          const route = state.routes.find((candidate) => candidate.name === item.routeName);
+      {navItems.map((item) => {
+        const route = state.routes.find((candidate) => candidate.name === item.routeName);
 
-          if (!route) {
-            return null;
+        if (!route) {
+          return null;
+        }
+
+        const descriptor = descriptors[route.key];
+        const isFocused = route.key === currentRouteKey;
+        const isLocked = Boolean(lockedSlots?.[item.slot]);
+
+        const onPress = () => {
+          if (item.disabled || isLocked) {
+            return;
           }
 
-          const descriptor = descriptors[route.key];
-          const isFocused = route.key === currentRouteKey;
+          const event = navigation.emit({
+            type: 'tabPress',
+            target: route.key,
+            canPreventDefault: true,
+          });
 
-          const onPress = () => {
-            if (item.disabled) {
-              return;
+          if (event.defaultPrevented) {
+            return;
+          }
+
+          void Haptics.selectionAsync();
+          navigation.navigate(route.name as never, route.params as never);
+        };
+
+        const onLongPress = () => {
+          if (item.disabled || isLocked) {
+            return;
+          }
+
+          navigation.emit({
+            type: 'tabLongPress',
+            target: route.key,
+          });
+        };
+
+        return (
+          <BottomNavItem
+            key={item.slot}
+            label={item.label}
+            inactiveIcon={item.inactiveIcon}
+            activeIcon={item.activeIcon}
+            isActive={isFocused}
+            isDisabled={item.disabled}
+            isLocked={isLocked}
+            accessibilityLabel={
+              descriptor.options.tabBarAccessibilityLabel
+                ? String(descriptor.options.tabBarAccessibilityLabel)
+                : `${item.label} tab`
             }
-
-            const event = navigation.emit({
-              type: 'tabPress',
-              target: route.key,
-              canPreventDefault: true,
-            });
-
-            if (event.defaultPrevented) {
-              return;
-            }
-
-            void Haptics.selectionAsync();
-            navigation.navigate(route.name as never, route.params as never);
-          };
-
-          const onLongPress = () => {
-            if (item.disabled) {
-              return;
-            }
-
-            navigation.emit({
-              type: 'tabLongPress',
-              target: route.key,
-            });
-          };
-
-          return (
-            <BottomNavItem
-              key={item.slot}
-              label={item.label}
-              inactiveIcon={item.inactiveIcon}
-              activeIcon={item.activeIcon}
-              isActive={isFocused}
-              isDisabled={item.disabled}
-              accessibilityLabel={
-                descriptor.options.tabBarAccessibilityLabel
-                  ? String(descriptor.options.tabBarAccessibilityLabel)
-                  : `${item.label} tab`
-              }
-              testID={descriptor.options.tabBarButtonTestID}
-              onPress={onPress}
-              onLongPress={onLongPress}
-            />
-          );
-        })}
+            testID={descriptor.options.tabBarButtonTestID}
+            onPress={onPress}
+            onLongPress={onLongPress}
+          />
+        );
+      })}
       </Animated.View>
     </View>
   );

@@ -1,6 +1,5 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import {
-  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,6 +11,7 @@ import { useQuery } from '@tanstack/react-query';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 
+import { AppRefreshControl } from '@/src/components/AppRefreshControl';
 import { ParentChildSwitcher } from '@/src/components/parent/ParentChildSwitcher';
 import {
   DailyUsageDonutCard,
@@ -23,7 +23,7 @@ import {
   ParentDashboardErrorState,
   SkeletonBlock,
 } from '@/src/components/parent/ParentDashboardStates';
-import { Colors, Radii, Shadows, Spacing, Typography } from '@/constants/theme';
+import { Colors, Radii, Spacing, Typography } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { getParentProgress } from '@/services/parentDashboardService';
 import { useParentDashboardChild } from '@/src/hooks/useParentDashboardChild';
@@ -157,9 +157,9 @@ export default function ChildProgressScreen({
     selectChild(childId);
   }
 
-  function handleRefresh() {
+  const handleRefresh = useCallback(() => {
     void progressQuery.refetch();
-  }
+  }, [progressQuery]);
 
   if (initialState === 'loading' || isChildDataResolving || (Boolean(activeChild) && progressQuery.isPending)) {
     return (
@@ -212,14 +212,12 @@ export default function ChildProgressScreen({
     <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
       <ScrollView
         contentContainerStyle={styles.contentContainer}
-        refreshControl={
-          <RefreshControl
-            colors={[Colors.surface]}
-            onRefresh={handleRefresh}
-            refreshing={progressQuery.isFetching}
-            tintColor={Colors.primary}
-          />
-        }
+      refreshControl={
+        <AppRefreshControl
+          onRefresh={handleRefresh}
+          refreshing={progressQuery.isRefetching}
+        />
+      }
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.heroWrap}>
@@ -376,7 +374,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceContainerLowest,
     padding: Spacing.md,
     gap: Spacing.md,
-    ...Shadows.card,
   },
   sectionHeader: {
     flexDirection: 'row',

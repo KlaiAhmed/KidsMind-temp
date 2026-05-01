@@ -1,7 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   Pressable,
-  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -15,6 +14,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { useSharedValue, withSpring } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 
+import { AppRefreshControl } from '@/src/components/AppRefreshControl';
 import { ActivityFlaggedBanner } from '@/src/components/parent/ActivityFlaggedBanner';
 import { ParentChildSwitcher } from '@/src/components/parent/ParentChildSwitcher';
 import {
@@ -308,10 +308,9 @@ export default function ParentOverviewScreen({ initialState }: ParentOverviewScr
     selectChild(childId);
   }
 
-  function handleRefresh() {
-    void historyQuery.refetch();
-    void progressQuery.refetch();
-  }
+  const handleRefresh = useCallback(() => {
+    void Promise.all([historyQuery.refetch(), progressQuery.refetch()]);
+  }, [historyQuery, progressQuery]);
 
   function handleRocketPress() {
     if (!activeChild) return;
@@ -415,14 +414,12 @@ export default function ParentOverviewScreen({ initialState }: ParentOverviewScr
     <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
       <ScrollView
         contentContainerStyle={styles.contentContainer}
-        refreshControl={
-          <RefreshControl
-            colors={[Colors.surface]}
-            onRefresh={handleRefresh}
-            refreshing={historyQuery.isFetching || progressQuery.isFetching}
-            tintColor={Colors.primary}
-          />
-        }
+      refreshControl={
+        <AppRefreshControl
+          onRefresh={handleRefresh}
+          refreshing={historyQuery.isRefetching || progressQuery.isRefetching}
+        />
+      }
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.headerRow}>
@@ -701,7 +698,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceContainerLowest,
     padding: Spacing.md,
     gap: Spacing.md,
-    ...Shadows.card,
   },
   sectionHeader: {
     flexDirection: 'row',

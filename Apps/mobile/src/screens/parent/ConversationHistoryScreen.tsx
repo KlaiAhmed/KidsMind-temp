@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Pressable,
-  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -17,6 +16,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import * as Linking from 'expo-linking';
 
+import { AppRefreshControl } from '@/src/components/AppRefreshControl';
 import { ParentChildSwitcher } from '@/src/components/parent/ParentChildSwitcher';
 import {
   ErrorCard,
@@ -24,7 +24,7 @@ import {
   ParentDashboardErrorState,
   SkeletonBlock,
 } from '@/src/components/parent/ParentDashboardStates';
-import { Colors, Radii, Shadows, Spacing, Typography } from '@/constants/theme';
+import { Colors, Radii, Spacing, Typography } from '@/constants/theme';
 import { toApiErrorMessage, useAuth } from '@/contexts/AuthContext';
 import {
   bulkDeleteSessions,
@@ -198,15 +198,15 @@ export default function ConversationHistoryScreen({
   });
 
   const exportMutation = useMutation({
-    mutationFn: async () => {
-      const response = await exportHistory(user!.id, activeChild!.id);
-      if (!response.url) {
-        throw new Error('Export failed. Please try again.');
-      }
+  mutationFn: async () => {
+    const response = await exportHistory(user!.id, activeChild!.id);
+    if (!response.downloadUrl) {
+      throw new Error('Export failed. Please try again.');
+    }
 
-      await Linking.openURL(response.url);
-      return response;
-    },
+    await Linking.openURL(response.downloadUrl);
+    return response;
+  },
     onMutate: () => {
       setExportError(null);
     },
@@ -236,9 +236,9 @@ export default function ConversationHistoryScreen({
     void router.push('/(auth)/child-profile-wizard?source=parent-dashboard' as never);
   }
 
-  function handleRefresh() {
+  const handleRefresh = useCallback(() => {
     void historyQuery.refetch();
-  }
+  }, [historyQuery]);
 
   function toggleSelection(sessionId: string) {
     setSelectedSessionIds((current) =>
@@ -286,7 +286,7 @@ export default function ConversationHistoryScreen({
     );
   }
 
-  if (initialState === 'loading' || isChildDataResolving || historyQuery.isPending) {
+  if (initialState === 'loading' || isChildDataResolving) {
     return (
       <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
         <HistorySkeleton />
@@ -320,6 +320,14 @@ export default function ConversationHistoryScreen({
     );
   }
 
+  if (historyQuery.isPending) {
+    return (
+      <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
+        <HistorySkeleton />
+      </SafeAreaView>
+    );
+  }
+
   if (historyQuery.isError || initialState === 'error') {
     return (
       <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
@@ -337,14 +345,12 @@ export default function ConversationHistoryScreen({
     <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
       <ScrollView
         contentContainerStyle={styles.contentContainer}
-        refreshControl={
-          <RefreshControl
-            colors={[Colors.surface]}
-            onRefresh={handleRefresh}
-            refreshing={historyQuery.isFetching}
-            tintColor={Colors.primary}
-          />
-        }
+      refreshControl={
+        <AppRefreshControl
+          onRefresh={handleRefresh}
+          refreshing={historyQuery.isRefetching}
+        />
+      }
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.heroWrap}>
@@ -702,7 +708,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceContainerLowest,
     padding: Spacing.md,
     gap: Spacing.sm,
-    ...Shadows.card,
   },
   selectionCount: {
     ...Typography.bodySemiBold,
@@ -768,7 +773,6 @@ const styles = StyleSheet.create({
     borderColor: Colors.outline,
     backgroundColor: Colors.surfaceContainerLowest,
     overflow: 'hidden',
-    ...Shadows.card,
   },
   threadCardSelected: {
     borderColor: Colors.primary,
@@ -814,7 +818,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceContainerLowest,
     padding: Spacing.md,
     gap: Spacing.sm,
-    ...Shadows.card,
   },
   privacyHeader: {
     flexDirection: 'row',

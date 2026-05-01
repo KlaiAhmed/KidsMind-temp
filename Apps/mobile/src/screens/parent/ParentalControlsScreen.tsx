@@ -1,10 +1,9 @@
 import type { ComponentProps } from 'react';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Pressable,
-  RefreshControl,
   ScrollView,
   StyleSheet,
   Switch,
@@ -17,6 +16,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 
+import { AppRefreshControl } from '@/src/components/AppRefreshControl';
 import { Colors, Radii, Shadows, Spacing, Typography } from '@/constants/theme';
 import { toApiErrorMessage, useAuth } from '@/contexts/AuthContext';
 import {
@@ -264,13 +264,12 @@ export default function ParentalControlsScreen({
     void router.push('/(auth)/child-profile-wizard?source=parent-dashboard' as never);
   }
 
-  function handleRefresh() {
+  const handleRefresh = useCallback(() => {
     if (activeChild) {
       void refreshChildData(activeChild.id);
     }
-    void notificationPrefsQuery.refetch();
-    void auditQuery.refetch();
-  }
+    void Promise.all([notificationPrefsQuery.refetch(), auditQuery.refetch()]);
+  }, [activeChild, refreshChildData, notificationPrefsQuery, auditQuery]);
 
   function confirmDeleteProfile() {
     if (!activeChild) {
@@ -389,14 +388,12 @@ export default function ParentalControlsScreen({
     <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
       <ScrollView
         contentContainerStyle={styles.contentContainer}
-        refreshControl={
-          <RefreshControl
-            colors={[Colors.surface]}
-            onRefresh={handleRefresh}
-            refreshing={notificationPrefsQuery.isFetching || auditQuery.isFetching || childDataLoading}
-            tintColor={Colors.primary}
-          />
-        }
+      refreshControl={
+        <AppRefreshControl
+          onRefresh={handleRefresh}
+          refreshing={notificationPrefsQuery.isRefetching || auditQuery.isRefetching}
+        />
+      }
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.heroCard}>
@@ -758,7 +755,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceContainerLowest,
     padding: Spacing.md,
     gap: Spacing.md,
-    ...Shadows.card,
   },
   infoRow: {
     flexDirection: 'row',
