@@ -29,7 +29,6 @@ import Animated, {
   useSharedValue,
   withSequence,
   withTiming,
-  runOnJS,
   type AnimatedStyle,
   type SharedValue,
 } from 'react-native-reanimated';
@@ -239,7 +238,6 @@ export function ParentPINGate({
   }, [visible]);
 
   const triggerShake = useCallback(() => {
-    'worklet';
     shakeTranslateX.value = withSequence(
       withTiming(-10, { duration: 50, easing: Easing.out(Easing.cubic) }),
       withTiming(10, { duration: 80, easing: Easing.inOut(Easing.cubic) }),
@@ -248,14 +246,15 @@ export function ParentPINGate({
       withTiming(-10, { duration: 80, easing: Easing.inOut(Easing.cubic) }),
       withTiming(0, { duration: 50, easing: Easing.out(Easing.cubic) }),
     );
-    runOnJS(Haptics.notificationAsync)(Haptics.NotificationFeedbackType.Error);
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => undefined);
   }, [shakeTranslateX]);
 
   const animateDotEntry = useCallback(
     (index: number) => {
-      'worklet';
-      dotOpacityValues[index].value = withTiming(0.5, { duration: 80 });
-      dotOpacityValues[index].value = withTiming(1, { duration: 150 });
+      dotOpacityValues[index].value = withSequence(
+        withTiming(0.5, { duration: 80 }),
+        withTiming(1, { duration: 150 }),
+      );
     },
     [dotOpacityValues],
   );
