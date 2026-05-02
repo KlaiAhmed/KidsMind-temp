@@ -598,6 +598,11 @@ export default function ParentalControlsScreen({
                     <View style={styles.auditDot} />
                     <View style={styles.auditCopy}>
                       <Text style={styles.auditAction}>{entry.action}</Text>
+                      {entry.details ? (
+                        <Text style={styles.auditBody} numberOfLines={2}>
+                          {entry.details}
+                        </Text>
+                      ) : null}
                       <Text style={styles.auditBody}>
                         {entry.timestamp
                           ? new Intl.DateTimeFormat(undefined, {
