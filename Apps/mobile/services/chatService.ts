@@ -228,7 +228,7 @@ export async function endChatSession(
   };
 }
 
-export async function sendChatMessage(payload: ChatRequestPayload): Promise<ChatMessageResponse> {
+export async function sendChatMessage(payload: ChatRequestPayload, signal?: AbortSignal): Promise<ChatMessageResponse> {
   const userId = getCurrentUserId();
   const response = await apiRequest<unknown>(
     `/api/v1/chat/${encodeURIComponent(userId)}/${encodeURIComponent(payload.childId)}/${encodeURIComponent(payload.sessionId)}/message`,
@@ -251,6 +251,7 @@ export async function sendChatMessage(payload: ChatRequestPayload): Promise<Chat
         input_source: payload.inputSource ?? 'keyboard',
         stream: false,
       },
+      signal,
     },
   );
   const normalizedResponse =

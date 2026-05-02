@@ -1,45 +1,3 @@
-/**
- * Migration Notes — expo-av → expo-audio
- *
- * Replaced:
- *   - `import { Audio } from 'expo-av'` → named imports from `expo-audio`
- *   - `Audio.requestPermissionsAsync()` → `requestRecordingPermissionsAsync()`
- *   - `Audio.setAudioModeAsync({allowsRecordingIOS, playsInSilentModeIOS, ...})` →
- *     `setAudioModeAsync({allowsRecording, playsInSilentMode, ...})`
- *     - `allowsRecordingIOS: true/false` → `allowsRecording: true/false`
- *     - `playsInSilentModeIOS: true` → `playsInSilentMode: true`
- *     - `shouldDuckAndroid: true` → `interruptionMode: 'duckOthers'`
- *     - `staysActiveInBackground: false` → `shouldPlayInBackground: false`
- *     - `playThroughEarpieceAndroid: false` → `shouldRouteThroughEarpiece: false`
- *   - `new Audio.Recording()` + ref → `useAudioRecorder(RecordingPresets.HIGH_QUALITY, statusListener)`
- *   - `recording.setProgressUpdateInterval(70)` → `useAudioRecorderState(recorder, 70)`
- *   - `recording.setOnRecordingStatusUpdate(cb)` → `statusListener` param + `useAudioRecorderState`
- *   - `recording.prepareToRecordAsync(opts)` → `recorder.prepareToRecordAsync()`
- *   - `recording.startAsync()` → `recorder.record()`
- *   - `recording.stopAndUnloadAsync()` → `recorder.stop()`
- *   - `recording.getURI()` → `recorder.uri`
- *   - `Audio.RecordingOptionsPresets.HIGH_QUALITY` → `RecordingPresets.HIGH_QUALITY`
- *   - Manual cleanup in useEffect unmount → automatic via `useAudioRecorder` hook
- *
- * Behavioral differences:
- *   - expo-audio's `useAudioRecorder` hook manages the recorder lifecycle (auto-release on unmount).
- *     The previous manual cleanup (setOnRecordingStatusUpdate(null), stopAndUnloadAsync) is no longer needed.
- *   - `RecordingStatus` (event-based, from statusListener) does NOT contain `metering`.
- *     Metering is only available on `RecorderState` via `useAudioRecorderState(recorder, interval)`,
- *     which polls at the specified interval (70ms). This is functionally equivalent to the previous
- *     setProgressUpdateInterval(70) + setOnRecordingStatusUpdate pattern.
- *   - `setAudioModeAsync` in expo-audio uses `Partial<AudioMode>`, so only specified properties are updated.
- *     The `interruptionMode` property replaces the separate `shouldDuckAndroid` flag.
- *   - `recorder.stop()` returns `Promise<void>` and the URI is available on `recorder.uri` afterward.
- *     The previous `recording.getURI()` was synchronous; now we read the `uri` property after `stop()` resolves.
- *   - expo-audio requires the `expo-audio` config plugin in app.json for
- *     `microphonePermission` (iOS NSMicrophoneUsageDescription). This was previously
- *     handled by expo-av's plugin. The plugin entry must be added to app.json plugins array.
- *
- * Limitations discovered:
- *   - None. All expo-av features used have direct expo-audio equivalents.
- */
-
 import { memo, useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -57,11 +15,9 @@ import Animated, {
   FadeIn,
   FadeOut,
   LinearTransition,
-  SlideInRight,
   SlideInUp,
   useAnimatedStyle,
   useSharedValue,
-  withSequence,
   withTiming,
 } from 'react-native-reanimated';
 import { AudioWaveform } from '@/components/chat/AudioWaveform';
@@ -103,15 +59,15 @@ interface ChatInputProps {
   onSend: (text: string, inputSource?: ChatInputSource) => Promise<boolean | void> | boolean | void;
   onSendQuiz: (topic: string) => Promise<boolean | void> | boolean | void;
   onTranscribeAudio: (audioUri: string) => Promise<string>;
+  onCancelResponse: () => void;
 }
 
-interface IconButtonProps {
+interface ControlButtonProps {
   name: IconName;
   label: string;
   active?: boolean;
   disabled?: boolean;
   solid?: boolean;
-  springOnPress?: boolean;
   onPress: () => void;
 }
 
@@ -171,15 +127,14 @@ function getPlaceholder(ageGroup: AgeGroup): string {
   return 'Ask me anything!';
 }
 
-function IconButton({
+function ControlButton({
   name,
   label,
   active = false,
   disabled = false,
   solid = false,
-  springOnPress = false,
   onPress,
-}: IconButtonProps) {
+}: ControlButtonProps) {
   const pressScale = useSharedValue(1);
 
   const animatedStyle = useAnimatedStyle(() => ({
@@ -191,16 +146,14 @@ function IconButton({
       return;
     }
 
-    if (springOnPress) {
-      pressScale.value = withSequence(
-        withTiming(0.9, { duration: 60, easing: Easing.out(Easing.ease) }),
-        withTiming(1.05, { duration: 70, easing: Easing.out(Easing.ease) }),
-        withTiming(1, { duration: 70, easing: Easing.out(Easing.ease) }),
-      );
-    }
+    pressScale.value = withTiming(0.94, { duration: 60, easing: Easing.out(Easing.ease) }, (finished) => {
+      if (finished) {
+        pressScale.value = withTiming(1, { duration: 80, easing: Easing.out(Easing.ease) });
+      }
+    });
 
     onPress();
-  }, [disabled, onPress, pressScale, springOnPress]);
+  }, [disabled, onPress, pressScale]);
 
   const iconColor = disabled
     ? Colors.placeholder
@@ -212,7 +165,6 @@ function IconButton({
 
   return (
     <Animated.View style={animatedStyle}>
-      {/* a11y: Icon buttons expose purpose-specific labels supplied by the caller. */}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={label}
@@ -241,6 +193,7 @@ function ChatInputComponent({
   onSend,
   onSendQuiz,
   onTranscribeAudio,
+  onCancelResponse,
 }: ChatInputProps) {
   const [inputState, dispatch] = useReducer(inputReducer, {
     mode: 'text',
@@ -267,7 +220,10 @@ function ChatInputComponent({
   const quizActive = isQuizMode(inputState.mode);
   const recordingActive = isRecordingMode(inputState.mode);
   const busy = isLoading || inputState.isTranscribing;
+  const isAiLoading = isLoading && !inputState.isTranscribing;
   const canSendText = !recordingActive && value.trim().length > 0 && !busy;
+  const showSendButton = canSendText && !isAiLoading;
+  const showStopButton = isAiLoading && !recordingActive;
 
   useEffect(() => {
     if (recorderState.isRecording && typeof recorderState.metering === 'number') {
@@ -466,7 +422,6 @@ function ChatInputComponent({
           <Animated.View entering={FadeIn.duration(150).easing(Easing.out(Easing.ease))} style={styles.quizPill}>
             <MaterialCommunityIcons name="comment-question-outline" size={16} color={Colors.primary} />
             <Text style={styles.quizPillText}>Quiz Mode</Text>
-            {/* a11y: Close button exits quiz mode without sending text. */}
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Exit quiz mode"
@@ -482,86 +437,139 @@ function ChatInputComponent({
         </Animated.View>
       ) : null}
 
-      {recordingActive ? (
-        <Animated.View
-          key="recording"
-          entering={SlideInRight.duration(150).easing(Easing.out(Easing.ease)).withInitialValues({
-            opacity: 0,
-            transform: [{ translateX: 8 }],
-          })}
-          exiting={FadeOut.duration(150).easing(Easing.out(Easing.ease))}
-          layout={LinearTransition.duration(120)}
-          style={styles.inputShell}
-        >
-          <Animated.View entering={FadeIn.duration(150).easing(Easing.out(Easing.ease))} style={styles.waveformSlot}>
+      <Animated.View
+        layout={LinearTransition.duration(120)}
+        style={styles.topRow}
+      >
+        {recordingActive ? (
+          <Animated.View
+            entering={FadeIn.duration(120).easing(Easing.out(Easing.ease))}
+            style={styles.waveformSlot}
+          >
             <AudioWaveform metering={metering} />
           </Animated.View>
-          <IconButton
-            name="close"
-            label="Cancel recording"
-            disabled={inputState.isTranscribing}
-            onPress={handleCancelRecording}
-          />
-          <IconButton
-            name="check"
-            label="Use recording"
-            active
-            solid
-            disabled={busy}
-            onPress={handleConfirmRecording}
-          />
-        </Animated.View>
-      ) : (
+        ) : (
+          <Animated.View
+            entering={FadeIn.duration(120).easing(Easing.out(Easing.ease))}
+            layout={LinearTransition.duration(120)}
+            style={styles.inputSlot}
+          >
+            <TextInput
+              accessibilityLabel={quizActive ? 'Quiz topic' : 'Message to Qubie'}
+              multiline
+              maxLength={MAX_MESSAGE_LENGTH}
+              value={value}
+              onChangeText={onChangeText}
+              placeholder={quizActive ? 'What should the quiz be about?' : getPlaceholder(ageGroup)}
+              placeholderTextColor={Colors.placeholder}
+              style={styles.input}
+              returnKeyType="send"
+              editable={!inputState.isTranscribing}
+              onSubmitEditing={() => {
+                if (canSendText) {
+                  void handleSubmitText();
+                }
+              }}
+            />
+          </Animated.View>
+        )}
+
+        {showStopButton ? (
+          <Animated.View
+            entering={FadeIn.duration(120).easing(Easing.out(Easing.ease))}
+            exiting={FadeOut.duration(120).easing(Easing.out(Easing.ease))}
+            layout={LinearTransition.duration(120)}
+          >
+            <ControlButton
+              name="stop-circle"
+              label="Stop generating"
+              solid
+              onPress={onCancelResponse}
+            />
+          </Animated.View>
+        ) : null}
+
+        {recordingActive ? (
+          <Animated.View
+            entering={FadeIn.duration(120).easing(Easing.out(Easing.ease))}
+            exiting={FadeOut.duration(120).easing(Easing.out(Easing.ease))}
+            layout={LinearTransition.duration(120)}
+            style={styles.recordingControls}
+          >
+            <ControlButton
+              name="close"
+              label="Cancel recording"
+              disabled={inputState.isTranscribing}
+              onPress={handleCancelRecording}
+            />
+            <ControlButton
+              name="check"
+              label="Use recording"
+              active
+              solid
+              disabled={busy}
+              onPress={handleConfirmRecording}
+            />
+          </Animated.View>
+        ) : null}
+      </Animated.View>
+
+      {!recordingActive ? (
         <Animated.View
-          key={quizActive ? 'quiz-text' : 'text'}
-          entering={FadeIn.duration(150).easing(Easing.out(Easing.ease))}
-          exiting={FadeOut.duration(150).easing(Easing.out(Easing.ease))}
+          entering={FadeIn.duration(120).easing(Easing.out(Easing.ease))}
+          exiting={FadeOut.duration(100).easing(Easing.out(Easing.ease))}
           layout={LinearTransition.duration(120)}
-          style={styles.inputShell}
+          style={styles.bottomRow}
         >
-          {/* a11y: Text input label changes when quiz mode is active. */}
-          <TextInput
-            accessibilityLabel={quizActive ? 'Quiz topic' : 'Message to Qubie'}
-            multiline
-            maxLength={MAX_MESSAGE_LENGTH}
-            value={value}
-            onChangeText={onChangeText}
-            placeholder={quizActive ? 'What should the quiz be about?' : getPlaceholder(ageGroup)}
-            placeholderTextColor={Colors.placeholder}
-            style={styles.input}
-            returnKeyType="send"
-            editable={!busy}
-            onSubmitEditing={() => {
-              if (canSendText) {
-                void handleSubmitText();
-              }
-            }}
+          <ControlButton
+            name="comment-question-outline"
+            label={quizActive ? 'Quiz mode active' : 'Start quiz mode'}
+            active={quizActive}
+            disabled={busy}
+            onPress={quizActive ? handleDeactivateQuiz : handleActivateQuiz}
           />
 
-          {!quizActive ? (
-            <>
-              <IconButton name="microphone" label="Record voice" disabled={busy} onPress={beginRecording} />
-              <IconButton name="headphones" label="Speech to speech" disabled={busy} onPress={handleVoiceToVoice} />
-              <IconButton
-                name="comment-question-outline"
-                label="Start quiz mode"
-                disabled={busy}
-                onPress={handleActivateQuiz}
-              />
-            </>
-          ) : null}
+          <Animated.View style={styles.rightControls}>
+            {!quizActive ? (
+              <Animated.View
+                entering={FadeIn.duration(120).easing(Easing.out(Easing.ease))}
+                exiting={FadeOut.duration(100).easing(Easing.out(Easing.ease))}
+                layout={LinearTransition.duration(120)}
+                style={styles.rightControls}
+              >
+                <ControlButton
+                  name="headphones"
+                  label="Speech to speech"
+                  disabled={busy}
+                  onPress={handleVoiceToVoice}
+                />
+                <ControlButton
+                  name="microphone"
+                  label="Record voice"
+                  disabled={busy}
+                  onPress={beginRecording}
+                />
+              </Animated.View>
+            ) : null}
 
-          <IconButton
-            name="send"
-            label={quizActive ? 'Generate quiz' : 'Send message'}
-            active={canSendText}
-            solid
-            disabled={!canSendText}
-            onPress={handleSubmitText}
-            springOnPress
-          />
+            {showSendButton ? (
+              <Animated.View
+                entering={FadeIn.duration(120).easing(Easing.out(Easing.ease))}
+                exiting={FadeOut.duration(100).easing(Easing.out(Easing.ease))}
+                layout={LinearTransition.duration(120)}
+              >
+                <ControlButton
+                  name="send"
+                  label={quizActive ? 'Generate quiz' : 'Send message'}
+                  active
+                  solid
+                  onPress={handleSubmitText}
+                />
+              </Animated.View>
+            ) : null}
+          </Animated.View>
         </Animated.View>
-      )}
+      ) : null}
 
       {inputState.feedback ? <Text style={styles.feedbackText}>{inputState.feedback}</Text> : null}
 
@@ -602,7 +610,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  inputShell: {
+  topRow: {
     borderRadius: Radii.xl,
     backgroundColor: Colors.surfaceContainerLow,
     paddingLeft: Spacing.sm,
@@ -613,6 +621,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.xs,
     minHeight: MIN_CHILD_TAP_TARGET,
+  },
+  inputSlot: {
+    flex: 1,
   },
   input: {
     flex: 1,
@@ -628,9 +639,25 @@ const styles = StyleSheet.create({
     minHeight: MIN_CHILD_TAP_TARGET - Spacing.md,
     justifyContent: 'center',
   },
+  recordingControls: {
+    flexDirection: 'row',
+    gap: Spacing.xs,
+  },
+  bottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingLeft: Spacing.xs,
+    paddingRight: Spacing.xs,
+  },
+  rightControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
   iconButton: {
-    width: 48,
-    height: 48,
+    width: 44,
+    height: 44,
     borderRadius: Radii.full,
     backgroundColor: Colors.surfaceContainer,
     alignItems: 'center',

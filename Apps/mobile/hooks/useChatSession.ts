@@ -7,6 +7,7 @@ import {
   submitQuizAnswers,
 } from '@/services/chatService';
 import { transcribeVoiceRecording } from '@/services/voiceService';
+import { isLocalSessionId } from '@/src/utils/sessionId';
 import { triggerHaptic } from '@/src/utils/haptics';
 import type { AgeGroup } from '@/types/child';
 import type {
@@ -61,6 +62,7 @@ interface UseChatSessionResult {
   sendQuizRequest: (topic: string) => Promise<void>;
   submitQuizAnswer: (questionId: number, answer: string) => void;
   resetQuizMode: () => void;
+  cancelResponse: () => void;
   transcribeRecording: (audioUri: string) => Promise<string>;
   setInputText: (text: string) => void;
   clearError: () => void;
@@ -152,10 +154,14 @@ export function useChatSession({
   const messagesRef = useRef<Message[]>([]);
   const endingRef = useRef<boolean>(false);
   const activeQuizRef = useRef<ActiveQuizState | null>(null);
+  const resolvingRef = useRef<Promise<Session | null> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     return () => {
       mountedRef.current = false;
+      abortRef.current?.abort();
+      abortRef.current = null;
     };
   }, []);
 
@@ -166,6 +172,53 @@ export function useChatSession({
   useEffect(() => {
     messagesRef.current = state.messages;
   }, [state.messages]);
+
+  const replaceActiveSession = useCallback(
+    (newSession: Session) => {
+      sessionRef.current = newSession;
+      setSession(newSession);
+      setState((current) => ({
+        ...current,
+        sessionId: newSession.id,
+        sessionStartedAt: newSession.startedAt,
+      }));
+    },
+    [],
+  );
+
+  const resolveLiveSession = useCallback(async (): Promise<Session | null> => {
+    const activeSession = sessionRef.current;
+    if (!activeSession || !isLocalSessionId(activeSession.id)) {
+      return activeSession;
+    }
+
+    if (!childId) {
+      return null;
+    }
+
+    if (resolvingRef.current) {
+      return resolvingRef.current;
+    }
+
+    const promise = (async (): Promise<Session | null> => {
+      try {
+        const serverSession = await startChatSession(childId);
+        if (!mountedRef.current) {
+          return serverSession;
+        }
+        replaceActiveSession(serverSession);
+        return serverSession;
+      } catch (error) {
+        console.warn('[useChatSession] resolveLiveSession failed:', error);
+        return null;
+      } finally {
+        resolvingRef.current = null;
+      }
+    })();
+
+    resolvingRef.current = promise;
+    return promise;
+  }, [childId, replaceActiveSession]);
 
   const setInputText = useCallback((text: string) => {
     setState((current) => ({
@@ -243,7 +296,7 @@ export function useChatSession({
     endingRef.current = true;
 
     try {
-      const response = activeSession.id.startsWith('local-session-')
+      const response = isLocalSessionId(activeSession.id)
         ? { endedAt: new Date().toISOString(), totalSeconds: elapsedSeconds }
         : await endChatSession(activeSession.id);
       if (!mountedRef.current) {
@@ -298,9 +351,20 @@ export function useChatSession({
         return;
       }
 
+      const liveSession = await resolveLiveSession();
+      if (!liveSession || isLocalSessionId(liveSession.id)) {
+        setState((current) => ({
+          ...current,
+          isAwaitingResponse: false,
+          isLoading: false,
+          error: 'I cannot reach the server right now. Please check your connection and try again.',
+        }));
+        return;
+      }
+
       const optimisticMessage: Message = {
         id: `child-${Date.now()}`,
-        sessionId: activeSession.id,
+        sessionId: liveSession.id,
         sender: 'child',
         content: text,
         safetyFlags: [],
@@ -319,86 +383,106 @@ export function useChatSession({
         error: null,
       }));
 
-      const startedRequestAt = Date.now();
+        const startedRequestAt = Date.now();
 
-      try {
-        const response = await sendChatMessage({
-          childId,
-          sessionId: activeSession.id,
-          text,
-          inputSource,
-          context: {
-            ageGroup,
-            gradeLevel,
-            subjectId: subjectContext?.subjectId,
-            subjectName: subjectContext?.subjectName,
-            topicId: subjectContext?.topicId,
-            conversation: buildConversationWindow(contextualMessages),
-          },
-        });
+        const controller = new AbortController();
+        abortRef.current = controller;
 
-        const elapsed = Date.now() - startedRequestAt;
-        if (elapsed < MIN_TYPING_INDICATOR_MS) {
-          await waitMs(MIN_TYPING_INDICATOR_MS - elapsed);
+        try {
+          const response = await sendChatMessage(
+            {
+              childId,
+              sessionId: liveSession.id,
+              text,
+              inputSource,
+              context: {
+                ageGroup,
+                gradeLevel,
+                subjectId: subjectContext?.subjectId,
+                subjectName: subjectContext?.subjectName,
+                topicId: subjectContext?.topicId,
+                conversation: buildConversationWindow(contextualMessages),
+              },
+            },
+            controller.signal,
+          );
+
+          const elapsed = Date.now() - startedRequestAt;
+          if (elapsed < MIN_TYPING_INDICATOR_MS) {
+            await waitMs(MIN_TYPING_INDICATOR_MS - elapsed);
+          }
+
+          if (!mountedRef.current) {
+            return;
+          }
+
+          const aiMessage: Message = {
+            id: response.messageId,
+            sessionId: liveSession.id,
+            sender: 'ai',
+            content: response.content || 'I need a moment to explain that. Please try again.',
+            safetyFlags: response.safetyFlags,
+            createdAt: response.createdAt,
+            triggeredBy: optimisticMessage.id,
+            status: 'sent',
+          };
+
+          const nextMessages = [...messagesRef.current, aiMessage];
+          messagesRef.current = nextMessages;
+
+          setState((current) => ({
+            ...current,
+            messages: nextMessages,
+            isAwaitingResponse: false,
+            error: null,
+          }));
+        } catch (err) {
+          if (controller.signal.aborted) {
+            if (mountedRef.current) {
+              setState((current) => ({
+                ...current,
+                isAwaitingResponse: false,
+              }));
+            }
+            return;
+          }
+
+          const elapsed = Date.now() - startedRequestAt;
+          if (elapsed < MIN_TYPING_INDICATOR_MS) {
+            await waitMs(MIN_TYPING_INDICATOR_MS - elapsed);
+          }
+
+          if (!mountedRef.current) {
+            return;
+          }
+
+          const failedMessage: Message = {
+            id: `ai-error-${optimisticMessage.id}`,
+            sessionId: liveSession.id,
+            sender: 'ai',
+            content: 'I lost connection before I could answer. Tap retry and I will try again.',
+            safetyFlags: [],
+            createdAt: new Date().toISOString(),
+            triggeredBy: optimisticMessage.id,
+            status: 'error',
+          };
+
+          const nextMessages = [...messagesRef.current, failedMessage];
+          messagesRef.current = nextMessages;
+
+          setState((current) => ({
+            ...current,
+            messages: nextMessages,
+            isAwaitingResponse: false,
+            error: null,
+          }));
+        } finally {
+          if (abortRef.current === controller) {
+            abortRef.current = null;
+          }
         }
-
-        if (!mountedRef.current) {
-          return;
-        }
-
-        const aiMessage: Message = {
-          id: response.messageId,
-          sessionId: activeSession.id,
-          sender: 'ai',
-          content: response.content || 'I need a moment to explain that. Please try again.',
-          safetyFlags: response.safetyFlags,
-          createdAt: response.createdAt,
-          triggeredBy: optimisticMessage.id,
-          status: 'sent',
-        };
-
-        const nextMessages = [...messagesRef.current, aiMessage];
-        messagesRef.current = nextMessages;
-
-        setState((current) => ({
-          ...current,
-          messages: nextMessages,
-          isAwaitingResponse: false,
-          error: null,
-        }));
-      } catch {
-        const elapsed = Date.now() - startedRequestAt;
-        if (elapsed < MIN_TYPING_INDICATOR_MS) {
-          await waitMs(MIN_TYPING_INDICATOR_MS - elapsed);
-        }
-
-        if (!mountedRef.current) {
-          return;
-        }
-
-        const failedMessage: Message = {
-          id: `ai-error-${optimisticMessage.id}`,
-          sessionId: activeSession.id,
-          sender: 'ai',
-          content: 'I lost connection before I could answer. Tap retry and I will try again.',
-          safetyFlags: [],
-          createdAt: new Date().toISOString(),
-          triggeredBy: optimisticMessage.id,
-          status: 'error',
-        };
-
-        const nextMessages = [...messagesRef.current, failedMessage];
-        messagesRef.current = nextMessages;
-
-        setState((current) => ({
-          ...current,
-          messages: nextMessages,
-          isAwaitingResponse: false,
-          error: null,
-        }));
-      }
     },
-    [ageGroup, childId, gradeLevel, startSession, subjectContext?.subjectId, subjectContext?.subjectName, subjectContext?.topicId]
+    [ageGroup, childId, gradeLevel, resolveLiveSession, startSession, subjectContext?.subjectId, subjectContext?.subjectName, subjectContext?.topicId],
   );
 
   const buildAndAppendSummaryMessage = useCallback(
@@ -557,9 +641,20 @@ export function useChatSession({
         return;
       }
 
+      const liveSession = await resolveLiveSession();
+      if (!liveSession || isLocalSessionId(liveSession.id)) {
+        setState((current) => ({
+          ...current,
+          isAwaitingResponse: false,
+          isLoading: false,
+          error: 'I cannot reach the server right now. Please check your connection and try again.',
+        }));
+        return;
+      }
+
       const optimisticMessage: Message = {
         id: `child-quiz-${Date.now()}`,
-        sessionId: activeSession.id,
+        sessionId: liveSession.id,
         sender: 'child',
         content: `Quiz me about ${topic}`,
         safetyFlags: [],
@@ -583,7 +678,7 @@ export function useChatSession({
       try {
         const response = await requestQuiz({
           childId,
-          sessionId: activeSession.id,
+          sessionId: liveSession.id,
           subject: subjectContext?.subjectName ?? 'General knowledge',
           topic,
           level: getQuizLevel(ageGroup),
@@ -620,7 +715,7 @@ export function useChatSession({
 
         const aiMessage: Message = {
           id: response.quizId,
-          sessionId: activeSession.id,
+          sessionId: liveSession.id,
           sender: 'ai',
           content: response.intro,
           quiz: response.questions.map((q) => ({ ...q })),
@@ -651,7 +746,7 @@ export function useChatSession({
 
         const failedMessage: Message = {
           id: `quiz-error-${optimisticMessage.id}`,
-          sessionId: activeSession.id,
+          sessionId: liveSession.id,
           sender: 'ai',
           content: 'I could not make that quiz just now. Tap retry and I will try again.',
           safetyFlags: [],
@@ -671,11 +766,25 @@ export function useChatSession({
         }));
       }
     },
-    [ageGroup, childId, gradeLevel, startSession, subjectContext?.subjectId, subjectContext?.subjectName, subjectContext?.topicId]
+    [ageGroup, childId, gradeLevel, resolveLiveSession, startSession, subjectContext?.subjectId, subjectContext?.subjectName, subjectContext?.topicId],
   );
 
   const resetQuizMode = useCallback(() => {
     activeQuizRef.current = null;
+  }, []);
+
+  const cancelResponse = useCallback(() => {
+    const controller = abortRef.current;
+    if (controller) {
+      controller.abort();
+      abortRef.current = null;
+    }
+    if (mountedRef.current) {
+      setState((current) => ({
+        ...current,
+        isAwaitingResponse: false,
+      }));
+    }
   }, []);
 
   const transcribeRecording = useCallback(
@@ -685,7 +794,7 @@ export function useChatSession({
       }
 
       const activeSession = sessionRef.current ?? (await startSession());
-      if (!activeSession || activeSession.id.startsWith('local-session-')) {
+      if (!activeSession || isLocalSessionId(activeSession.id)) {
         throw new Error('Voice is unavailable until a live chat session starts.');
       }
 
@@ -773,6 +882,7 @@ export function useChatSession({
     sendQuizRequest,
     submitQuizAnswer,
     resetQuizMode,
+    cancelResponse,
     transcribeRecording,
     setInputText,
     clearError,

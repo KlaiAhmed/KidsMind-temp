@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   FlatList,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -14,6 +12,7 @@ import { useNavigation } from '@react-navigation/native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import Animated, { useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
 import { Colors, Radii, Spacing, Typography } from '@/constants/theme';
 import { ChatInput } from '@/components/chat/ChatInput';
 import { MessageBubble } from '@/components/chat/MessageBubble';
@@ -23,6 +22,7 @@ import { useChatSession } from '@/hooks/useChatSession';
 import { useChildProfile } from '@/hooks/useChildProfile';
 import { useChildSessionGate } from '@/hooks/useChildSessionGate';
 import { useSubjects } from '@/hooks/useSubjects';
+import { useKeyboardHeight } from '@/hooks/useKeyboardHeight';
 import { useAuth } from '@/contexts/AuthContext';
 import { getChildTabSceneBottomPadding } from '@/components/navigation/bottomNavTokens';
 import { showToast } from '@/services/toastClient';
@@ -76,10 +76,13 @@ export default function AIChatScreen() {
     timeZone: profile?.timezone ?? null,
   });
 
+  const { keyboardOffset } = useKeyboardHeight(insets.bottom);
+
   return (
     <AIChatSessionGate
       childTabSceneBottomPadding={childTabSceneBottomPadding}
       gateState={gateState}
+      keyboardOffset={keyboardOffset}
       params={params}
       profile={profile}
     />
@@ -89,6 +92,7 @@ export default function AIChatScreen() {
 interface AIChatSessionGateProps {
   childTabSceneBottomPadding: number;
   gateState: SessionGateState;
+  keyboardOffset: SharedValue<number>;
   params: ChatRouteParams;
   profile: ChildProfile | null;
 }
@@ -96,6 +100,7 @@ interface AIChatSessionGateProps {
 function AIChatSessionGate({
   childTabSceneBottomPadding,
   gateState,
+  keyboardOffset,
   params,
   profile,
 }: AIChatSessionGateProps) {
@@ -129,6 +134,7 @@ function AIChatSessionGate({
     sendQuizRequest,
     submitQuizAnswer,
     resetQuizMode,
+    cancelResponse,
     transcribeRecording,
     setInputText,
     clearError,
@@ -263,6 +269,28 @@ function AIChatSessionGate({
 
   const keyExtractor = useCallback((item: ChatListItem) => item.id, []);
 
+  const chatInputAnimatedStyle = useAnimatedStyle(() => {
+    const keyboardDelta = Math.max(
+      keyboardOffset.value - childTabSceneBottomPadding,
+      0,
+    );
+
+    return {
+      transform: [{ translateY: -keyboardDelta }],
+    };
+  });
+
+  const messagesShellAnimatedStyle = useAnimatedStyle(() => {
+    const keyboardDelta = Math.max(
+      keyboardOffset.value - childTabSceneBottomPadding,
+      0,
+    );
+
+    return {
+      marginBottom: keyboardDelta,
+    };
+  });
+
   if (gateState.status !== 'ACTIVE' && !state.isAwaitingResponse) {
     return (
       <GateMessageScreen
@@ -275,33 +303,30 @@ function AIChatSessionGate({
   }
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-      <KeyboardAvoidingView
-        style={styles.keyboardAvoidingView}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
-        <View style={[styles.container, { paddingBottom: childTabSceneBottomPadding }]}>
-          <SessionHeader
-            subjectName={resolvedSubjectName}
-            elapsedSeconds={elapsedSeconds}
-            minutesRemaining={minutesRemaining}
-          />
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <View style={[styles.container, { paddingBottom: childTabSceneBottomPadding }]}>
+        <SessionHeader
+          subjectName={resolvedSubjectName}
+          elapsedSeconds={elapsedSeconds}
+          minutesRemaining={minutesRemaining}
+        />
 
-          {state.error ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Dismiss chat error"
-              onPress={clearError}
-              style={styles.errorBanner}
-            >
-              {/* a11y: Error banner can be dismissed by tapping it. */}
-              <MaterialCommunityIcons name="alert-circle-outline" size={18} color={Colors.errorText} />
-              <Text style={styles.errorText}>{state.error}</Text>
-            </Pressable>
-          ) : null}
+        {state.error ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss chat error"
+            onPress={clearError}
+            style={styles.errorBanner}
+          >
+            <MaterialCommunityIcons name="alert-circle-outline" size={18} color={Colors.errorText} />
+            <Text style={styles.errorText}>{state.error}</Text>
+          </Pressable>
+        ) : null}
 
+        <Animated.View style={[styles.messagesShell, messagesShellAnimatedStyle]}>
           <FlatList
             ref={flatListRef}
+            style={styles.messagesList}
             data={listData}
             keyExtractor={keyExtractor}
             renderItem={renderItem}
@@ -318,7 +343,9 @@ function AIChatSessionGate({
               </View>
             }
           />
+        </Animated.View>
 
+        <Animated.View style={chatInputAnimatedStyle}>
           <ChatInput
             value={state.inputText}
             ageGroup={profile?.ageGroup ?? '7-11'}
@@ -327,9 +354,10 @@ function AIChatSessionGate({
             onSend={handleSend}
             onSendQuiz={handleSendQuiz}
             onTranscribeAudio={transcribeRecording}
+            onCancelResponse={cancelResponse}
           />
-        </View>
-      </KeyboardAvoidingView>
+        </Animated.View>
+      </View>
     </SafeAreaView>
   );
 }
@@ -339,9 +367,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.surface,
   },
-  keyboardAvoidingView: {
-    flex: 1,
-  },
   container: {
     flex: 1,
     paddingHorizontal: Spacing.md,
@@ -350,6 +375,12 @@ const styles = StyleSheet.create({
   messagesContainer: {
     paddingTop: Spacing.md,
     paddingBottom: Spacing.md,
+  },
+  messagesShell: {
+    flex: 1,
+  },
+  messagesList: {
+    flex: 1,
   },
   errorBanner: {
     flexDirection: 'row',
