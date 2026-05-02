@@ -79,3 +79,20 @@ def sanitize_child_profile(profile_dict: dict) -> dict:
 
 def sanitize_child_rules(rules_dict: dict) -> dict:
     return {k: v for k, v in rules_dict.items() if k in _CHILD_RULES_SAFE_FIELDS}
+
+
+def build_detail(log: AuditLog) -> str:
+    parts = [log.resource] if log.resource else []
+    if log.before_state or log.after_state:
+        changes = []
+        before = log.before_state or {}
+        after = log.after_state or {}
+        all_keys = set(before.keys()) | set(after.keys())
+        for key in sorted(all_keys):
+            old_val = before.get(key)
+            new_val = after.get(key)
+            if old_val != new_val:
+                changes.append(f"{key}: {old_val} → {new_val}")
+        if changes:
+            parts.append("; ".join(changes))
+    return " | ".join(parts) if parts else ""
