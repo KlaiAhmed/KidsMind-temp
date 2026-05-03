@@ -33,7 +33,7 @@ async def transcribe(
         logger.info(
             "Transcription request received",
             extra={
-                "filename": audio.filename,
+                "audio_filename": audio.filename,
                 "content_type": content_type,
                 "audio_size_bytes": len(audio_bytes),
             },
@@ -51,7 +51,7 @@ async def transcribe(
             "Unsupported audio format error",
             extra={
                 "error": str(exc),
-                "filename": audio.filename,
+                "audio_filename": audio.filename,
                 "content_type": content_type,
             },
         )
@@ -62,7 +62,7 @@ async def transcribe(
             "Audio file too large",
             extra={
                 "error": str(exc),
-                "filename": audio.filename,
+                "audio_filename": audio.filename,
                 "audio_size_bytes": len(audio_bytes),
             },
         )
@@ -73,7 +73,7 @@ async def transcribe(
             "Audio decoding failed",
             extra={
                 "error": str(exc),
-                "filename": audio.filename,
+                "audio_filename": audio.filename,
             },
         )
         raise HTTPException(status_code=422, detail="Audio decoding failed.")
@@ -83,7 +83,7 @@ async def transcribe(
             "Empty transcription returned",
             extra={
                 "error": str(exc),
-                "filename": audio.filename,
+                "audio_filename": audio.filename,
             },
         )
         raise HTTPException(status_code=400, detail="Empty transcription.")
@@ -92,7 +92,7 @@ async def transcribe(
         logger.exception(
             "Transcription failed",
             extra={
-                "filename": audio.filename,
+                "audio_filename": audio.filename,
             },
         )
         raise HTTPException(status_code=500, detail="Transcription failed. Please try again later.")
@@ -115,7 +115,7 @@ async def transcribe_stream(
         logger.info(
             "Streaming transcription request received",
             extra={
-                "filename": audio.filename,
+                "audio_filename": audio.filename,
                 "content_type": content_type,
                 "audio_size_bytes": len(audio_bytes),
             },
@@ -142,7 +142,7 @@ async def transcribe_stream(
             "Unsupported audio format error",
             extra={
                 "error": str(exc),
-                "filename": audio.filename,
+                "audio_filename": audio.filename,
                 "content_type": content_type,
             },
         )
@@ -153,7 +153,7 @@ async def transcribe_stream(
             "Audio file too large",
             extra={
                 "error": str(exc),
-                "filename": audio.filename,
+                "audio_filename": audio.filename,
                 "audio_size_bytes": len(audio_bytes),
             },
         )
