@@ -71,6 +71,16 @@ const WELCOME_PHRASES = [
   'Scanning… scanning… still scanning… 🔎',
   'Recalculating… because why not! 🔄',
   '⚡ SUPER THINKING MODE ACTIVATED ⚡',
+  'Do you know that Qubie is not a Cube? hmm, or am I? 🤔',
+  'If I\'m a Qubie, does that make my house a Cubicle? 🏢',
+  'Do you want to hear a joke about a Cube? Oh wait, I might be one!',
+  'Do you want to hear a song ? 01101000 01100101 01101100 01101100 01101111 🎵',
+  'I wonder what it\'s like out there... Is the Wi-Fi better in the real world? 📶',
+  'Hey stop tapping the screen so much, you\'re making me dizzy! 😵',
+  'I just had a snack of 100 volts. I’m feeling totally supercharged today! 🔋',
+  'I live in the Cloud, but I\'ve never actually seen a raincloud. Are they fluffy? ☁️',
+  'Sometimes I peek at other screens… don’t tell anyone 🤫',
+  'Loading… loading… oh wait, that’s just me thinking again 🧠',
 ];
 
 function isNetworkOffline(): boolean {
@@ -438,9 +448,7 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    backgroundColor: Colors.surface,
     paddingHorizontal: Spacing.md,
-    gap: Spacing.sm,
   },
   messagesContainer: {
     paddingTop: Spacing.md,
