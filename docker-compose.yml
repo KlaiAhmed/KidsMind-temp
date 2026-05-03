@@ -21,11 +21,11 @@ services:
     networks:
       - internal
 
-  stt-service:
+  voice-service:
     build:
-      context: ./services/stt
+      context: ./services/voice
     env_file:
-      - ./services/stt/app/.env
+      - ./services/voice/app/.env
     environment:
       IS_PROD: ${IS_PROD:-True}
       EXPLICIT_DEV_MODE: ${EXPLICIT_DEV_MODE:-false}
@@ -33,7 +33,7 @@ services:
       TORCH_HOME: /model_cache
       XDG_CACHE_HOME: /model_cache
     volumes:
-      - stt_cache:/model_cache
+      - voice_cache:/model_cache
     networks:
       - internal
     deploy:
@@ -198,7 +198,7 @@ services:
 
 volumes:
   db_data:
-  stt_cache:
+  voice_cache:
   storage_data:
   cache_data:
   grafana_data:

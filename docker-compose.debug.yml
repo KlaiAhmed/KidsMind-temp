@@ -1,7 +1,7 @@
 services:
-  stt-service:
+  voice-service:
     ports:
-      - "127.0.0.1:${STT_PORT:-8002}:8000"
+      - "127.0.0.1:${voice_PORT:-8002}:8000"
 
   database:
     ports:

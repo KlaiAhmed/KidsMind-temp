@@ -8,9 +8,9 @@ services:
       --reload-exclude '**/.git/**'
       --reload-exclude '**/__pycache__/**'
 
-  stt-service:
+  voice-service:
     volumes:
-      - ./services/stt/app:/app:rw
+      - ./services/voice/app:/app:rw
     command: >
       uvicorn main:app --host 0.0.0.0 --port 8000 --reload
       --reload-dir /app
