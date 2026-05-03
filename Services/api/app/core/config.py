@@ -303,10 +303,10 @@ class Settings(BaseSettings):
     def validate_base_url(cls, v: str) -> str:
         return _validate_url_scheme(v, "BASE_URL", required=True)
 
-    @field_validator("STT_SERVICE_URL")
+    @field_validator("VOICE_SERVICE_URL")
     @classmethod
     def validate_stt_url(cls, v: str) -> str:
-        return _validate_url_scheme(v, "STT_SERVICE_URL", required=True)
+        return _validate_url_scheme(v, "VOICE_SERVICE_URL", required=True)
 
     @field_validator("DEFAULT_LANGUAGE")
     @classmethod
