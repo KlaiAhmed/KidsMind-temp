@@ -102,8 +102,8 @@ class Settings(BaseSettings):
     CSRF_TOKEN_EXPIRE_SECONDS: int = 604800
 
     # Service URLs
-    STT_SERVICE_URL: str = "http://stt-service:8000"
-    STT_REQUEST_TIMEOUT_SECONDS: float = 15.0
+    VOICE_SERVICE_URL: str = "http://voice-service:8000"
+    VOICE_REQUEST_TIMEOUT_SECONDS: float = 15.0
     HTTP_CLIENT_CONNECT_TIMEOUT: float = 5.0
     HTTP_CLIENT_READ_TIMEOUT: float = 60.0
     HTTP_CLIENT_WRITE_TIMEOUT: float = 10.0

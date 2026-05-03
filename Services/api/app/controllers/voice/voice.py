@@ -211,7 +211,7 @@ def _map_stt_status_to_error(status_code: int) -> dict[str, str]:
     if status_code == 422:
         return {"code": "decode_error", "message": "Audio decoding failed."}
     if status_code == 503:
-        return {"code": "stt_busy", "message": "STT service busy, try again."}
+        return {"code": "stt_busy", "message": "Voice service busy, try again."}
     return {"code": "stt_unreachable", "message": "Voice service unavailable. Please try again."}
 
 
@@ -250,8 +250,8 @@ async def voice_transcribe_sync_controller(
             timeout=settings.STT_REQUEST_TIMEOUT_SECONDS,
         )
     except httpx.RequestError as exc:
-        logger.warning("STT service request failed", extra={"error": str(exc)})
-        raise HTTPException(status_code=502, detail="STT service unavailable.") from exc
+        logger.warning("Voice service request failed", extra={"error": str(exc)})
+        raise HTTPException(status_code=502, detail="Voice service unavailable.") from exc
 
     if stt_response.status_code != 200:
         error_payload = _map_stt_status_to_error(stt_response.status_code)
@@ -261,7 +261,7 @@ async def voice_transcribe_sync_controller(
             raise HTTPException(status_code=503, detail=error_payload["message"])
         if stt_response.status_code in {413, 415, 422}:
             raise HTTPException(status_code=stt_response.status_code, detail=error_payload["message"])
-        raise HTTPException(status_code=502, detail="STT service unavailable.")
+        raise HTTPException(status_code=502, detail="Voice service unavailable.")
 
     payload = stt_response.json()
     text = str(payload.get("text") or "").strip()
