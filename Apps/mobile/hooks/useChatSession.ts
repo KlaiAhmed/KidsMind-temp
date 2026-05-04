@@ -21,6 +21,7 @@ import type {
   ConversationContextEntry,
   Message,
   QuizLevel,
+  QuizState,
   QuizSummary,
   QuizSubmitResponse,
   Session,
@@ -39,6 +40,7 @@ interface SubjectContext {
 interface ActiveQuizState {
   quizId: string;
   subject: string;
+  topic: string;
   questions: ChatQuizQuestion[];
   answeredQuestionIds: Set<number>;
   startedAt: number;
@@ -84,6 +86,7 @@ interface UseChatSessionResult {
   retryMessage: (aiMessageId: string) => Promise<void>;
   sendQuizRequest: (topic: string) => Promise<void>;
   submitQuizAnswer: (questionId: number, answer: string) => void;
+  submitQuiz: (quizId: string) => void;
   retryQuizSubmission: (quizId: string) => void;
   resetQuizMode: () => void;
   cancelResponse: () => void;
@@ -848,48 +851,16 @@ export function useChatSession({
     ],
   );
 
-  const buildAndAppendSummaryMessage = useCallback(
-    (quizState: ActiveQuizState, serverResult: QuizSubmitResponse) => {
-      const summary: QuizSummary = {
-        correctCount: serverResult.correctCount,
-        totalQuestions: serverResult.totalQuestions,
-        scorePercentage: serverResult.scorePercentage,
-        xpEarned: serverResult.xpEarned,
-        bonusXp: serverResult.bonusXp,
-        totalXp: serverResult.totalXp,
-        streakMultiplier: serverResult.streakMultiplier,
-        isPerfect: serverResult.isPerfect,
-      };
-
-      const activeSession = sessionRef.current;
-      if (!activeSession) return;
-
-      const summaryMessage: Message = {
-        id: `quiz-summary-${quizState.quizId}`,
-        sessionId: activeSession.id,
-        sender: 'ai',
-        content: '',
-        quizScore: summary,
-        safetyFlags: [],
-        createdAt: new Date().toISOString(),
-        triggeredBy: quizState.triggerMessageId,
-        status: 'sent',
-      };
-
-      const nextMessages = [...messagesRef.current, summaryMessage];
-      messagesRef.current = nextMessages;
-
-      setState((current) => ({
-        ...current,
-        messages: nextMessages,
-      }));
-
-      if (onQuizComplete) {
-        onQuizComplete(summary);
-      }
-    },
-    [onQuizComplete],
-  );
+  const buildQuizSummary = useCallback((serverResult: QuizSubmitResponse): QuizSummary => ({
+    correctCount: serverResult.correctCount,
+    totalQuestions: serverResult.totalQuestions,
+    scorePercentage: serverResult.scorePercentage,
+    xpEarned: serverResult.xpEarned,
+    bonusXp: serverResult.bonusXp,
+    totalXp: serverResult.totalXp,
+    streakMultiplier: serverResult.streakMultiplier,
+    isPerfect: serverResult.isPerfect,
+  }), []);
 
   const updateQuizMessage = useCallback((quizId: string, updates: Partial<Message>) => {
     setState((current) => {
@@ -906,11 +877,18 @@ export function useChatSession({
     });
   }, []);
 
+  const transitionQuizMessage = useCallback((quizId: string, quizStatus: QuizState, updates: Partial<Message> = {}) => {
+    updateQuizMessage(quizId, {
+      ...updates,
+      quizStatus,
+    });
+  }, [updateQuizMessage]);
+
   const buildQuizSubmissionPayload = useCallback((quiz: ActiveQuizState) => ({
     quiz_id: quiz.quizId,
     answers: quiz.questions
-      .filter((q) => q.userAnswer !== undefined)
-      .map((q) => ({ question_id: q.id, answer: q.userAnswer! })),
+      .filter((q) => Boolean(q.userAnswer?.trim()))
+      .map((q) => ({ question_id: q.id, answer: q.userAnswer!.trim() })),
     duration_seconds: (Date.now() - quiz.startedAt) / 1000,
     subject: quiz.subject,
   }), []);
@@ -938,20 +916,25 @@ export function useChatSession({
       });
 
       quiz.questions = validatedQuestions;
-      updateQuizMessage(quiz.quizId, {
+      const summary = buildQuizSummary(serverResult);
+
+      transitionQuizMessage(quiz.quizId, 'results', {
         quiz: validatedQuestions,
-        quizStatus: 'results',
         quizError: undefined,
+        quizScore: summary,
       });
 
       if (childId) {
         await removePendingQuizSubmission(childId, quiz.quizId);
       }
 
-      buildAndAppendSummaryMessage(quiz, serverResult);
+      if (onQuizComplete) {
+        onQuizComplete(summary);
+      }
+
       activeQuizRef.current = null;
     },
-    [buildAndAppendSummaryMessage, childId, updateQuizMessage],
+    [buildQuizSummary, childId, onQuizComplete, transitionQuizMessage],
   );
 
   const markQuizSubmissionError = useCallback((quiz: ActiveQuizState, message: string) => {
@@ -960,16 +943,31 @@ export function useChatSession({
       status: question.userAnswer ? 'answered' as const : question.status,
     }));
     quiz.questions = answeredQuestions;
-    updateQuizMessage(quiz.quizId, {
+    transitionQuizMessage(quiz.quizId, 'error', {
       quiz: answeredQuestions,
-      quizStatus: 'error',
       quizError: message,
     });
-  }, [updateQuizMessage]);
+  }, [transitionQuizMessage]);
 
   const submitQuizState = useCallback(
     async (quiz: ActiveQuizState) => {
       if (!childId) return;
+
+      if (quiz.questions.length === 0) {
+        transitionQuizMessage(quiz.quizId, 'error', {
+          quizError: 'This quiz did not include any questions.',
+        });
+        return;
+      }
+
+      const hasAllAnswers = quiz.questions.every((question) => Boolean(question.userAnswer?.trim()));
+      if (!hasAllAnswers) {
+        transitionQuizMessage(quiz.quizId, 'answering', {
+          quiz: quiz.questions,
+          quizError: 'Answer every question before submitting.',
+        });
+        return;
+      }
 
       const payload = buildQuizSubmissionPayload(quiz);
       const pendingEntry: PendingQuizSubmission = {
@@ -984,9 +982,8 @@ export function useChatSession({
         status: 'pending' as const,
       }));
       quiz.questions = pendingQuestions;
-      updateQuizMessage(quiz.quizId, {
+      transitionQuizMessage(quiz.quizId, 'submitting', {
         quiz: pendingQuestions,
-        quizStatus: 'submitting',
         quizError: undefined,
       });
 
@@ -999,20 +996,21 @@ export function useChatSession({
         markQuizSubmissionError(quiz, 'Could not submit the quiz. Your answers are saved for retry.');
       }
     },
-    [applyQuizServerResult, buildQuizSubmissionPayload, childId, markQuizSubmissionError, updateQuizMessage],
+    [applyQuizServerResult, buildQuizSubmissionPayload, childId, markQuizSubmissionError, transitionQuizMessage],
   );
 
   const submitQuizAnswer = useCallback(
     (questionId: number, answer: string) => {
       const quiz = activeQuizRef.current;
-      if (!quiz || quiz.answeredQuestionIds.has(questionId)) return;
+      const trimmedAnswer = answer.trim();
+      if (!quiz || !trimmedAnswer) return;
 
       const question = quiz.questions.find((q) => q.id === questionId);
       if (!question) return;
 
       const updatedQuestion: ChatQuizQuestion = {
         ...question,
-        userAnswer: answer,
+        userAnswer: trimmedAnswer,
         status: 'answered',
       };
 
@@ -1021,23 +1019,26 @@ export function useChatSession({
 
       setState((current) => {
         const nextMessages = current.messages.map((msg) => {
-          if (!msg.quiz) return msg;
-          const hasQuestion = msg.quiz.some((q) => q.id === questionId);
-          if (!hasQuestion) return msg;
+          if (msg.id !== quiz.quizId || !msg.quiz) return msg;
           return {
             ...msg,
             quiz: msg.quiz.map((q) => (q.id === questionId ? updatedQuestion : q)),
             quizStatus: 'answering' as const,
+            quizError: undefined,
           };
         });
         messagesRef.current = nextMessages;
         return { ...current, messages: nextMessages };
       });
+    },
+    [],
+  );
 
-      const allAnswered = quiz.answeredQuestionIds.size >= quiz.questions.length;
-      if (allAnswered) {
-        void submitQuizState(quiz);
-      }
+  const submitQuiz = useCallback(
+    (quizId: string) => {
+      const quiz = activeQuizRef.current;
+      if (!quiz || quiz.quizId !== quizId) return;
+      void submitQuizState(quiz);
     },
     [submitQuizState],
   );
@@ -1069,7 +1070,9 @@ export function useChatSession({
             });
           }
         })
-        .catch(() => undefined);
+        .catch((error) => {
+          console.warn('[useChatSession] retryQuizSubmission failed:', error);
+        });
     },
     [childId, onQuizComplete, submitQuizState],
   );
@@ -1099,12 +1102,15 @@ export function useChatSession({
                 isPerfect: serverResult.isPerfect,
               });
             }
-          } catch {
+          } catch (error) {
+            console.warn('[useChatSession] pending quiz submission failed:', error);
             break;
           }
         }
       })
-      .catch(() => undefined);
+      .catch((error) => {
+        console.warn('[useChatSession] pending quiz replay failed:', error);
+      });
 
     return () => {
       cancelled = true;
@@ -1143,6 +1149,8 @@ export function useChatSession({
         return;
       }
 
+      activeQuizRef.current = null;
+
       const activeSession = sessionRef.current ?? (await startSession());
       if (!activeSession) {
         setState((current) => ({
@@ -1173,16 +1181,32 @@ export function useChatSession({
         status: 'sent',
       };
 
-      const contextualMessages = [...messagesRef.current, optimisticMessage];
-      messagesRef.current = contextualMessages;
+      const requestedAt = new Date().toISOString();
+      const quizMessageId = `quiz-loading-${Date.now()}`;
+      const quizSubject = subjectContext?.subjectName ?? 'General knowledge';
+      const loadingQuizMessage: Message = {
+        id: quizMessageId,
+        sessionId: liveSession.id,
+        sender: 'ai',
+        content: '',
+        quiz: [],
+        quizStatus: 'loading',
+        quizSubject,
+        quizTopic: topic,
+        quizRequestedAt: requestedAt,
+        safetyFlags: [],
+        createdAt: requestedAt,
+        triggeredBy: optimisticMessage.id,
+        status: 'sent',
+      };
 
-      setState((current) => ({
-        ...current,
-        messages: contextualMessages,
+      const contextualMessages = [...messagesRef.current, optimisticMessage];
+      const nextMessages = [...contextualMessages, loadingQuizMessage];
+      commitMessages(nextMessages, {
         inputText: '',
         isAwaitingResponse: true,
         error: null,
-      }));
+      });
 
       const startedRequestAt = Date.now();
 
@@ -1215,38 +1239,38 @@ export function useChatSession({
           return;
         }
 
+        const quizQuestions = response.questions.map((q) => ({ ...q, status: 'unanswered' as const }));
+
         activeQuizRef.current = {
           quizId: response.quizId,
           subject: response.subject,
-          questions: response.questions.map((q) => ({ ...q, status: 'unanswered' })),
+          topic: response.topic,
+          questions: quizQuestions,
           answeredQuestionIds: new Set(),
           startedAt: Date.now(),
           triggerMessageId: optimisticMessage.id,
         };
 
-        const aiMessage: Message = {
-          id: response.quizId,
-          sessionId: liveSession.id,
-          sender: 'ai',
-          content: response.intro,
-          quiz: response.questions.map((q) => ({ ...q, status: 'unanswered' })),
-          quizStatus: 'displaying',
-          safetyFlags: [],
-          createdAt: new Date().toISOString(),
-          triggeredBy: optimisticMessage.id,
-          status: 'sent',
-        };
-
-        const nextMessages = [...messagesRef.current, aiMessage];
-        messagesRef.current = nextMessages;
-
-        setState((current) => ({
-          ...current,
-          messages: nextMessages,
-          isAwaitingResponse: false,
-          error: null,
-        }));
-      } catch {
+        updateMessageById(
+          quizMessageId,
+          (message) => ({
+            ...message,
+            id: response.quizId,
+            content: response.intro,
+            quiz: quizQuestions,
+            quizStatus: 'ready',
+            quizError: undefined,
+            quizScore: undefined,
+            quizSubject: response.subject,
+            quizTopic: response.topic,
+            status: 'sent',
+          }),
+          {
+            isAwaitingResponse: false,
+            error: null,
+          },
+        );
+      } catch (error) {
         const elapsed = Date.now() - startedRequestAt;
         if (elapsed < MIN_TYPING_INDICATOR_MS) {
           await waitMs(MIN_TYPING_INDICATOR_MS - elapsed);
@@ -1256,29 +1280,41 @@ export function useChatSession({
           return;
         }
 
-        const failedMessage: Message = {
-          id: `quiz-error-${optimisticMessage.id}`,
-          sessionId: liveSession.id,
-          sender: 'ai',
-          content: 'I could not make that quiz just now. Tap retry and I will try again.',
-          safetyFlags: [],
-          createdAt: new Date().toISOString(),
-          triggeredBy: optimisticMessage.id,
-          status: 'error',
-        };
+        const message = error instanceof Error
+          ? error.message
+          : 'I could not make that quiz just now. Please try again.';
 
-        const nextMessages = [...messagesRef.current, failedMessage];
-        messagesRef.current = nextMessages;
-
-        setState((current) => ({
-          ...current,
-          messages: nextMessages,
-          isAwaitingResponse: false,
-          error: null,
-        }));
+        activeQuizRef.current = null;
+        updateMessageById(
+          quizMessageId,
+          (currentMessage) => ({
+            ...currentMessage,
+            content: '',
+            quiz: [],
+            quizStatus: 'error',
+            quizError: message,
+            quizScore: undefined,
+            status: 'sent',
+          }),
+          {
+            isAwaitingResponse: false,
+            error: null,
+          },
+        );
       }
     },
-    [ageGroup, childId, gradeLevel, resolveLiveSession, startSession, subjectContext?.subjectId, subjectContext?.subjectName, subjectContext?.topicId],
+    [
+      ageGroup,
+      childId,
+      commitMessages,
+      gradeLevel,
+      resolveLiveSession,
+      startSession,
+      subjectContext?.subjectId,
+      subjectContext?.subjectName,
+      subjectContext?.topicId,
+      updateMessageById,
+    ],
   );
 
   const resetQuizMode = useCallback(() => {
@@ -1823,6 +1859,7 @@ export function useChatSession({
     retryMessage,
     sendQuizRequest,
     submitQuizAnswer,
+    submitQuiz,
     retryQuizSubmission,
     resetQuizMode,
     cancelResponse,
