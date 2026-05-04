@@ -7,7 +7,8 @@ export type SafetyFlag = string;
 export type ChatInputSource = 'keyboard' | 'voice';
 export type QuizLevel = 'easy' | 'medium' | 'hard';
 export type MessageStatus = 'sent' | 'streaming' | 'error';
-export type QuizMessageStatus = 'displaying' | 'answering' | 'submitting' | 'results' | 'error';
+export type QuizState = 'loading' | 'ready' | 'answering' | 'submitting' | 'results' | 'error';
+export type QuizMessageStatus = QuizState;
 export type QuizQuestionStatus = 'unanswered' | 'answered' | 'pending' | 'correct' | 'incorrect';
 
 export interface Message {
@@ -23,6 +24,9 @@ export interface Message {
   quizStatus?: QuizMessageStatus;
   quizError?: string;
   quizScore?: QuizSummary;
+  quizSubject?: string;
+  quizTopic?: string;
+  quizRequestedAt?: string;
 }
 
 export interface Session {
