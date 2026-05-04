@@ -56,6 +56,8 @@ class SessionMetadata(BaseModel):
     ended_at: datetime | None = None
     message_count: int = 0
     has_flagged_content: bool = False
+    flagged_message_count: int = 0
+    last_flagged_at: datetime | None = None
     subjects: list[str] = Field(default_factory=list)
 
 
@@ -73,6 +75,8 @@ class ParentHistorySession(BaseModel):
     ended_at: datetime | None = None
     message_count: int = 0
     has_flagged_content: bool = False
+    flagged_message_count: int = 0
+    last_flagged_at: datetime | None = None
     last_message_at: datetime | None = None
     preview: str = ""
 
@@ -127,9 +131,9 @@ class NotificationPrefsUpdate(BaseModel):
     weekly_report_enabled: bool | None = None
     session_start_enabled: bool | None = None
     session_end_enabled: bool | None = None
-streak_milestone_enabled: bool | None = None
-email_channel: bool | None = None
-push_channel: bool | None = None
+    streak_milestone_enabled: bool | None = None
+    email_channel: bool | None = None
+    push_channel: bool | None = None
 
 
 from schemas.audit.audit_schema import AuditLogEntry as ControlAuditEntry

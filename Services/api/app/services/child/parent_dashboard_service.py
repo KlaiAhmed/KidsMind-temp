@@ -74,7 +74,15 @@ class ParentDashboardService:
             .scalar() or 0
         )
 
-        flagged_count = 0
+        flagged_count = (
+            self.db.query(func.count(ChatHistory.id))
+            .join(ChatSession, ChatHistory.session_id == ChatSession.id)
+            .filter(
+                ChatSession.child_profile_id == child_id,
+                ChatHistory.is_flagged.is_(True),
+            )
+            .scalar() or 0
+        )
 
         streak = self._compute_streak(child_id)
 
@@ -127,13 +135,36 @@ class ParentDashboardService:
         )
         count_map = {row.session_id: int(row.msg_count) for row in msg_count_rows}
 
+        flagged_rows = (
+            self.db.query(
+                ChatHistory.session_id,
+                func.count(ChatHistory.id).label("flagged_count"),
+                func.max(ChatHistory.created_at).label("last_flagged_at"),
+            )
+            .filter(
+                ChatHistory.session_id.in_(session_ids),
+                ChatHistory.is_flagged.is_(True),
+            )
+            .group_by(ChatHistory.session_id)
+            .all()
+        )
+        flagged_map = {
+            row.session_id: {
+                "flagged_count": int(row.flagged_count or 0),
+                "last_flagged_at": row.last_flagged_at,
+            }
+            for row in flagged_rows
+        }
+
         recent_sessions = [
             SessionMetadata(
                 session_id=s.id,
                 started_at=s.started_at,
                 ended_at=s.ended_at,
                 message_count=count_map.get(s.id, 0),
-                has_flagged_content=False,
+                has_flagged_content=bool(flagged_map.get(s.id, {}).get("flagged_count")),
+                flagged_message_count=flagged_map.get(s.id, {}).get("flagged_count", 0),
+                last_flagged_at=flagged_map.get(s.id, {}).get("last_flagged_at"),
                 subjects=[],
             )
             for s in recent_sessions_rows
@@ -244,16 +275,27 @@ class ParentDashboardService:
         date_from: datetime | None = None,
         date_to: datetime | None = None,
     ) -> ParentHistoryResponse:
-        child = self._require_child_for_parent(child_id, parent_id)
+        self._require_child_for_parent(child_id, parent_id)
 
         query = self.db.query(ChatSession).filter(ChatSession.child_profile_id == child_id)
-
         if date_from:
             query = query.filter(ChatSession.started_at >= date_from)
         if date_to:
             query = query.filter(ChatSession.started_at <= date_to)
+        if flagged_only:
+            query = query.filter(
+                self.db.query(ChatHistory.id).filter(
+                    ChatHistory.session_id == ChatSession.id,
+                    ChatHistory.is_flagged.is_(True)
+                ).exists()
+            )
 
-        total_count = query.count()
+        total_count = (
+            self.db.query(func.count())
+            .select_from(query.with_entities(ChatSession.id).distinct().subquery())
+            .scalar()
+            or 0
+        )
 
         rows = (
             query.order_by(ChatSession.started_at.desc())
@@ -262,44 +304,66 @@ class ParentDashboardService:
             .all()
         )
 
-        session_ids = [s.id for s in rows]
-        msg_count_rows = (
-            self.db.query(
-                ChatHistory.session_id,
-                func.count(ChatHistory.id).label("msg_count"),
+        session_ids = [session.id for session in rows]
+        message_rows = []
+        if session_ids:
+            message_rows = (
+                self.db.query(ChatHistory)
+                .filter(ChatHistory.session_id.in_(session_ids))
+                .order_by(ChatHistory.session_id.asc(), ChatHistory.created_at.asc(), ChatHistory.id.asc())
+                .all()
             )
-            .filter(ChatHistory.session_id.in_(session_ids))
-            .group_by(ChatHistory.session_id)
-            .all()
-        )
-        count_map = {row.session_id: int(row.msg_count) for row in msg_count_rows}
 
-        last_msg_rows = (
-            self.db.query(
-                ChatHistory.session_id,
-                func.max(ChatHistory.created_at).label("last_message_at"),
-            )
-            .filter(ChatHistory.session_id.in_(session_ids))
-            .group_by(ChatHistory.session_id)
-            .all()
-        )
-        last_msg_map = {row.session_id: row.last_message_at for row in last_msg_rows}
+        messages_by_session: dict[UUID, list[ChatHistory]] = {}
+        for message in message_rows:
+            messages_by_session.setdefault(message.session_id, []).append(message)
 
-        sessions = [
-            ParentHistorySession(
-                session_id=session.id,
-                started_at=session.started_at,
-                ended_at=session.ended_at,
-                message_count=count_map.get(session.id, 0),
-                has_flagged_content=False,
-                last_message_at=last_msg_map.get(session.id),
-                preview="",
+        flagged_rows = []
+        if session_ids:
+            flagged_rows = (
+                self.db.query(
+                    ChatHistory.session_id,
+                    func.count(ChatHistory.id).label("flagged_count"),
+                    func.max(ChatHistory.created_at).label("last_flagged_at"),
+                )
+                .filter(
+                    ChatHistory.session_id.in_(session_ids),
+                    ChatHistory.is_flagged.is_(True),
+                )
+                .group_by(ChatHistory.session_id)
+                .all()
             )
-            for session in rows
-        ]
+
+        flagged_map = {
+            row.session_id: {
+                "flagged_count": int(row.flagged_count or 0),
+                "last_flagged_at": row.last_flagged_at,
+            }
+            for row in flagged_rows
+        }
+
+        sessions = []
+        for session in rows:
+            session_messages = messages_by_session.get(session.id, [])
+            last_message_at = session_messages[-1].created_at if session_messages else None
+            preview = session_messages[-1].content[:160] if session_messages else ""
+            flagged_info = flagged_map.get(session.id, {})
+
+            sessions.append(
+                ParentHistorySession(
+                    session_id=session.id,
+                    started_at=session.started_at,
+                    ended_at=session.ended_at,
+                    message_count=len(session_messages),
+                    has_flagged_content=bool(flagged_info.get("flagged_count")),
+                    flagged_message_count=flagged_info.get("flagged_count", 0),
+                    last_flagged_at=flagged_info.get("last_flagged_at"),
+                    last_message_at=last_message_at,
+                    preview=preview,
+                )
+            )
 
         has_more = (offset + limit) < total_count
-
         return ParentHistoryResponse(
             child_id=child_id,
             sessions=sessions,
@@ -316,6 +380,7 @@ class ParentDashboardService:
         session_ids: list[UUID],
     ) -> BulkDeleteResponse:
         child = self._require_child_for_parent(child_id, parent_id)
+
         deleted = 0
         not_found = 0
 

@@ -40,9 +40,12 @@ from controllers.child.parent_dashboard import (
     update_notification_prefs_controller,
 )
 from controllers.child.parent_notification import (
+    list_flagged_notifications_controller,
     list_notifications_controller,
     mark_all_notifications_read_controller,
+    mark_all_flagged_notifications_read_controller,
     mark_notifications_read_controller,
+    mark_flagged_notifications_read_controller,
 )
 from dependencies.auth.auth import get_current_user
 from dependencies.infrastructure.infrastructure import get_db, get_redis
@@ -60,6 +63,7 @@ from schemas.child.child_profile_schema import (
 from schemas.gamification.badge_schema import BadgeCatalogResponse
 from schemas.gamification.notification_schema import (
     MarkNotificationsReadRequest,
+    ParentFlaggedNotificationListResponse,
     ParentBadgeNotificationListResponse,
 )
 from schemas.audit.audit_schema import AuditLogResponse
@@ -600,6 +604,33 @@ async def list_badge_notifications(
     return result
 
 
+@router.get("/notifications/flagged", response_model=ParentFlaggedNotificationListResponse)
+async def list_flagged_notifications(
+    request: Request,
+    response: Response,
+    unread_only: bool = False,
+    limit: int = 50,
+    offset: int = 0,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    timer = time.perf_counter()
+
+    logger.info(f"List flagged notifications request received for parent_id={current_user.id}")
+    result = await list_flagged_notifications_controller(
+        current_user=current_user,
+        db=db,
+        unread_only=unread_only,
+        limit=limit,
+        offset=offset,
+    )
+
+    timer = time.perf_counter() - timer
+    logger.info(f"List flagged notifications request processed in {timer:.3f} seconds")
+
+    return result
+
+
 @router.patch("/notifications/badges/read", response_model=dict)
 async def mark_badge_notifications_read(
     request: Request,
@@ -623,6 +654,29 @@ async def mark_badge_notifications_read(
     return result
 
 
+@router.patch("/notifications/flagged/read", response_model=dict)
+async def mark_flagged_notifications_read(
+    request: Request,
+    response: Response,
+    payload: MarkNotificationsReadRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    timer = time.perf_counter()
+
+    logger.info(f"Mark flagged notifications read request received for parent_id={current_user.id}")
+    result = await mark_flagged_notifications_read_controller(
+        current_user=current_user,
+        db=db,
+        payload=payload,
+    )
+
+    timer = time.perf_counter() - timer
+    logger.info(f"Mark flagged notifications read request processed in {timer:.3f} seconds")
+
+    return result
+
+
 @router.patch("/notifications/badges/read-all", response_model=dict)
 async def mark_all_badge_notifications_read(
     request: Request,
@@ -640,5 +694,26 @@ async def mark_all_badge_notifications_read(
 
     timer = time.perf_counter() - timer
     logger.info(f"Mark all badge notifications read request processed in {timer:.3f} seconds")
+
+    return result
+
+
+@router.patch("/notifications/flagged/read-all", response_model=dict)
+async def mark_all_flagged_notifications_read(
+    request: Request,
+    response: Response,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    timer = time.perf_counter()
+
+    logger.info(f"Mark all flagged notifications read request received for parent_id={current_user.id}")
+    result = await mark_all_flagged_notifications_read_controller(
+        current_user=current_user,
+        db=db,
+    )
+
+    timer = time.perf_counter() - timer
+    logger.info(f"Mark all flagged notifications read request processed in {timer:.3f} seconds")
 
     return result
