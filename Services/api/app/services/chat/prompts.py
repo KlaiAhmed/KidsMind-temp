@@ -101,27 +101,47 @@ QUIZ REQUEST:
 - Level: {level}
 - Number of questions: {question_count}
 
-INSTRUCTIONS:
-- Generate exactly {question_count} quiz questions appropriate for the child's level.
-- Mix question types: prefer MCQ (multiple choice), include at least one true/false.
-- All questions must be directly about {topic} at {level} level.
-- increasing difficulty through quiz
-- Explanations must be clear, brief, and encouraging.
-- The intro must be motivating and age-appropriate.
+STRICT OUTPUT REQUIREMENTS (NON-NEGOTIABLE):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-OUTPUT FORMAT:
-Return ONLY valid JSON matching this schema exactly, no markdown fences, no preamble:
+1. Return ONLY valid JSON. NO markdown, NO text before or after.
+2. JSON MUST start with {{ and end with }}
+3. MUST contain EXACTLY {question_count} questions (not fewer, not more).
+4. MUST include balanced question types for the requested count:
+   - If {question_count} is 3 or more, include at least one multiple choice (MCQ), one true/false, and one short answer.
+   - If {question_count} is exactly 3, that means exactly one question of each type.
+   - If {question_count} is less than 3, generate only valid questions and do not invent extra items.
+5. ALL questions MUST be UNIQUE:
+   - No repeated question wording.
+   - No repeated concepts or topics.
+   - Each question tests a different aspect of {topic}.
+6. Each question MUST have all required fields:
+   - "id": sequence number starting at 1
+   - "type": one of "mcq", "true_false", "short_answer"
+   - "prompt": clear, age-appropriate question text
+   - "options": array of strings for MCQ/true_false ONLY (null for short_answer)
+   - "answer": correct answer (string, must match one option for MCQ/true_false)
+   - "explanation": brief, encouraging explanation (never empty)
+7. Progressive difficulty: questions gradually increase in difficulty from easy to hard.
+
+IF YOU CANNOT MEET ANY REQUIREMENT:
+- Return this only: {{"intro":"","questions":[]}}
+- Do NOT generate partial quizzes.
+- Do NOT reuse concepts across questions.
+
+OUTPUT SCHEMA (EXACTLY):
 {{
-  "intro": "string",
+  "intro": "string - motivating, age-appropriate introduction",
   "questions": [
     {{
-      "id": integer,
-      "type": "mcq" | "true_false" | "short_answer",
-      "prompt": "string",
-      "options": ["string"] | null,
-      "answer": "string",
-      "explanation": "string"
-    }}
+      "id": 1,
+      "type": "mcq",
+      "prompt": "question text",
+      "options": ["option1", "option2", "option3", "option4"],
+      "answer": "correct option text",
+      "explanation": "brief explanation"
+    }},
+    ...
   ]
 }}
 
