@@ -1,9 +1,8 @@
-import { memo, useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useReducer, useRef } from 'react';
 import { Pressable, StyleSheet, Text, TextInput } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   useAudioRecorder,
-  useAudioRecorderState,
   RecordingPresets,
   setAudioModeAsync,
   requestRecordingPermissionsAsync,
@@ -15,7 +14,6 @@ import Animated, {
   FadeIn,
   FadeOut,
   LinearTransition,
-  SlideInUp,
   interpolate,
   interpolateColor,
   useAnimatedStyle,
@@ -32,8 +30,8 @@ type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
 
 const MIN_CHILD_TAP_TARGET = 56;
 const MAX_MESSAGE_LENGTH = 500;
-const DEFAULT_METERING = -160;
-const METERING_POLL_INTERVAL_MS = 70;
+
+
 const RECORDING_OPTIONS = {
   ...RecordingPresets.HIGH_QUALITY,
   isMeteringEnabled: true,
@@ -225,7 +223,12 @@ function QuizToggleButton({ active, disabled, onActivate, onDeactivate }: QuizTo
 
   const handlePress = useCallback(() => {
     if (disabled) return;
-    active ? onDeactivate() : onActivate();
+    if (active) {
+      onDeactivate();
+      return;
+    }
+
+    onActivate();
   }, [active, disabled, onActivate, onDeactivate]);
 
   const iconColor = active ? Colors.primary : Colors.textTertiary;
@@ -283,7 +286,7 @@ function ChatInputComponent({
     }
   });
 
-  const recorderState = useAudioRecorderState(recorder, METERING_POLL_INTERVAL_MS);
+  
 
   const quizActive = isQuizMode(inputState.mode);
   const recordingActive = isRecordingMode(inputState.mode);
@@ -293,10 +296,7 @@ function ChatInputComponent({
   const showSendButton = canSendText && !isAiLoading;
   const showStopButton = isAiLoading && !recordingActive;
 
-  const metering =
-    recordingActive && recorderState.metering != null
-      ? recorderState.metering
-      : DEFAULT_METERING;
+  
 
   const restoreAudioMode = useCallback(async () => {
     await setAudioModeAsync({
@@ -406,7 +406,6 @@ function ChatInputComponent({
       return;
     }
 
-    const shouldSendQuiz = quizActive;
     dispatch({ type: 'set_transcribing', value: true });
     dispatch({ type: 'set_feedback', message: null });
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
@@ -428,14 +427,6 @@ function ChatInputComponent({
       }
 
       onChangeText(transcript);
-
-      const didSend = shouldSendQuiz
-        ? await onSendQuiz(transcript)
-        : await onSend(transcript, 'voice');
-
-      if (didSend !== false) {
-        onChangeText('');
-      }
     } catch {
       dispatch({
         type: 'set_feedback',
@@ -444,7 +435,7 @@ function ChatInputComponent({
     } finally {
       dispatch({ type: 'set_transcribing', value: false });
     }
-  }, [busy, onChangeText, onSend, onSendQuiz, onTranscribeAudio, quizActive, stopActiveRecording]);
+  }, [busy, onChangeText, onTranscribeAudio, stopActiveRecording]);
 
   const handleActivateQuiz = useCallback(async () => {
     if (busy) {
@@ -483,7 +474,7 @@ function ChatInputComponent({
             entering={FadeIn.duration(120).easing(Easing.out(Easing.ease))}
             style={styles.waveformSlot}
           >
-            <AudioWaveform metering={metering} />
+            <AudioWaveform isRecording={recordingActive} />
           </Animated.View>
         ) : (
           <Animated.View

@@ -8,7 +8,7 @@ import {
   startChatSession,
   submitQuizAnswers,
 } from '@/services/chatService';
-import { transcribeVoiceRecording } from '@/services/voiceService';
+import { sendVoiceTranscriptionStreaming } from '@/services/voiceService';
 import { isLocalSessionId } from '@/src/utils/sessionId';
 import { triggerHaptic } from '@/src/utils/haptics';
 import type { AgeGroup } from '@/types/child';
@@ -52,8 +52,25 @@ interface UseChatSessionOptions {
   autoStart?: boolean;
 }
 
+interface TranscriptionMetadata {
+  transcriptionId?: string;
+  messageId?: string;
+  language?: string;
+  durationSeconds?: number;
+  finishReason?: string;
+  childId?: string;
+}
+
+interface TranscriptionState {
+  transcriptionText: string;
+  isTranscribing: boolean;
+  transcriptionError: string | null;
+  transcriptionMetadata: TranscriptionMetadata | null;
+}
+
 interface UseChatSessionResult {
   state: ChatState;
+  transcription: TranscriptionState;
   session: Session | null;
   elapsedSeconds: number;
   minutesRemaining: number | null;
@@ -129,6 +146,31 @@ function buildInitialChatState(): ChatState {
   };
 }
 
+function buildInitialTranscriptionState(): TranscriptionState {
+  return {
+    transcriptionText: '',
+    isTranscribing: false,
+    transcriptionError: null,
+    transcriptionMetadata: null,
+  };
+}
+
+function mergeTranscriptionText(previousText: string, nextChunk: string): string {
+  if (!nextChunk) {
+    return previousText;
+  }
+
+  if (!previousText) {
+    return nextChunk;
+  }
+
+  if (nextChunk.startsWith(previousText)) {
+    return nextChunk;
+  }
+
+  return previousText + nextChunk;
+}
+
 function normalizeAnswerForComparison(answer: string, questionType: string): string {
   const normalized = answer.trim().toLowerCase();
   if (questionType === 'true_false') {
@@ -148,6 +190,7 @@ export function useChatSession({
   autoStart = true,
 }: UseChatSessionOptions): UseChatSessionResult {
   const [state, setState] = useState<ChatState>(buildInitialChatState);
+  const [transcription, setTranscription] = useState<TranscriptionState>(buildInitialTranscriptionState);
   const [session, setSession] = useState<Session | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
 
@@ -158,12 +201,22 @@ export function useChatSession({
   const activeQuizRef = useRef<ActiveQuizState | null>(null);
   const resolvingRef = useRef<Promise<Session | null> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const transcriptionAbortRef = useRef<AbortController | null>(null);
+  const transcriptionSnapshotRef = useRef<string>('');
+  const transcriptionBufferRef = useRef<string>('');
+  const transcriptionRafRef = useRef<ReturnType<typeof requestAnimationFrame> | null>(null);
 
   useEffect(() => {
     return () => {
       mountedRef.current = false;
       abortRef.current?.abort();
       abortRef.current = null;
+      transcriptionAbortRef.current?.abort();
+      transcriptionAbortRef.current = null;
+      if (transcriptionRafRef.current !== null) {
+        cancelAnimationFrame(transcriptionRafRef.current);
+        transcriptionRafRef.current = null;
+      }
     };
   }, []);
 
@@ -267,6 +320,59 @@ export function useChatSession({
       error: null,
     }));
   }, []);
+
+  const clearTranscriptionStream = useCallback(() => {
+    transcriptionBufferRef.current = '';
+    if (transcriptionRafRef.current !== null) {
+      cancelAnimationFrame(transcriptionRafRef.current);
+      transcriptionRafRef.current = null;
+    }
+  }, []);
+
+  const commitTranscriptionText = useCallback((text: string) => {
+    if (!mountedRef.current) {
+      return;
+    }
+
+    setTranscription((current) => ({
+      ...current,
+      transcriptionText: text,
+    }));
+
+    setState((current) => ({
+      ...current,
+      inputText: text,
+    }));
+  }, []);
+
+  const flushTranscriptionBuffer = useCallback(() => {
+    transcriptionRafRef.current = null;
+
+    if (!mountedRef.current) {
+      transcriptionBufferRef.current = '';
+      return;
+    }
+
+    const nextChunk = transcriptionBufferRef.current;
+    if (!nextChunk) {
+      return;
+    }
+
+    transcriptionBufferRef.current = '';
+    const nextText = mergeTranscriptionText(transcriptionSnapshotRef.current, nextChunk);
+    transcriptionSnapshotRef.current = nextText;
+    commitTranscriptionText(nextText);
+  }, [commitTranscriptionText]);
+
+  const scheduleTranscriptionFlush = useCallback(() => {
+    if (transcriptionRafRef.current !== null) {
+      return;
+    }
+
+    transcriptionRafRef.current = requestAnimationFrame(() => {
+      void flushTranscriptionBuffer();
+    });
+  }, [flushTranscriptionBuffer]);
 
   const startSession = useCallback(async (): Promise<Session | null> => {
     if (!childId || sessionRef.current) {
@@ -988,15 +1094,135 @@ export function useChatSession({
         throw new Error('Voice is unavailable until a live chat session starts.');
       }
 
-      const response = await transcribeVoiceRecording({
-        childId,
-        sessionId: activeSession.id,
-        audioUri,
+      transcriptionAbortRef.current?.abort();
+      const controller = new AbortController();
+      transcriptionAbortRef.current = controller;
+
+      transcriptionSnapshotRef.current = state.inputText;
+      transcriptionBufferRef.current = '';
+      clearTranscriptionStream();
+
+      let finalText = '';
+      let finalMetadata: TranscriptionMetadata | null = null;
+
+      setTranscription({
+        transcriptionText: '',
+        isTranscribing: true,
+        transcriptionError: null,
+        transcriptionMetadata: null,
       });
 
-      return response.text;
+      setState((current) => ({
+        ...current,
+        inputText: '',
+      }));
+
+      try {
+        await sendVoiceTranscriptionStreaming({
+          userId: getCurrentUserId(),
+          childId,
+          sessionId: activeSession.id,
+          audioUri,
+          context: buildSerializedContext(ageGroup, gradeLevel, subjectContext, messagesRef.current),
+          signal: controller.signal,
+          onStart: ({ transcriptionId, messageId, childId: eventChildId }) => {
+            transcriptionBufferRef.current = '';
+            setTranscription((current) => ({
+              ...current,
+              isTranscribing: true,
+              transcriptionError: null,
+              transcriptionMetadata: {
+                transcriptionId,
+                messageId,
+                childId: eventChildId,
+              },
+            }));
+          },
+          onDelta: (deltaText) => {
+            transcriptionBufferRef.current = mergeTranscriptionText(
+              transcriptionBufferRef.current,
+              deltaText,
+            );
+            scheduleTranscriptionFlush();
+          },
+          onEnd: ({ transcriptionId, messageId, text, language, durationSeconds, finishReason }) => {
+            if (transcriptionRafRef.current !== null) {
+              cancelAnimationFrame(transcriptionRafRef.current);
+              transcriptionRafRef.current = null;
+            }
+
+            const combinedText = mergeTranscriptionText(transcriptionBufferRef.current, text);
+            transcriptionBufferRef.current = '';
+            transcriptionSnapshotRef.current = combinedText;
+            finalText = combinedText;
+            finalMetadata = {
+              transcriptionId,
+              messageId,
+              language,
+              durationSeconds,
+              finishReason,
+              childId,
+            };
+
+            commitTranscriptionText(combinedText);
+            setTranscription((current) => ({
+              ...current,
+              isTranscribing: false,
+              transcriptionError: null,
+              transcriptionMetadata: finalMetadata,
+            }));
+          },
+          onError: (_code, message) => {
+            if (transcriptionRafRef.current !== null) {
+              cancelAnimationFrame(transcriptionRafRef.current);
+              transcriptionRafRef.current = null;
+            }
+
+            transcriptionBufferRef.current = '';
+            setTranscription((current) => ({
+              ...current,
+              isTranscribing: false,
+              transcriptionError: message,
+            }));
+
+            if (transcriptionSnapshotRef.current) {
+              commitTranscriptionText(transcriptionSnapshotRef.current);
+            } else {
+              commitTranscriptionText('');
+            }
+          },
+        });
+
+        if (!finalText.trim()) {
+          throw new Error('Could not hear any words in that recording. Please try again.');
+        }
+
+        return finalText;
+      } catch (error) {
+        if (controller.signal.aborted) {
+          throw new Error('Voice transcription was cancelled.');
+        }
+
+        const message = error instanceof Error ? error.message : 'Voice transcription is unavailable right now. Please try again.';
+        setTranscription((current) => ({
+          ...current,
+          isTranscribing: false,
+          transcriptionError: message,
+        }));
+
+        if (transcriptionSnapshotRef.current) {
+          commitTranscriptionText(transcriptionSnapshotRef.current);
+        }
+
+        throw error instanceof Error ? error : new Error(message);
+      } finally {
+        clearTranscriptionStream();
+        if (transcriptionAbortRef.current === controller) {
+          transcriptionAbortRef.current = null;
+        }
+      }
     },
-    [childId, startSession]
+    [ageGroup, childId, clearTranscriptionStream, commitTranscriptionText, gradeLevel, scheduleTranscriptionFlush, startSession, subjectContext, state.inputText]
   );
 
   useEffect(() => {
@@ -1061,6 +1287,7 @@ export function useChatSession({
 
   return {
     state,
+    transcription,
     session,
     elapsedSeconds,
     minutesRemaining,

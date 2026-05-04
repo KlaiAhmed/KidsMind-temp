@@ -16,6 +16,7 @@
  * once after the response finishes rather than incrementally).
  */
 import { apiRequest, getApiBaseUrl } from '@/services/apiClient';
+import { createIncrementalSseParser } from '@/services/incrementalSseParser';
 import { useAuthStore } from '@/store/authStore';
 import type {
   ChatMessageResponse,
@@ -422,84 +423,9 @@ export function sendChatMessageStreaming(params: {
  
     const xhr = new XMLHttpRequest();
  
-    // ── SSE parser state ──────────────────────────────────────────────────────
-    let processedLength = 0;
- 
-    // lineBuffer: holds any incomplete line that arrived mid-chunk. Split/pop
-    // keeps it here until the next onprogress delivers the rest of the line.
-    let lineBuffer = '';
- 
-    // currentEvent / currentDataLines: accumulates the fields of the SSE event
-    // block currently being parsed. Flushed on blank line (the SSE block
-    // separator) or when a new event: field is encountered.
-    let currentEvent = '';
-    let currentDataLines: string[] = [];
- 
-    /**
-     * Flush the currently accumulated SSE event and reset parser state.
-     * Called on every blank line (the SSE block separator).
-     */
-    const flushCurrentEvent = (): Error | null => {
-      const eventType = currentEvent;
-      const dataLines = currentDataLines;
-      currentEvent = '';
-      currentDataLines = [];
-      return dispatchSseEvent(eventType, dataLines, params);
-    };
- 
-    /**
-     * Parse only the new portion of xhr.responseText not yet consumed.
-     * processedLength tracks the character offset of the last byte we read.
-     */
-    const parseNewChunk = (fullText: string): Error | null => {
-      const newChunk = fullText.slice(processedLength);
-      processedLength = fullText.length;
- 
-      lineBuffer += newChunk;
- 
-      // Split on CRLF or LF per the SSE spec.
-      const lines = lineBuffer.split(/\r?\n/);
- 
-      // The last element may be an incomplete line (no newline yet). Hold it
-      // in lineBuffer until the next progress event completes it.
-      lineBuffer = lines.pop() ?? '';
- 
-      for (const line of lines) {
-        if (!line) {
-          // Blank line = SSE event block terminator. Dispatch the event.
-          const error = flushCurrentEvent();
-          if (error) {
-            return error;
-          }
-          continue;
-        }
- 
-        if (line.startsWith('event:')) {
-          // A new named event starts here. Flush any previously accumulated
-          // event first (handles servers that omit blank lines between events).
-          const error = flushCurrentEvent();
-          if (error) {
-            return error;
-          }
-          currentEvent = line.slice(6).trim();
-          continue;
-        }
- 
-        if (line.startsWith('data:')) {
-          // Per SSE spec: one optional leading space after the colon is stripped.
-          // .trim() handles both "data: value" and "data:value" safely.
-          const data = line.slice(5).trim();
-          if (data) {
-            currentDataLines.push(data);
-          }
-          continue;
-        }
- 
-        // id:, retry:, comments (`:`) — all ignored.
-      }
- 
-      return null;
-    };
+    const parser = createIncrementalSseParser((eventType, dataLines) =>
+      dispatchSseEvent(eventType, dataLines, params),
+    );
  
     // ── AbortSignal wiring ────────────────────────────────────────────────────
  
@@ -529,7 +455,7 @@ export function sendChatMessageStreaming(params: {
       if (!xhr.responseText) {
         return;
       }
-      const error = parseNewChunk(xhr.responseText);
+      const error = parser.parseChunk(xhr.responseText);
       if (error) {
         xhr.abort();
         rejectAndClean(error);
@@ -546,7 +472,7 @@ export function sendChatMessageStreaming(params: {
  
       // Parse any bytes that arrived after the final onprogress event.
       if (xhr.responseText) {
-        const error = parseNewChunk(xhr.responseText);
+        const error = parser.parseChunk(xhr.responseText);
         if (error) {
           rejectAndClean(error);
           return;
@@ -554,7 +480,7 @@ export function sendChatMessageStreaming(params: {
       }
  
       // Flush any event not terminated by a trailing blank line.
-      const error = flushCurrentEvent();
+      const error = parser.flush();
       if (error) {
         rejectAndClean(error);
         return;
