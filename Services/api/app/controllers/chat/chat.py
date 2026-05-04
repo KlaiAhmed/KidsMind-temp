@@ -517,9 +517,36 @@ async def chat_message_controller(
             message_id = new_message_id()
 
             async def _blocked_stream() -> AsyncGenerator[bytes, None]:
-                yield format_chat_start(message_id=message_id, child_id=normalized_child_id)
-                yield format_chat_delta(safe_message)
-                yield format_chat_end(message_id=message_id)
+                response_sent = False
+                terminal_sent = False
+                try:
+                    yield format_chat_start(message_id=message_id, child_id=normalized_child_id)
+                    response_sent = True
+                    yield format_sse(
+                        "flagged",
+                        build_flagged_stream_payload(message_id=message_id, safe_message=safe_message),
+                    )
+                    yield format_chat_delta(safe_message)
+                    yield format_chat_end(message_id=message_id)
+                    terminal_sent = True
+                    return
+                except asyncio.CancelledError:
+                    logger.info(
+                        "Flagged chat input stream cancelled",
+                        extra={"child_id": normalized_child_id, "session_id": normalized_session_id},
+                    )
+                    raise
+                except Exception:
+                    logger.exception(
+                        "Flagged chat input stream failed",
+                        extra={"child_id": normalized_child_id, "session_id": normalized_session_id},
+                    )
+                    if not response_sent or not terminal_sent:
+                        yield format_chat_error(
+                            "internal_error",
+                            "Something went wrong. Please try again.",
+                            message_id,
+                        )
 
             return StreamingResponse(
                 _blocked_stream(),
@@ -535,6 +562,7 @@ async def chat_message_controller(
             "type": "flagged",
             "message": safe_message,
             "content": safe_message,
+            "flagged": True,
         }
 
     user_dict = {
@@ -550,8 +578,11 @@ async def chat_message_controller(
 
         async def _sse_generator() -> AsyncGenerator[bytes, None]:
             buffered_chunks: list[str] = []
+            response_sent = False
+            terminal_sent = False
             try:
                 yield start_event
+                response_sent = True
                 async for chunk_text in ai_service.stream_chat_text(
                     user=user_dict,
                     profile_context=profile_context,
@@ -603,12 +634,18 @@ async def chat_message_controller(
                         moderation_result=output_moderation,
                     )
                     db.commit()
+                    yield format_sse(
+                        "flagged",
+                        build_flagged_stream_payload(message_id=msg_id, safe_message=safe_message),
+                    )
                     yield format_chat_delta(safe_message)
                     yield format_chat_end(message_id=msg_id)
+                    terminal_sent = True
                     return
 
                 for chunk_text in buffered_chunks:
                     yield format_chat_delta(chunk_text)
+                    response_sent = True
 
                 db_result = await run_in_threadpool(
                     save_chat_turn_with_optional_flag,
@@ -620,6 +657,7 @@ async def chat_message_controller(
                 )
                 db.commit()
                 yield format_chat_end(message_id=msg_id)
+                terminal_sent = True
                 await _run_gamification(db, child_profile.id, user_id)
                 logger.info(
                     "Chat message completed",
@@ -632,8 +670,16 @@ async def chat_message_controller(
                     },
                 )
                 _ = db_result
+            except asyncio.CancelledError:
+                logger.info(
+                    "Chat message stream cancelled",
+                    extra={"user_id": normalized_user_id, "child_id": normalized_child_id},
+                )
+                raise
             except AIRateLimitError:
                 yield error_event_fn("rate_limit", "AI service rate limit exceeded")
+                response_sent = True
+                terminal_sent = True
                 return
             except Exception:
                 db.rollback()
@@ -642,7 +688,15 @@ async def chat_message_controller(
                     extra={"user_id": normalized_user_id, "child_id": normalized_child_id},
                 )
                 yield error_event_fn("internal_error", "Stream interrupted")
+                response_sent = True
+                terminal_sent = True
                 return
+            if not response_sent:
+                yield error_event_fn("internal_error", "Something went wrong. Please try again.")
+                response_sent = True
+                terminal_sent = True
+            if response_sent and not terminal_sent:
+                yield format_chat_end(message_id=msg_id, finish_reason="stop")
 
         return StreamingResponse(
             _sse_generator(),
@@ -734,6 +788,7 @@ async def chat_message_controller(
             "type": "flagged",
             "message": safe_message,
             "content": safe_message,
+            "flagged": True,
         }
 
     try:
