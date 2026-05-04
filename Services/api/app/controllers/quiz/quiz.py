@@ -22,7 +22,9 @@ from models.user.user import User
 from schemas.quiz.quiz_schema import QuizSubmitRequest
 from services.gamification.badge_award_service import evaluate_and_award
 from services.gamification.gamification_service import process_quiz_completion
+from services.child.child_profile_context_cache import invalidate_child_profile_context_cache
 from utils.shared.logger import logger
+from typing import Any
 
 
 def _normalize_answer(answer: str, question_type: str) -> str:
@@ -165,6 +167,7 @@ async def submit_quiz_controller(
     child_id: UUID,
     current_user: User,
     payload: QuizSubmitRequest,
+    redis: Any,
 ) -> dict:
     child = db.query(ChildProfile).filter(
         ChildProfile.id == child_id,
@@ -196,6 +199,14 @@ async def submit_quiz_controller(
         QuizResult.quiz_id == quiz.id
     ).first()
     if existing_result:
+        logger.info(
+            "Returning cached quiz result (idempotent resubmission)",
+            extra={
+                "child_id": str(child_id),
+                "quiz_id": str(quiz.id),
+                "existing_result_id": str(existing_result.id),
+            },
+        )
         return _build_existing_submit_response(
             existing_result=existing_result,
             questions=questions,
@@ -223,51 +234,37 @@ async def submit_quiz_controller(
             parent_id=current_user.id,
             correct_count=correct_count,
             total_questions=total_questions,
-            subject=payload.subject or quiz.subject,
+            subject=payload.subject,
         )
-
-        streak_multiplier = float(gamification.streak_multiplier)
-        quiz_result.xp_earned = int(gamification.xp_earned)
-        quiz_result.bonus_xp = _bonus_xp_for_result(
-            correct_count=correct_count,
-            total_questions=total_questions,
-            multiplier=streak_multiplier,
-        )
-        quiz_result.total_xp = int(gamification.xp_total)
-        quiz_result.streak_multiplier = streak_multiplier
-        quiz_result.is_perfect = bool(gamification.is_perfect)
         db.commit()
     except Exception:
         db.rollback()
         logger.exception(
-            "Gamification processing failed during quiz submission; storing result without XP",
+            "Gamification update failed during quiz submission",
             extra={"child_id": str(child_id), "quiz_id": str(quiz.id)},
         )
-        quiz_result = QuizResult(
-            quiz_id=quiz.id,
-            score=correct_count,
-            total_questions=total_questions,
-            results=question_results,
-            xp_earned=0,
-            bonus_xp=0,
-            total_xp=int(child.xp or 0),
-            streak_multiplier=1.0,
-            is_perfect=is_perfect,
-            duration_seconds=payload.duration_seconds,
-        )
-        db.add(quiz_result)
-        db.commit()
+        raise HTTPException(status_code=500, detail="Failed to process quiz completion")
 
-    db.refresh(quiz_result)
+    try:
+        await invalidate_child_profile_context_cache(child_id, redis)
+        logger.info(
+            "Child profile context cache invalidated after quiz submission",
+            extra={"child_id": str(child_id), "quiz_id": str(quiz.id)},
+        )
+    except Exception:
+        logger.exception(
+            "Cache invalidation failed (non-fatal)",
+            extra={"child_id": str(child_id)},
+        )
 
     return _build_submit_response(
         correct_count=correct_count,
         total_questions=total_questions,
         results=question_results,
-        xp_earned=int(quiz_result.xp_earned or 0),
-        bonus_xp=int(quiz_result.bonus_xp or 0),
-        total_xp=int(quiz_result.total_xp or 0),
-        streak_multiplier=float(quiz_result.streak_multiplier or 1.0),
-        is_perfect=bool(quiz_result.is_perfect),
+        xp_earned=gamification.xp_earned,
+        bonus_xp=0,
+        total_xp=gamification.xp_total,
+        streak_multiplier=gamification.streak_multiplier,
+        is_perfect=is_perfect,
     )
 
