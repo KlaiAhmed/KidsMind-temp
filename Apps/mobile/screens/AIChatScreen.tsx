@@ -26,6 +26,7 @@ import { useSubjects } from '@/hooks/useSubjects';
 import { useKeyboardHeight } from '@/hooks/useKeyboardHeight';
 import { useAuth } from '@/contexts/AuthContext';
 import { getChildTabSceneBottomPadding } from '@/components/navigation/bottomNavTokens';
+import { queryClient } from '@/services/queryClient';
 import { showToast } from '@/services/toastClient';
 import { ttsStop } from '@/src/utils/tts';
 import type { ChildProfile, SessionGateState } from '@/types/child';
@@ -156,9 +157,19 @@ function AIChatSessionGate({
 
   const handleQuizComplete = useCallback(
     () => {
-      void refreshChildData().catch(() => undefined);
+      void Promise.all([
+        refreshChildData(profile?.id ?? undefined),
+        queryClient.invalidateQueries({ queryKey: ['child-dashboard-overview', profile?.id] }),
+        queryClient.invalidateQueries({ queryKey: ['child-dashboard-progress', profile?.id] }),
+        queryClient.refetchQueries({ queryKey: ['child-dashboard-overview', profile?.id] }),
+        queryClient.refetchQueries({ queryKey: ['child-dashboard-progress', profile?.id] }),
+        queryClient.invalidateQueries({ queryKey: ['parent-dashboard'] }),
+        queryClient.refetchQueries({ queryKey: ['parent-dashboard'] }),
+      ]).catch((error) => {
+        console.warn('[AIChatScreen] Quiz completion refresh failed:', error);
+      });
     },
-    [refreshChildData],
+    [profile?.id, refreshChildData],
   );
 
   const {
@@ -169,6 +180,7 @@ function AIChatSessionGate({
     retryMessage,
     sendQuizRequest,
     submitQuizAnswer,
+    submitQuiz,
     retryQuizSubmission,
     resetQuizMode,
     cancelResponse,
@@ -246,8 +258,9 @@ function AIChatSessionGate({
     }));
 
     const hasStreamingMessage = state.messages.some((message) => message.status === 'streaming');
+    const hasLoadingQuizMessage = state.messages.some((message) => message.quizStatus === 'loading');
 
-    if (state.isAwaitingResponse && !hasStreamingMessage) {
+    if (state.isAwaitingResponse && !hasStreamingMessage && !hasLoadingQuizMessage) {
       return [
         {
           id: TYPING_PLACEHOLDER_ID,
@@ -321,6 +334,13 @@ function AIChatSessionGate({
     [submitQuizAnswer],
   );
 
+  const handleQuizSubmit = useCallback(
+    (quizId: string) => {
+      submitQuiz(quizId);
+    },
+    [submitQuiz],
+  );
+
   const handleQuizRetrySubmit = useCallback(
     (quizId: string) => {
       retryQuizSubmission(quizId);
@@ -328,9 +348,11 @@ function AIChatSessionGate({
     [retryQuizSubmission],
   );
 
-  const handleQuizTryAnother = useCallback(() => {
+  const handleQuizTryAnother = useCallback((topic?: string) => {
     resetQuizMode();
-  }, [resetQuizMode]);
+    const nextTopic = topic?.trim() || resolvedSubjectName || params.subjectName || 'practice';
+    void handleSendQuiz(nextTopic);
+  }, [handleSendQuiz, params.subjectName, resetQuizMode, resolvedSubjectName]);
 
   const renderItem = useCallback<ListRenderItem<ChatListItem>>(({ item }) => {
     if (item.type === 'typing') {
@@ -354,6 +376,7 @@ function AIChatSessionGate({
         onLongPressMessage={handleLongPressMessage}
         onRetryAiMessage={handleRetryAiMessage}
         onQuizAnswer={handleQuizAnswer}
+        onQuizSubmit={handleQuizSubmit}
         onQuizRetrySubmit={handleQuizRetrySubmit}
         onQuizTryAnother={handleQuizTryAnother}
       />
@@ -361,6 +384,7 @@ function AIChatSessionGate({
   }, [
     handleLongPressMessage,
     handleQuizAnswer,
+    handleQuizSubmit,
     handleQuizRetrySubmit,
     handleQuizTryAnother,
     handleRetryAiMessage,
