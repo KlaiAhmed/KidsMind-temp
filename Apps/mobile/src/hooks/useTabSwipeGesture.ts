@@ -131,6 +131,7 @@ export function useTabSwipeGesture(options: {
           translateX.value = withSpring(0, { damping: 22, stiffness: 200, mass: 0.8 });
           elasticX.value = withSpring(0, { damping: 22, stiffness: 200, mass: 0.8 });
         }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [currentIndex, disabled, lockedIndices, onNavigate, tabRoutes, screenWidth],
   );
 

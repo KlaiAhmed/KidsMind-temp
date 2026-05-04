@@ -1,15 +1,15 @@
 # KidsMind Mobile Client (Expo + React Native)
 
-![Expo](https://img.shields.io/badge/Expo_SDK_54-000020?logo=expo)
-![React Native](https://img.shields.io/badge/React_Native-0.81.5-61DAFB?logo=react)
+![Expo](https://img.shields.io/badge/Expo_SDK_55-000020?logo=expo)
+![React Native](https://img.shields.io/badge/React_Native-0.83.6-61DAFB?logo=react)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.9.2-3178C6?logo=typescript&logoColor=white)
 ![Zustand](https://img.shields.io/badge/Zustand-5.0.12-443E38?logo=zustand)
 ![TanStack Query](https://img.shields.io/badge/TanStack_Query-5.99.1-FF4154?logo=reactquery&logoColor=white)
 
 AI-powered, child-safe learning mobile app for ages 3–15 and parents.
 
-- **Framework**: React Native 0.81 + TypeScript (strict)
-- **Runtime**: Expo SDK 54 (New Architecture enabled)
+- **Framework**: React Native 0.83 + TypeScript (strict)
+- **Runtime**: Expo SDK 55 (New Architecture enabled)
 - **Routing**: Expo Router v6 (file-based routing)
 - **State**: Zustand v5 (auth) + TanStack Query v5 (server) + local `useState`
 - **Validation**: Zod v4 (`zod/v4` import) + react-hook-form

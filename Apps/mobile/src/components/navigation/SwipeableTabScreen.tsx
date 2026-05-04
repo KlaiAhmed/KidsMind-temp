@@ -44,7 +44,10 @@ export function SwipeableTabScreen({
   const pathname = usePathname();
   const router = useRouter();
   const { width: screenWidth } = useWindowDimensions();
-  const tabRoutes: string[] = space === 'parent' ? [...PARENT_TAB_ROUTES] : [...CHILD_TAB_ROUTES];
+  const tabRoutes = useMemo(
+    () => (space === 'parent' ? [...PARENT_TAB_ROUTES] : [...CHILD_TAB_ROUTES]),
+    [space],
+  );
 
   const currentIndex = useMemo(
     () =>
