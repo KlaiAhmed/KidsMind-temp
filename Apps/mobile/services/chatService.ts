@@ -15,7 +15,7 @@
  * buffered on the native networking stack, meaning onDelta fires all at
  * once after the response finishes rather than incrementally).
  */
-import { apiRequest, getApiBaseUrl } from '@/services/apiClient';
+import { ApiClientError, apiRequest, getApiBaseUrl } from '@/services/apiClient';
 import { createIncrementalSseParser } from '@/services/incrementalSseParser';
 import { useAuthStore } from '@/store/authStore';
 import type {
@@ -63,6 +63,9 @@ interface QuizApiResponse {
   intro?: unknown;
   questions?: unknown;
 }
+
+const QUIZ_REQUEST_TIMEOUT_MS = 120000;
+const QUIZ_REQUEST_ATTEMPTS = 2;
 
 function normalizeOptionalString(value: unknown): string | null {
   if (typeof value !== 'string') {
@@ -636,21 +639,37 @@ export async function submitQuizAnswers(
 
 export async function sendQuizRequest(payload: QuizRequestPayload): Promise<ChatQuizResponse> {
   const userId = getCurrentUserId();
-  const response = await apiRequest<unknown>(
-    `/api/v1/chat/${encodeURIComponent(userId)}/${encodeURIComponent(payload.childId)}/${encodeURIComponent(payload.sessionId)}/quiz`,
-    {
-      method: 'POST',
-      body: {
-        child_id: payload.childId,
-        subject: payload.subject,
-        topic: payload.topic,
-        level: payload.level,
-        question_count: payload.questionCount,
-        context: payload.context,
-      },
-      timeoutMs: 45000,
-    },
-  );
+  const path = `/api/v1/chat/${encodeURIComponent(userId)}/${encodeURIComponent(payload.childId)}/${encodeURIComponent(payload.sessionId)}/quiz`;
+  let lastError: unknown = null;
 
-  return normalizeQuizResponse(response);
+  for (let attempt = 1; attempt <= QUIZ_REQUEST_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await apiRequest<unknown>(
+        path,
+        {
+          method: 'POST',
+          body: {
+            child_id: payload.childId,
+            subject: payload.subject,
+            topic: payload.topic,
+            level: payload.level,
+            question_count: payload.questionCount,
+            context: payload.context,
+          },
+          timeoutMs: QUIZ_REQUEST_TIMEOUT_MS,
+        },
+      );
+
+      return normalizeQuizResponse(response);
+    } catch (error) {
+      lastError = error;
+      const status = error instanceof ApiClientError ? error.status : 0;
+      const isRetryable = status === 0 || status === 408 || status >= 500;
+      if (attempt >= QUIZ_REQUEST_ATTEMPTS || !isRetryable) {
+        throw error;
+      }
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('Could not generate the quiz.');
 }
