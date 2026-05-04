@@ -104,7 +104,6 @@ interface AuthContextValue extends SessionAuthState, ChildState {
   refreshChildData: (preferredChildId?: string | null) => Promise<void>;
   markSubjectAccess: (subjectId: string) => void;
   completeTopic: (topicId: string) => void;
-  addQuizXp: (xpAmount: number) => void;
 }
 
 // ─── Context ──────────────────────────────────────────────────────
@@ -989,32 +988,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 });
 }, []);
 
-const addQuizXp = useCallback((xpAmount: number) => {
-  if (xpAmount <= 0) return;
-
-  setChildState((current) => {
-    if (!current.childProfile) return current;
-
-    const nextXp = current.childProfile.xp + xpAmount;
-    const { level, xpToNextLevel } = buildLevelProgress(nextXp);
-    const nextProfile = {
-      ...current.childProfile,
-      xp: nextXp,
-      level,
-      xpToNextLevel,
-      totalExercisesCompleted: current.childProfile.totalExercisesCompleted + 1,
-    };
-
-    return {
-      ...current,
-      childProfiles: current.childProfiles.map((p) =>
-        p.id === nextProfile.id ? nextProfile : p,
-      ),
-      childProfile: nextProfile,
-    };
-  });
-}, []);
-
 return (
     <AuthContext.Provider
       value={{
@@ -1041,7 +1014,6 @@ return (
         refreshChildData,
         markSubjectAccess,
         completeTopic,
-        addQuizXp,
       }}
     >
       {children}

@@ -142,7 +142,7 @@ function AIChatSessionGate({
 }: AIChatSessionGateProps) {
   const navigation = useNavigation();
   const { getSubjectById } = useSubjects();
-  const { addQuizXp, refreshChildData } = useAuth();
+  const { refreshChildData } = useAuth();
   const voiceEnabled = profile?.rules?.voiceModeEnabled ?? false;
 
   const resolvedSubjectName =
@@ -155,11 +155,10 @@ function AIChatSessionGate({
       : undefined;
 
   const handleQuizComplete = useCallback(
-    (summary: { totalXp: number }) => {
-      addQuizXp(summary.totalXp);
+    () => {
       void refreshChildData().catch(() => undefined);
     },
-    [addQuizXp, refreshChildData],
+    [refreshChildData],
   );
 
   const {
@@ -170,6 +169,7 @@ function AIChatSessionGate({
     retryMessage,
     sendQuizRequest,
     submitQuizAnswer,
+    retryQuizSubmission,
     resetQuizMode,
     cancelResponse,
     transcribeRecording,
@@ -321,6 +321,13 @@ function AIChatSessionGate({
     [submitQuizAnswer],
   );
 
+  const handleQuizRetrySubmit = useCallback(
+    (quizId: string) => {
+      retryQuizSubmission(quizId);
+    },
+    [retryQuizSubmission],
+  );
+
   const handleQuizTryAnother = useCallback(() => {
     resetQuizMode();
   }, [resetQuizMode]);
@@ -347,12 +354,14 @@ function AIChatSessionGate({
         onLongPressMessage={handleLongPressMessage}
         onRetryAiMessage={handleRetryAiMessage}
         onQuizAnswer={handleQuizAnswer}
+        onQuizRetrySubmit={handleQuizRetrySubmit}
         onQuizTryAnother={handleQuizTryAnother}
       />
     );
   }, [
     handleLongPressMessage,
     handleQuizAnswer,
+    handleQuizRetrySubmit,
     handleQuizTryAnother,
     handleRetryAiMessage,
     profile?.ageGroup,

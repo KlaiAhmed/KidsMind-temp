@@ -15,6 +15,7 @@ import type {
   WeekdayKey,
 } from '@/types/child';
 import type { Badge, BadgeApiItem } from '@/types/badge';
+import type { QuizSubmitResponse } from '@/types/chat';
 import { apiRequest } from '@/services/apiClient';
 
 interface ChildRulesApiResponse {
@@ -820,6 +821,6 @@ export async function submitChatQuiz(
   _childId: string,
   _sessionId: string,
   _payload: { quiz_id: string; answers: Array<{ question_id: number; answer: string }>; duration_seconds?: number },
-): Promise<{ correct_count: number; total_questions: number; score_percentage: number }> {
+): Promise<QuizSubmitResponse> {
   throw new Error('submitChatQuiz: endpoint not yet implemented on backend');
 }
