@@ -1,15 +1,9 @@
-import { memo, useCallback, useState } from 'react';
+import { memo, useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import Animated, {
-  Easing,
-  FadeIn,
-  withSpring,
-  useSharedValue,
-  useAnimatedStyle,
-} from 'react-native-reanimated';
-import { Colors, Radii, Shadows, Spacing, Typography } from '@/constants/theme';
+import Animated, { Easing, FadeIn } from 'react-native-reanimated';
+import { Colors, Radii, Spacing, Typography } from '@/constants/theme';
 import type { ChatQuizQuestion } from '@/types/chat';
 
 interface QuizQuestionCardProps {
@@ -51,21 +45,6 @@ function OptionButton({
   disabled: boolean;
   onPress: () => void;
 }) {
-  const scale = useSharedValue(1);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
-
-  const handlePress = useCallback(() => {
-    if (disabled) return;
-
-    scale.value = withSpring(0.96, { damping: 15, stiffness: 400 }, () => {
-      scale.value = withSpring(1, { damping: 12, stiffness: 300 });
-    });
-    onPress();
-  }, [disabled, onPress, scale]);
-
   const backgroundColor =
     state === 'selected_correct'
       ? Colors.success
@@ -75,7 +54,7 @@ function OptionButton({
           ? Colors.success
           : state === 'selected' || state === 'pending'
             ? Colors.primaryFixed
-            : Colors.surfaceContainerLowest;
+            : Colors.surfaceContainerLow;
 
   const borderColor =
     state === 'selected_correct'
@@ -86,7 +65,7 @@ function OptionButton({
           ? Colors.success
           : state === 'selected' || state === 'pending'
             ? Colors.primary
-            : Colors.outlineVariant;
+            : Colors.transparent;
 
   const textColor =
     state === 'selected_correct' || state === 'selected_wrong' || state === 'revealed_correct'
@@ -94,56 +73,62 @@ function OptionButton({
       : Colors.text;
 
   return (
-    <Animated.View style={animatedStyle}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={label}
-        accessibilityState={{ disabled, selected: state !== 'idle' }}
-        disabled={disabled}
-        onPress={handlePress}
-        style={[styles.optionButton, { backgroundColor, borderColor }]}
-      >
-        <View style={styles.optionContent}>
-          <Text style={[styles.optionText, { color: textColor }]} numberOfLines={3}>
-            {label}
-          </Text>
-          {state === 'pending' ? (
-            <ActivityIndicator size="small" color={Colors.primary} />
-          ) : state === 'selected_correct' || state === 'revealed_correct' ? (
-            <MaterialCommunityIcons name="check-circle" size={20} color={Colors.white} />
-          ) : state === 'selected_wrong' ? (
-            <MaterialCommunityIcons name="close-circle" size={20} color={Colors.white} />
-          ) : null}
-        </View>
-      </Pressable>
-    </Animated.View>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled, selected: state !== 'idle' }}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.optionButton,
+        { backgroundColor, borderColor },
+        pressed && !disabled ? styles.buttonPressed : null,
+      ]}
+    >
+      <View style={styles.optionContent}>
+        <Text style={[styles.optionText, { color: textColor }]} numberOfLines={4}>
+          {label}
+        </Text>
+        {state === 'pending' ? (
+          <ActivityIndicator size="small" color={Colors.primary} />
+        ) : state === 'selected_correct' || state === 'revealed_correct' ? (
+          <MaterialCommunityIcons name="check-circle" size={20} color={Colors.white} />
+        ) : state === 'selected_wrong' ? (
+          <MaterialCommunityIcons name="close-circle" size={20} color={Colors.white} />
+        ) : null}
+      </View>
+    </Pressable>
   );
 }
 
 function ShortAnswerSection({
-  isLocked,
+  disabled,
   isPending,
   isCorrect,
   selectedAnswer,
   correctAnswer,
   onSubmit,
 }: {
-  isLocked: boolean;
+  disabled: boolean;
   isPending: boolean;
   isCorrect: boolean | undefined;
   selectedAnswer: string | null;
   correctAnswer?: string;
   onSubmit: (answer: string) => void;
 }) {
-  const [textInput, setTextInput] = useState('');
+  const [textInput, setTextInput] = useState(selectedAnswer ?? '');
+
+  useEffect(() => {
+    setTextInput(selectedAnswer ?? '');
+  }, [selectedAnswer]);
 
   const handleSubmit = useCallback(() => {
     const trimmed = textInput.trim();
-    if (!trimmed || isLocked) return;
+    if (!trimmed || disabled) return;
     onSubmit(trimmed);
-  }, [textInput, isLocked, onSubmit]);
+  }, [textInput, disabled, onSubmit]);
 
-  if (!isLocked) {
+  if (!disabled) {
     return (
       <View style={styles.shortAnswerInputRow}>
         <TextInput
@@ -152,23 +137,24 @@ function ShortAnswerSection({
           placeholderTextColor={Colors.placeholder}
           value={textInput}
           onChangeText={setTextInput}
-          editable={!isLocked}
+          editable={!disabled}
           returnKeyType="send"
           onSubmitEditing={handleSubmit}
           accessibilityLabel="Type your answer"
         />
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Submit answer"
-          disabled={!textInput.trim() || isLocked}
+          accessibilityLabel="Save answer"
+          accessibilityState={{ disabled: !textInput.trim() || disabled }}
+          disabled={!textInput.trim() || disabled}
           onPress={handleSubmit}
           style={({ pressed }) => [
             styles.shortAnswerSubmitButton,
-            (!textInput.trim() || isLocked) && styles.shortAnswerSubmitDisabled,
-            pressed && styles.optionPressed,
+            (!textInput.trim() || disabled) ? styles.shortAnswerSubmitDisabled : null,
+            pressed && textInput.trim() && !disabled ? styles.buttonPressed : null,
           ]}
         >
-          <MaterialCommunityIcons name="send" size={18} color={Colors.white} />
+          <MaterialCommunityIcons name="check" size={18} color={Colors.white} />
         </Pressable>
       </View>
     );
@@ -177,7 +163,7 @@ function ShortAnswerSection({
   return (
     <View style={styles.shortAnswerFeedback}>
       <View style={styles.shortAnswerResultRow}>
-        <Text style={styles.shortAnswerLabel}>Your answer: </Text>
+        <Text style={styles.shortAnswerLabel}>Your answer</Text>
         <Text
           style={[
             styles.shortAnswerValue,
@@ -195,7 +181,7 @@ function ShortAnswerSection({
       </View>
       {isCorrect === false && correctAnswer ? (
         <View style={styles.shortAnswerResultRow}>
-          <Text style={styles.shortAnswerLabel}>Correct answer: </Text>
+          <Text style={styles.shortAnswerLabel}>Correct answer</Text>
           <Text style={[styles.shortAnswerValue, styles.shortAnswerCorrect]}>
             {correctAnswer}
           </Text>
@@ -212,33 +198,17 @@ function FeedbackSection({
   isCorrect: boolean;
   explanation: string;
 }) {
-  const scale = useSharedValue(0.97);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
-
   return (
-    <Animated.View
-      entering={FadeIn.duration(180).easing(Easing.out(Easing.ease))}
-      onLayout={() => {
-        scale.value = withSpring(1.03, { damping: 12, stiffness: 300 }, () => {
-          scale.value = withSpring(1, { damping: 15, stiffness: 200 });
-        });
-      }}
-      style={animatedStyle}
-    >
+    <Animated.View entering={FadeIn.duration(160).easing(Easing.out(Easing.ease))}>
       <View
         style={[
           styles.feedbackContainer,
           isCorrect ? styles.feedbackCorrect : styles.feedbackIncorrect,
         ]}
       >
-        <View style={styles.feedbackHeader}>
-          <Text style={[styles.feedbackResultText, isCorrect ? styles.textCorrect : styles.textWrong]}>
-            {isCorrect ? 'Correct!' : 'Not quite!'}
-          </Text>
-        </View>
+        <Text style={[styles.feedbackResultText, isCorrect ? styles.textCorrect : styles.textWrong]}>
+          {isCorrect ? 'Correct' : 'Not quite'}
+        </Text>
         {explanation ? <Text style={styles.explanationText}>{explanation}</Text> : null}
       </View>
     </Animated.View>
@@ -255,7 +225,7 @@ function QuizQuestionCardComponent({
   const selectedAnswer = question.userAnswer ?? null;
   const isPending = question.status === 'pending';
   const hasServerResult = question.status === 'correct' || question.status === 'incorrect';
-  const isLocked = Boolean(selectedAnswer) || disabled || isPending || hasServerResult;
+  const isLocked = disabled || isPending || hasServerResult;
   const isCorrect = hasServerResult ? Boolean(question.isCorrect) : undefined;
 
   const handleOptionPress = useCallback(
@@ -284,10 +254,10 @@ function QuizQuestionCardComponent({
     : question.options ?? [];
 
   return (
-    <View style={styles.card}>
+    <View style={styles.questionSection}>
       <View style={styles.cardHeader}>
         <Text style={styles.questionCounter}>
-          Question {questionIndex + 1} of {totalQuestions}
+          Question {questionIndex + 1}/{totalQuestions}
         </Text>
         <View style={styles.typePill}>
           <MaterialCommunityIcons
@@ -296,7 +266,7 @@ function QuizQuestionCardComponent({
             color={Colors.primary}
           />
           <Text style={styles.typePillText}>
-            {question.type === 'mcq' ? 'Multiple Choice' : question.type === 'true_false' ? 'True or False' : 'Short Answer'}
+            {question.type === 'mcq' ? 'Multiple choice' : question.type === 'true_false' ? 'True or false' : 'Short answer'}
           </Text>
         </View>
       </View>
@@ -305,7 +275,7 @@ function QuizQuestionCardComponent({
 
       {isShortAnswer ? (
         <ShortAnswerSection
-          isLocked={isLocked}
+          disabled={isLocked}
           isPending={isPending}
           isCorrect={isCorrect}
           selectedAnswer={selectedAnswer}
@@ -329,7 +299,7 @@ function QuizQuestionCardComponent({
       {isPending ? (
         <View style={styles.pendingRow}>
           <ActivityIndicator size="small" color={Colors.primary} />
-          <Text style={styles.pendingText}>Waiting for server</Text>
+          <Text style={styles.pendingText}>Waiting for results</Text>
         </View>
       ) : null}
 
@@ -348,17 +318,17 @@ export const QuizQuestionCard = memo(QuizQuestionCardComponent);
 const Sizing_minTapTarget = 44;
 
 const styles = StyleSheet.create({
-  card: {
-    backgroundColor: Colors.surfaceContainerLowest,
-    borderRadius: Radii.lg,
-    padding: Spacing.md,
-    ...Shadows.card,
+  questionSection: {
+    borderRadius: Radii.md,
+    backgroundColor: Colors.surfaceContainerLow,
     gap: Spacing.sm,
+    padding: Spacing.md,
   },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: Spacing.sm,
   },
   questionCounter: {
     ...Typography.captionMedium,
@@ -381,14 +351,14 @@ const styles = StyleSheet.create({
   promptText: {
     ...Typography.bodySemiBold,
     color: Colors.text,
-    fontSize: 17,
+    fontSize: 16,
     lineHeight: 24,
   },
   optionsContainer: {
     gap: Spacing.sm,
   },
   optionButton: {
-    borderRadius: Radii.lg,
+    borderRadius: Radii.md,
     borderWidth: 1.5,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.md,
@@ -405,8 +375,9 @@ const styles = StyleSheet.create({
     ...Typography.bodyMedium,
     flex: 1,
   },
-  optionPressed: {
-    transform: [{ scale: 0.96 }],
+  buttonPressed: {
+    transform: [{ scale: 0.98 }],
+    opacity: 0.92,
   },
   shortAnswerInputRow: {
     flexDirection: 'row',
@@ -445,9 +416,11 @@ const styles = StyleSheet.create({
   shortAnswerLabel: {
     ...Typography.caption,
     color: Colors.textSecondary,
+    minWidth: 96,
   },
   shortAnswerValue: {
     ...Typography.bodyMedium,
+    color: Colors.text,
     flex: 1,
   },
   shortAnswerCorrect: {
@@ -480,11 +453,6 @@ const styles = StyleSheet.create({
   },
   feedbackIncorrect: {
     backgroundColor: Colors.errorContainer,
-  },
-  feedbackHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
   },
   feedbackResultText: {
     ...Typography.bodySemiBold,
