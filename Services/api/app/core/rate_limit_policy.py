@@ -145,7 +145,6 @@ def _raw_endpoint_rules() -> list[EndpointRule]:
         EndpointRule("POST", "/api/mobile/auth/logout", "T3", "mobile_auth_logout", "logout"),
 
         EndpointRule("POST", "/api/v1/voice/{user_id}/{child_id}/{session_id}/transcribe", "T5", "stt_transcribe", "stt_transcribe"),
-        EndpointRule("POST", "/api/v1/voice/{user_id}/{child_id}/{session_id}/transcribe/sync", "T5", "stt_transcribe", "stt_transcribe"),
         EndpointRule("POST", "/api/v1/chat/message/{child_id}", "T5", "chat_message", "chat_message"),
         EndpointRule("POST", "/api/v1/chat/quiz", "T5", "chat_quiz", "chat_quiz"),
         EndpointRule("GET", "/api/v1/chat/history/{user_id}/{child_id}/{session_id}", "T1", "chat_history_get", "chat_history_get"),

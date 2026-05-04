@@ -7,10 +7,10 @@ def format_sse(event: str, data: dict) -> bytes:
     return payload.encode("utf-8")
 
 
-def format_chat_start(message_id: str, child_id: str) -> bytes:
+def format_chat_start(message_id: str, child_id: str, message_type: str = "chat") -> bytes:
     return format_sse("start", {
         "message_id": message_id,
-        "type": "chat",
+        "type": message_type,
         "child_id": child_id,
     })
 

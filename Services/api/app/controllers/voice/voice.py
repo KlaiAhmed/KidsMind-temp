@@ -18,7 +18,7 @@ from services.chat.chat_session_service import create_session_for_child
 from services.child.child_profile_context_cache import get_child_profile_context
 from utils.media.file_name import generate_audio_file_storage_path
 from utils.shared.logger import logger
-from utils.chat.sse import format_sse
+from utils.chat.sse import format_chat_delta, format_chat_end, format_chat_error, format_chat_start, format_sse
 
 
 def _resolve_or_create_chat_session(
@@ -215,13 +215,60 @@ def _map_stt_status_to_error(status_code: int) -> dict[str, str]:
     return {"code": "stt_unreachable", "message": "Voice service unavailable. Please try again."}
 
 
-async def voice_transcribe_sync_controller(
+def voice_transcribe_controller(
     *,
     user_id: UUID,
     child_id: UUID,
     session_id: UUID,
     profile_context: dict,
     audio_file: UploadFile,
+    context: str,
+    content_type: str,
+    background_tasks,
+    db: Session,
+    redis: object,
+    stt_client: httpx.AsyncClient,
+    stream: bool = False,
+) -> dict | AsyncGenerator[bytes, None]:
+    if stream:
+        return _voice_transcribe_stream_controller(
+            user_id=user_id,
+            child_id=child_id,
+            session_id=session_id,
+            profile_context=profile_context,
+            audio_file=audio_file,
+            context=context,
+            content_type=content_type,
+            background_tasks=background_tasks,
+            db=db,
+            redis=redis,
+            stt_client=stt_client,
+        )
+
+    return _voice_transcribe_sync_controller(
+        user_id=user_id,
+        child_id=child_id,
+        session_id=session_id,
+        profile_context=profile_context,
+        audio_file=audio_file,
+        context=context,
+        content_type=content_type,
+        background_tasks=background_tasks,
+        db=db,
+        redis=redis,
+        stt_client=stt_client,
+    )
+
+
+async def _voice_transcribe_sync_controller(
+    *,
+    user_id: UUID,
+    child_id: UUID,
+    session_id: UUID,
+    profile_context: dict,
+    audio_file: UploadFile,
+    context: str,
+    content_type: str,
     background_tasks,
     db: Session,
     redis: object,
@@ -240,13 +287,13 @@ async def voice_transcribe_sync_controller(
 
     audio_bytes = await audio_file.read()
     filename = audio_file.filename or "audio"
-    content_type = audio_file.content_type or "application/octet-stream"
+    request_content_type = content_type or audio_file.content_type or "application/octet-stream"
 
     try:
         stt_response = await stt_client.post(
             f"{settings.VOICE_SERVICE_URL}/v1/stt/transcriptions",
-            files={"audio": (filename, audio_bytes, content_type)},
-            data={"context": "", "content_type": content_type},
+            files={"audio": (filename, audio_bytes, request_content_type)},
+            data={"context": context, "content_type": request_content_type},
             timeout=settings.VOICE_REQUEST_TIMEOUT_SECONDS,
         )
     except httpx.RequestError as exc:
@@ -301,7 +348,7 @@ async def voice_transcribe_sync_controller(
             user_id=user_id,
             child_id=child_profile.id,
             session_id=chat_session.id,
-            content_type=content_type,
+            content_type=request_content_type,
             filename=filename,
         )
 
@@ -313,13 +360,15 @@ async def voice_transcribe_sync_controller(
     }
 
 
-async def voice_transcribe_stream_controller(
+async def _voice_transcribe_stream_controller(
     *,
     user_id: UUID,
     child_id: UUID,
     session_id: UUID,
     profile_context: dict,
     audio_file: UploadFile,
+    context: str,
+    content_type: str,
     background_tasks,
     db: Session,
     redis: object,
@@ -338,13 +387,10 @@ async def voice_transcribe_stream_controller(
 
     audio_bytes = await audio_file.read()
     filename = audio_file.filename or "audio"
-    content_type = audio_file.content_type or "application/octet-stream"
+    request_content_type = content_type or audio_file.content_type or "application/octet-stream"
 
     transcription_id = str(uuid4())
-    yield format_sse(
-        "start",
-        {"transcription_id": transcription_id, "child_id": str(child_id)},
-    )
+    yield format_chat_start(message_id=transcription_id, child_id=str(child_id), message_type="transcription")
 
     had_error = False
     final_text = ""
@@ -355,75 +401,70 @@ async def voice_transcribe_stream_controller(
         async with stt_client.stream(
             "POST",
             f"{settings.VOICE_SERVICE_URL}/v1/stt/transcriptions/stream",
-            files={"audio": (filename, audio_bytes, content_type)},
-            data={"context": "", "content_type": content_type},
+            files={"audio": (filename, audio_bytes, request_content_type)},
+            data={"context": context, "content_type": request_content_type},
             timeout=settings.VOICE_REQUEST_TIMEOUT_SECONDS,
         ) as stt_response:
             if stt_response.status_code != 200:
                 had_error = True
                 error_payload = _map_stt_status_to_error(stt_response.status_code)
-                yield format_sse("error", error_payload)
+                yield format_chat_error(error_payload["code"], error_payload["message"], transcription_id)
                 return
 
             buffer_event = None
-            buffer_data = None
-            buffer_raw = None
+            buffer_data_lines: list[str] = []
 
             async for line in stt_response.aiter_lines():
                 line = line.strip()
                 if not line:
                     if buffer_event:
-                        event_name = buffer_event
-                        event_data = buffer_data if isinstance(buffer_data, dict) else {}
-                        raw_data = buffer_raw or ""
+                        payload_text = "\n".join(buffer_data_lines).strip()
 
-                        if event_name == "segment":
-                            if raw_data:
-                                yield f"event: segment\ndata: {raw_data}\n\n".encode("utf-8")
-                            else:
-                                yield format_sse("segment", event_data)
-                        elif event_name == "final":
-                            final_text = str(event_data.get("text") or "")
-                            final_language = str(event_data.get("language") or "")
-                            duration_value = event_data.get("duration_seconds")
+                        if buffer_event == "segment":
+                            segment_payload = _parse_json_payload(payload_text)
+                            yield format_chat_delta(str(segment_payload.get("text") or ""))
+                        elif buffer_event == "final":
+                            final_payload = _parse_json_payload(payload_text)
+                            final_text = str(final_payload.get("text") or "")
+                            final_language = str(final_payload.get("language") or "")
+                            duration_value = final_payload.get("duration_seconds")
                             if isinstance(duration_value, (int, float)):
                                 final_duration = float(duration_value)
                             else:
                                 final_duration = 0.0
 
-                            payload = dict(event_data)
-                            payload["transcription_id"] = transcription_id
-                            yield format_sse("final", payload)
-                        elif event_name == "error":
+                            yield format_sse(
+                                "end",
+                                {
+                                    "message_id": transcription_id,
+                                    "finish_reason": "stop",
+                                    "text": final_text,
+                                    "language": final_language,
+                                    "duration_seconds": final_duration,
+                                },
+                            )
+                        elif buffer_event == "error":
                             had_error = True
-                            if raw_data:
-                                yield f"event: error\ndata: {raw_data}\n\n".encode("utf-8")
-                            else:
-                                yield format_sse("error", event_data)
+                            error_payload = _parse_json_payload(payload_text)
+                            error_code = str(error_payload.get("code") or "stt_unreachable")
+                            error_message = str(error_payload.get("message") or "Voice service unavailable. Please try again.")
+                            yield format_chat_error(error_code, error_message, transcription_id)
 
                         buffer_event = None
-                        buffer_data = None
-                        buffer_raw = None
+                        buffer_data_lines = []
                     continue
 
                 if line.startswith("event:"):
                     buffer_event = line[6:].strip()
                 elif line.startswith("data:"):
-                    raw_data = line[5:].strip()
-                    buffer_raw = raw_data
-                    if buffer_event == "final":
-                        try:
-                            buffer_data = json.loads(raw_data)
-                        except json.JSONDecodeError:
-                            buffer_data = {}
-                    else:
-                        buffer_data = {}
+                    buffer_data_lines.append(line[5:].strip())
     except httpx.RequestError as exc:
         had_error = True
         logger.warning("STT streaming request failed", extra={"error": str(exc)})
-        yield format_sse(
-            "error",
-            {"code": "stt_unreachable", "message": "Voice service unavailable. Please try again."},
+        yield format_chat_error(
+            "stt_unreachable",
+            "Voice service unavailable. Please try again.",
+            transcription_id,
         )
         return
 
@@ -443,10 +484,20 @@ async def voice_transcribe_stream_controller(
             filename=filename,
         )
     elif not had_error:
-        yield format_sse(
-            "error",
-            {
-                "code": "empty_audio",
-                "message": "Could not hear you clearly. Try again in a quiet place.",
-            },
+        yield format_chat_error(
+            "empty_audio",
+            "Could not hear you clearly. Try again in a quiet place.",
+            transcription_id,
         )
+
+
+def _parse_json_payload(payload_text: str) -> dict:
+    if not payload_text:
+        return {}
+    try:
+        parsed_payload = json.loads(payload_text)
+    except json.JSONDecodeError:
+        return {}
+    if isinstance(parsed_payload, dict):
+        return parsed_payload
+    return {}

@@ -27,7 +27,7 @@ async def check_voice_mode_enabled(
 ) -> dict:
     """
     Dependency: raises HTTP 403 if voiceModeEnabled is False for this child profile.
-    Apply to /voice/transcribe and /voice/transcribe/sync routes only.
+    Apply to /voice/transcribe routes only.
     """
     if current_user.id != user_id:
         raise HTTPException(status_code=403, detail="Forbidden")

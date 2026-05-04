@@ -182,8 +182,7 @@ Client → CORS → Tracing → CSRF → Rate Limit → Auth → Router → Cont
 
 | Method | Path | Auth | Rate Tier | Description |
 |---|---|---|---|---|
-| POST | `/api/v1/voice/{user_id}/{child_id}/{session_id}/transcribe` | Access + ownership | STT | Stream audio transcription (SSE) |
-| POST | `/api/v1/voice/{user_id}/{child_id}/{session_id}/transcribe/sync` | Access + ownership | STT | Sync audio transcription (JSON) |
+| POST | `/api/v1/voice/{user_id}/{child_id}/{session_id}/transcribe` | Access + ownership | STT | Transcribe audio with optional SSE streaming |
 
 ### Quiz
 
