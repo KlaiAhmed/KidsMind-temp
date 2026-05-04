@@ -16,7 +16,7 @@ from core.config import settings
 from dependencies.auth.auth import get_current_user
 from dependencies.infrastructure.infrastructure import get_db
 from models.user.user import User
-from schemas.quiz.quiz_schema import QuizSubmitRequest
+from schemas.quiz.quiz_schema import QuizSubmitRequest, QuizSubmitResponse
 from utils.shared.limiter import limiter
 
 router = APIRouter()
@@ -24,6 +24,7 @@ router = APIRouter()
 
 @router.post(
     "/{child_id}/submit",
+    response_model=QuizSubmitResponse,
     summary="Submit quiz answers for server-side validation",
     description=(
         "Validates submitted answers against server-stored correct answers. "

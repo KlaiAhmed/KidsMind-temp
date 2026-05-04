@@ -1,3 +1,19 @@
-from .quiz_schema import QuizAnswerItem, QuizQuestion, QuizRequest, QuizResponse, QuizSubmitRequest
+from .quiz_schema import (
+    QuizAnswerItem,
+    QuizQuestion,
+    QuizQuestionResult,
+    QuizRequest,
+    QuizResponse,
+    QuizSubmitRequest,
+    QuizSubmitResponse,
+)
 
-__all__ = ["QuizAnswerItem", "QuizQuestion", "QuizRequest", "QuizResponse", "QuizSubmitRequest"]
+__all__ = [
+    "QuizAnswerItem",
+    "QuizQuestion",
+    "QuizQuestionResult",
+    "QuizRequest",
+    "QuizResponse",
+    "QuizSubmitRequest",
+    "QuizSubmitResponse",
+]

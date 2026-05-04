@@ -6,8 +6,8 @@ Layer: Model
 Domain: Quiz
 """
 
-from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, func, text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, func, text
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
 from core.database import Base
@@ -26,6 +26,12 @@ class QuizResult(Base):
     )
     score = Column(Integer, nullable=False)
     total_questions = Column(Integer, nullable=False)
+    results = Column(JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb"))
+    xp_earned = Column(Integer, nullable=False, default=0, server_default=text("0"))
+    bonus_xp = Column(Integer, nullable=False, default=0, server_default=text("0"))
+    total_xp = Column(Integer, nullable=False, default=0, server_default=text("0"))
+    streak_multiplier = Column(Float, nullable=False, default=1.0, server_default=text("1"))
+    is_perfect = Column(Boolean, nullable=False, default=False, server_default=text("false"))
     duration_seconds = Column(Float, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
