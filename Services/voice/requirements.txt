@@ -7,3 +7,4 @@ uvicorn==0.40.0
 python-multipart==0.0.22
 prometheus-fastapi-instrumentator==7.1.0
 pydantic-settings==2.13.1
+gTTS==2.5.4

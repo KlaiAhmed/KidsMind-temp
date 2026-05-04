@@ -6,6 +6,7 @@ import asyncio
 
 # Local imports
 from routers.stt_router import router as stt_router
+from routers.tts_router import router as tts_router
 from core.logging_setup import setup_logging, RequestTracingMiddleware
 from core.config import settings
 from models.whisper import load_all_models, get_model
@@ -74,6 +75,9 @@ def create_app() -> FastAPI:
 
     # Include the STT router
     app.include_router(stt_router, prefix="/v1/stt", tags=["Speech-to-Text"])
+
+    # Include the TTS router
+    app.include_router(tts_router, prefix="/v1/tts", tags=["Text-to-Speech"])
 
     # Instrumentation for Prometheus
     Instrumentator().instrument(app).expose(app)

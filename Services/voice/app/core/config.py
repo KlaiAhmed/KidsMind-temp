@@ -63,6 +63,10 @@ class Settings(BaseSettings):
     WHISPER_MODEL: str = "large-v3-turbo"
     WHISPER_NUM_WORKERS: int = 2
 
+    # Text-to-speech provider selection
+    TTS_PROVIDER: str = "gtts"
+    TTS_DEFAULT_LANGUAGE: str = "en"
+
     # These are derived from WHISPER_MODE if not explicitly set
     WHISPER_DEVICE: str = ""
     WHISPER_COMPUTE_TYPE: str = ""
@@ -96,6 +100,9 @@ class Settings(BaseSettings):
                 self.WHISPER_COMPUTE_TYPE = "int8"
             if self.WHISPER_CPU_THREADS == 0:
                 self.WHISPER_CPU_THREADS = 8
+
+        self.TTS_PROVIDER = self.TTS_PROVIDER.strip().lower()
+        self.TTS_DEFAULT_LANGUAGE = self.TTS_DEFAULT_LANGUAGE.strip().lower()
         return self
 
 
