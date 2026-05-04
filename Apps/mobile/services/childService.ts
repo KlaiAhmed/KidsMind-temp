@@ -533,29 +533,27 @@ export async function updateChildRules(
   input: UpdateChildRulesInput,
 ): Promise<ChildProfile> {
   const resolvedChildId = normalizeChildId(childId);
-  const rulesBody: Record<string, unknown> = {};
+  const body: Record<string, unknown> = {};
 
   if (input.defaultLanguage !== undefined) {
-    rulesBody.default_language = input.defaultLanguage;
+    body.default_language = input.defaultLanguage;
   }
 
   if (input.homeworkModeEnabled !== undefined) {
-    rulesBody.homework_mode_enabled = input.homeworkModeEnabled;
+    body.homework_mode_enabled = input.homeworkModeEnabled;
   }
 
   if (input.voiceModeEnabled !== undefined) {
-    rulesBody.voice_mode_enabled = input.voiceModeEnabled;
+    body.voice_mode_enabled = input.voiceModeEnabled;
   }
 
   if (input.audioStorageEnabled !== undefined) {
-    rulesBody.audio_storage_enabled = input.audioStorageEnabled;
+    body.audio_storage_enabled = input.audioStorageEnabled;
   }
 
   if (input.conversationHistoryEnabled !== undefined) {
-    rulesBody.conversation_history_enabled = input.conversationHistoryEnabled;
+    body.conversation_history_enabled = input.conversationHistoryEnabled;
   }
-
-  const body: Record<string, unknown> = { rules: rulesBody };
 
   if (input.allowedSubjects !== undefined) {
     body.allowed_subjects = input.allowedSubjects.map((subject) => ({ subject }));
