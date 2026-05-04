@@ -6,6 +6,7 @@ Layer: Router
 Domain: Quiz / Gamification
 """
 
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, Request
@@ -14,7 +15,7 @@ from sqlalchemy.orm import Session
 from controllers.quiz.quiz import submit_quiz_controller
 from core.config import settings
 from dependencies.auth.auth import get_current_user
-from dependencies.infrastructure.infrastructure import get_db
+from dependencies.infrastructure.infrastructure import get_db, get_redis
 from models.user.user import User
 from schemas.quiz.quiz_schema import QuizSubmitRequest, QuizSubmitResponse
 from utils.shared.limiter import limiter
@@ -38,9 +39,11 @@ async def submit_quiz(
     payload: QuizSubmitRequest = Body(...),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    redis: Any = Depends(get_redis),
 ):
     return await submit_quiz_controller(
         db=db,
+        redis=redis,
         child_id=child_id,
         current_user=current_user,
         payload=payload,
