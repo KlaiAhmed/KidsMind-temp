@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { useSharedValue, withSpring } from 'react-native-reanimated';
@@ -231,6 +231,7 @@ function OverviewSkeleton() {
 
 export default function ParentOverviewScreen({ initialState }: ParentOverviewScreenProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const params = useLocalSearchParams<{ childId?: string }>();
   const { user, childDataLoading, childProfileStatus } = useAuth();
   const { children, activeChild, selectedChildId, selectChild, getChildAvatarSource } = useParentDashboardChild(
@@ -308,9 +309,12 @@ export default function ParentOverviewScreen({ initialState }: ParentOverviewScr
     selectChild(childId);
   }
 
-  const handleRefresh = useCallback(() => {
-    void Promise.all([historyQuery.refetch(), progressQuery.refetch()]);
-  }, [historyQuery, progressQuery]);
+  const handleRefresh = useCallback(async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['parent-dashboard', 'overview-history', user?.id, activeChild?.id] }),
+      queryClient.invalidateQueries({ queryKey: ['parent-dashboard', 'progress', user?.id, activeChild?.id] }),
+    ]);
+  }, [queryClient, user?.id, activeChild?.id]);
 
   function handleRocketPress() {
     if (!activeChild) return;

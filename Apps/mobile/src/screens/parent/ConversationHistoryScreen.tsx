@@ -236,10 +236,6 @@ export default function ConversationHistoryScreen({
     void router.push('/(auth)/child-profile-wizard?source=parent-dashboard' as never);
   }
 
-  const handleRefresh = useCallback(() => {
-    void historyQuery.refetch();
-  }, [historyQuery]);
-
   function toggleSelection(sessionId: string) {
     setSelectedSessionIds((current) =>
       current.includes(sessionId)
@@ -251,6 +247,19 @@ export default function ConversationHistoryScreen({
   function enterSelectionMode(sessionId: string) {
     setSelectedSessionIds((current) => (current.includes(sessionId) ? current : [...current, sessionId]));
   }
+
+  const handleRefresh = useCallback(async () => {
+    const invalidationParams = {
+      limit: 50,
+      offset: 0,
+      search: searchValue.trim() || undefined,
+      flaggedOnly,
+      days: rangeDays,
+    };
+    await queryClient.invalidateQueries({
+      queryKey: ['parent-dashboard', 'history', user?.id, activeChild?.id, invalidationParams],
+    });
+  }, [queryClient, user?.id, activeChild?.id, searchValue, flaggedOnly, rangeDays]);
 
   function confirmBulkDelete(sessionIds: string[], title: string, message: string) {
     if (sessionIds.length === 0 || bulkDeleteMutation.isPending) {
@@ -285,6 +294,8 @@ export default function ConversationHistoryScreen({
       `This will remove ${sessionIds.length} sessions from the current history results.`,
     );
   }
+
+  const isRefreshing = historyQuery.isRefetching;
 
   if (initialState === 'loading' || isChildDataResolving) {
     return (
@@ -345,12 +356,12 @@ export default function ConversationHistoryScreen({
     <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
       <ScrollView
         contentContainerStyle={styles.contentContainer}
-      refreshControl={
-        <AppRefreshControl
-          onRefresh={handleRefresh}
-          refreshing={historyQuery.isRefetching}
-        />
-      }
+        refreshControl={
+          <AppRefreshControl
+            onRefresh={handleRefresh}
+            refreshing={isRefreshing}
+          />
+        }
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.heroWrap}>

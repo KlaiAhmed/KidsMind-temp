@@ -93,6 +93,7 @@ interface UseChatSessionResult {
   transcribeRecording: (audioUri: string) => Promise<string>;
   speechToSpeechRecording: (audioUri: string) => Promise<void>;
   setInputText: (text: string) => void;
+  clearChat: () => void;
   clearError: () => void;
   onQuizSummaryDismissed?: () => void;
 }
@@ -1327,12 +1328,73 @@ export function useChatSession({
       controller.abort();
       abortRef.current = null;
     }
-    if (mountedRef.current) {
+
+    if (!mountedRef.current) {
+      return;
+    }
+
+    const activeSession = sessionRef.current;
+    if (!activeSession) {
       setState((current) => ({
         ...current,
         isAwaitingResponse: false,
+        isLoading: false,
+      }));
+      return;
+    }
+
+    const currentMessages = messagesRef.current;
+    const pendingStreamingMessage = currentMessages.find(
+      (msg) => msg.status === 'streaming' || (msg.sender === 'ai' && msg.content === '' && msg.status !== 'sent'),
+    );
+
+    if (pendingStreamingMessage) {
+      removeMessageById(
+        pendingStreamingMessage.id,
+        {
+          isAwaitingResponse: false,
+          isLoading: false,
+        },
+      );
+      appendMessage(
+        {
+          id: `ai-canceled-${Date.now()}`,
+          sessionId: activeSession.id,
+          sender: 'ai',
+          content: 'Request canceled.',
+          safetyFlags: [],
+          createdAt: new Date().toISOString(),
+          status: 'error',
+        },
+        {
+          isAwaitingResponse: false,
+          isLoading: false,
+        },
+      );
+    } else {
+      setState((current) => ({
+        ...current,
+        isAwaitingResponse: false,
+        isLoading: false,
       }));
     }
+  }, [appendMessage, removeMessageById]);
+
+  const clearChat = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    transcriptionAbortRef.current?.abort();
+    transcriptionAbortRef.current = null;
+    activeQuizRef.current = null;
+    messagesRef.current = [];
+    setState((current) => ({
+      ...current,
+      messages: [],
+      inputText: '',
+      isLoading: false,
+      isAwaitingResponse: false,
+      error: null,
+    }));
   }, []);
 
   const transcribeRecording = useCallback(
@@ -1866,6 +1928,7 @@ export function useChatSession({
     transcribeRecording,
     speechToSpeechRecording,
     setInputText,
+    clearChat,
     clearError,
   };
 }

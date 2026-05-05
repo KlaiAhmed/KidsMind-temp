@@ -196,7 +196,6 @@ export default function ParentalControlsScreen({
     childDataLoading,
     childProfileStatus,
     deleteChildProfile,
-    refreshChildData,
   } = useAuth();
   const { children, activeChild, selectedChildId, selectChild, getChildAvatarSource } = useParentDashboardChild(
     typeof params.childId === 'string' ? params.childId : undefined,
@@ -264,12 +263,12 @@ export default function ParentalControlsScreen({
     void router.push('/(auth)/child-profile-wizard?source=parent-dashboard' as never);
   }
 
-  const handleRefresh = useCallback(() => {
-    if (activeChild) {
-      void refreshChildData(activeChild.id);
-    }
-    void Promise.all([notificationPrefsQuery.refetch(), auditQuery.refetch()]);
-  }, [activeChild, refreshChildData, notificationPrefsQuery, auditQuery]);
+  const handleRefresh = useCallback(async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['parent-dashboard', 'notification-prefs', user?.id] }),
+      queryClient.invalidateQueries({ queryKey: ['parent-dashboard', 'audit-log', user?.id, activeChild?.id] }),
+    ]);
+  }, [queryClient, user?.id, activeChild?.id]);
 
   function confirmDeleteProfile() {
     if (!activeChild) {

@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useState } from 'react';
 import {
   FlatList,
   Pressable,
@@ -9,6 +9,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { Image } from 'expo-image';
+import AvatarPlaceholder from '@/components/ui/AvatarPlaceholder';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { Colors, Radii, Spacing, Typography } from '@/constants/theme';
@@ -57,7 +58,7 @@ function AvatarPickerComponent({
               pressed ? styles.avatarCellPressed : null,
             ]}
           >
-            <Image source={item.asset} contentFit="cover" style={styles.avatarImage} />
+            <AvatarCell asset={item.asset} style={styles.avatarImage} />
             <Text numberOfLines={1} style={styles.avatarLabel}>
               {item.label}
             </Text>
@@ -71,6 +72,17 @@ function AvatarPickerComponent({
       }}
     />
   );
+}
+
+function AvatarCell({ asset, style }: { asset: any; style: any }) {
+  const [hasError, setHasError] = useState(false);
+
+  if (hasError || !asset) {
+    const size = style?.width && typeof style.width === 'number' ? style.width : 52;
+    return <AvatarPlaceholder size={size} style={{ borderRadius: size / 2 }} />;
+  }
+
+  return <Image source={asset} contentFit="cover" style={style} onError={() => setHasError(true)} />;
 }
 
 export const AvatarPicker = memo(AvatarPickerComponent);

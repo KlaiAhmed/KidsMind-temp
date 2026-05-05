@@ -6,8 +6,11 @@ import {
   type ImageSourcePropType,
   type ViewStyle,
 } from 'react-native';
+import { useState } from 'react';
+import AvatarPlaceholder from '@/components/ui/AvatarPlaceholder';
 
 import { Radii, Spacing, Colors } from '@/constants/theme';
+import { useChildProfile } from '@/hooks/useChildProfile';
 
 interface ChildSpaceHeaderProps {
   avatarSource: ImageSourcePropType;
@@ -22,6 +25,29 @@ interface ChildSpaceHeaderProps {
 // child-tabs layout now provides the PIN-gate entry point on ALL four tabs,
 // eliminating the duplicate that existed when only Home had the shield.
 
+function getTimezoneGreeting(childName: string, timezone?: string | null): string {
+  const tz = timezone || undefined;
+  const hourStr = new Date().toLocaleString('en-US', {
+    hour: 'numeric',
+    hour12: false,
+    timeZone: tz,
+  });
+  const hour = parseInt(hourStr, 10);
+
+  let greeting: string;
+  if (hour >= 5 && hour < 12) {
+    greeting = 'Good morning';
+  } else if (hour >= 12 && hour < 17) {
+    greeting = 'Good afternoon';
+  } else if (hour >= 17 && hour < 21) {
+    greeting = 'Good evening';
+  } else {
+    greeting = 'Good night';
+  }
+
+  return `${greeting}, ${childName}! 👋`;
+}
+
 export function ChildSpaceHeader({
   avatarSource,
   childName,
@@ -30,12 +56,14 @@ export function ChildSpaceHeader({
   style,
   children,
 }: ChildSpaceHeaderProps) {
-  const displayGreeting = greetingText || `Good morning, ${childName}! ☀️`;
+  const { profile } = useChildProfile();
+  
+  const displayGreeting = greetingText || getTimezoneGreeting(childName, profile?.timezone);
 
   return (
     <View style={[styles.container, style]}>
       <View style={styles.headerRow}>
-        <Image source={avatarSource} style={styles.avatar} />
+        <AvatarOrImage source={avatarSource} style={styles.avatar} />
 
         <View style={styles.textContainer}>
           <Text style={styles.welcomeLabel}>{welcomeLabel}</Text>
@@ -48,6 +76,17 @@ export function ChildSpaceHeader({
       {children}
     </View>
   );
+}
+
+function AvatarOrImage({ source, style }: { source: any; style: any }) {
+  const [hasError, setHasError] = useState(false);
+
+  if (hasError || !source) {
+    const size = style?.width && typeof style.width === 'number' ? style.width : 44;
+    return <AvatarPlaceholder size={size} style={{ borderRadius: size / 2 }} />;
+  }
+
+  return <Image source={source} style={style} onError={() => setHasError(true)} />;
 }
 
 const styles = StyleSheet.create({

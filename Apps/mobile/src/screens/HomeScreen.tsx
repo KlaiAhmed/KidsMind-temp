@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 
 import { Colors } from '@/constants/theme';
@@ -21,7 +22,8 @@ import { buildSubjectGridItems } from '@/src/utils/profilePresentation';
 export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { profile, getAvatarById, refreshChildData } = useChildProfile();
+  const queryClient = useQueryClient();
+  const { profile, getAvatarById } = useChildProfile();
   const overviewQuery = useChildDashboardOverview();
   const progressQuery = useChildDashboardProgress();
   const [showBadgeBanner, setShowBadgeBanner] = useState(true);
@@ -39,24 +41,18 @@ export default function HomeScreen() {
 
   const isRefreshing = overviewQuery.isRefetching || progressQuery.isRefetching;
 
-  const handleRefresh = useCallback(() => {
+  const handleRefresh = useCallback(async () => {
     if (isRefreshing) {
       return;
     }
 
-    const refreshes: Promise<unknown>[] = [
-      overviewQuery.refetch(),
-      progressQuery.refetch(),
-    ];
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['child-dashboard-overview', profile?.id] }),
+      queryClient.invalidateQueries({ queryKey: ['child-dashboard-progress', profile?.id] }),
+    ]);
 
-    if (profile?.id) {
-      refreshes.push(refreshChildData(profile.id));
-    }
-
-    void Promise.all(refreshes).then(() => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
-    });
-  }, [isRefreshing, overviewQuery, progressQuery, profile?.id, refreshChildData]);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+  }, [isRefreshing, queryClient, profile?.id]);
 
   return (
     <SafeAreaView edges={['top']} style={styles.safeArea}>

@@ -60,7 +60,7 @@ const scheduleSchema = z
   .object({
     mode: scheduleModeSchema,
     allowedSubjects: z.array(subjectSchema).min(1, 'Choose at least one subject'),
-    dailyLimitMinutes: z.number().int().min(1, 'Daily limit must be at least 1 minute').max(600),
+    dailyLimitMinutes: z.number().int().min(30, 'Daily cap must be at least 30 minutes').max(600, 'Daily cap cannot exceed 600 minutes').nullable(),
     weekSchedule: weekScheduleSchema,
   })
   .superRefine((value, ctx) => {
@@ -79,6 +79,14 @@ const scheduleSchema = z
       return;
     }
 
+    if (value.dailyLimitMinutes === null) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['dailyLimitMinutes'],
+        message: 'Enter a daily cap between 30 and 600 minutes',
+      });
+    }
+
     const [referenceDayKey, referenceDay] = enabledDays[0];
     const referenceSubjects = [...referenceDay.subjects].sort().join('|');
 
@@ -87,11 +95,27 @@ const scheduleSchema = z
         ctx.addIssue({
           code: 'custom',
           path: ['weekSchedule', dayKey, 'durationMinutes'],
-          message: 'Duration must be greater than 0 minutes',
+          message: 'Enter a daily cap between 30 and 600 minutes',
         });
       }
 
-      if (day.durationMinutes && day.durationMinutes > value.dailyLimitMinutes) {
+      if (day.durationMinutes && day.durationMinutes < 30) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['weekSchedule', dayKey, 'durationMinutes'],
+          message: 'Daily cap must be at least 30 minutes',
+        });
+      }
+
+      if (day.durationMinutes && day.durationMinutes > 600) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['weekSchedule', dayKey, 'durationMinutes'],
+          message: 'Daily cap cannot exceed 600 minutes',
+        });
+      }
+
+      if (day.durationMinutes && value.dailyLimitMinutes !== null && day.durationMinutes > value.dailyLimitMinutes) {
         ctx.addIssue({
           code: 'custom',
           path: ['weekSchedule', dayKey, 'durationMinutes'],
@@ -367,7 +391,7 @@ export function buildChildProfileWizardDefaultValues(
     schedule: {
       mode: 'simple',
       allowedSubjects,
-      dailyLimitMinutes: profile?.rules?.dailyLimitMinutes ?? profile?.dailyGoalMinutes ?? 30,
+      dailyLimitMinutes: profile ? profile.rules?.dailyLimitMinutes ?? profile.dailyGoalMinutes ?? null : null,
       weekSchedule,
     },
     rules: {

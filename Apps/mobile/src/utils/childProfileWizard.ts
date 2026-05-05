@@ -225,35 +225,35 @@ export function buildDefaultWeekSchedule(subjects: SubjectKey[] = []): WeekSched
     monday: {
       enabled: hasSubjects,
       subjects: [...subjects],
-      durationMinutes: hasSubjects ? 30 : null,
+      durationMinutes: null,
       startTime: null,
       endTime: null,
     },
     tuesday: {
       enabled: hasSubjects,
       subjects: [...subjects],
-      durationMinutes: hasSubjects ? 30 : null,
+      durationMinutes: null,
       startTime: null,
       endTime: null,
     },
     wednesday: {
       enabled: hasSubjects,
       subjects: [...subjects],
-      durationMinutes: hasSubjects ? 30 : null,
+      durationMinutes: null,
       startTime: null,
       endTime: null,
     },
     thursday: {
       enabled: hasSubjects,
       subjects: [...subjects],
-      durationMinutes: hasSubjects ? 30 : null,
+      durationMinutes: null,
       startTime: null,
       endTime: null,
     },
     friday: {
       enabled: hasSubjects,
       subjects: [...subjects],
-      durationMinutes: hasSubjects ? 30 : null,
+      durationMinutes: null,
       startTime: null,
       endTime: null,
     },
@@ -275,7 +275,7 @@ export function toIsoDateString(day: number, month: number, year: number): strin
 }
 
 export function parseTimeToMinutes(value: string): number | null {
-  const match = value.match(/^([01]\d|2[0-3]):([0-5]\d)$/);
+  const match = value.match(/^([01]\d|2[0-3]):([0-5]\d)(?::[0-5]\d)?$/);
 
   if (!match) {
     return null;

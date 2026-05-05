@@ -1,7 +1,9 @@
 import type { ImageSourcePropType } from 'react-native';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
+import AvatarPlaceholder from '@/components/ui/AvatarPlaceholder';
 
 import { Colors, Radii, Spacing, Typography } from '@/constants/theme';
 
@@ -54,7 +56,12 @@ export function ChildAvatarChip({
             size={26}
           />
         ) : (
-          <Image contentFit="cover" source={avatarSource} style={styles.avatar} />
+          (() => {
+            const [hasError, setHasError] = [false, () => {}];
+            // Inline hook-like behavior isn't allowed here in render helper, so
+            // lift to actual component below instead.
+            return <AvatarOrImage source={avatarSource} style={styles.avatar} />;
+          })()
         )}
       </Pressable>
 
@@ -113,3 +120,15 @@ const styles = StyleSheet.create({
     color: Colors.primary,
   },
 });
+
+function AvatarOrImage({ source, style }: { source: any; style: any }) {
+  const [hasError, setHasError] = useState(false);
+
+  if (hasError || !source) {
+    // estimate size from container style if numeric, otherwise default
+    const size = style?.width && typeof style.width === 'number' ? style.width : 64;
+    return <AvatarPlaceholder size={size} style={{ borderRadius: size / 2 }} />;
+  }
+
+  return <Image contentFit="cover" source={source} style={style} onError={() => setHasError(true)} />;
+}

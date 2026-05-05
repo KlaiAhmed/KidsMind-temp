@@ -233,6 +233,10 @@ function formatMinutesToTime(value: number): string {
   return `${`${hours}`.padStart(2, '0')}:${`${minutes}`.padStart(2, '0')}`;
 }
 
+function formatMinutesToApiTime(value: number): string {
+  return `${formatMinutesToTime(value)}:00`;
+}
+
 function toHourMinute(value: string | null | undefined): string | null {
   if (typeof value !== 'string') {
     return null;
@@ -403,8 +407,8 @@ function buildWeekSchedulePatchPayload(
     return [
       {
         day_of_week: dayOfWeek,
-        access_window_start: formatMinutesToTime(startMinutes),
-        access_window_end: formatMinutesToTime(endMinutes),
+        access_window_start: formatMinutesToApiTime(startMinutes),
+        access_window_end: formatMinutesToApiTime(endMinutes),
         daily_cap_seconds: day.durationMinutes * 60,
         subjects: day.subjects.map((subject) => ({ subject })),
       },

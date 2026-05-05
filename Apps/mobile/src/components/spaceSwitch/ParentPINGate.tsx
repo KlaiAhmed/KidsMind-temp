@@ -21,7 +21,6 @@ import {
   StyleSheet,
   Text,
   View,
-  type ViewStyle,
 } from 'react-native';
 import Animated, {
   Easing,
@@ -29,7 +28,6 @@ import Animated, {
   useSharedValue,
   withSequence,
   withTiming,
-  type AnimatedStyle,
   type SharedValue,
 } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';

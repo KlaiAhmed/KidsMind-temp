@@ -8,7 +8,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 
 import { useBadges } from '@/hooks/useBadges';
@@ -18,7 +18,9 @@ import { AppRefreshControl } from '@/src/components/AppRefreshControl';
 import { BadgeCard as GalleryBadgeCard } from '@/components/badges/BadgeCard';
 import { ProfileSkeletonBlock } from '@/src/components/profile/ProfileSkeletonBlock';
 import { ProfileColors, profileCardShadow } from '@/src/components/profile/profileTokens';
+import { getChildTabSceneBottomPadding } from '@/components/navigation/bottomNavTokens';
 import { useParentDashboardChild } from '@/src/hooks/useParentDashboardChild';
+import { queryClient } from '@/services/queryClient';
 
 function BadgeGridPlaceholder() {
   return (
@@ -38,6 +40,7 @@ function BadgeGridPlaceholder() {
 
 export default function BadgesScreen() {
   const router = useRouter();
+  const { bottom: safeBottom } = useSafeAreaInsets();
   const { profile, defaultAvatarId, getAvatarById } = useChildProfile();
   const {
     badges,
@@ -61,12 +64,12 @@ export default function BadgesScreen() {
 
   const isRefreshing = isLoading && badges.length > 0;
 
-  const handleRefresh = useCallback(() => {
+  const handleRefresh = useCallback(async () => {
     clearError();
-    void refresh().then(() => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
-    });
-  }, [refresh, clearError]);
+    await queryClient.invalidateQueries({ queryKey: ['badges', activeProfile?.id] });
+    await refresh();
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+  }, [refresh, clearError, queryClient, activeProfile?.id]);
 
   function handleBack() {
     // SECURITY: Child badge navigation never uses history back because prior stack entries may be parent routes.
@@ -76,7 +79,7 @@ export default function BadgesScreen() {
   return (
     <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
       <ScrollView
-        contentContainerStyle={styles.contentContainer}
+        contentContainerStyle={[styles.contentContainer, { paddingBottom: getChildTabSceneBottomPadding(safeBottom) + 16 }]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <AppRefreshControl

@@ -31,8 +31,15 @@ const childTabScreenOptions = {
     ios: 'fade' as const,
     android: 'fade' as const,
   }),
+  animationEnabled: true,
   tabBarHideOnKeyboard: true,
   sceneContainerStyle: {
+    backgroundColor: Colors.surface,
+  },
+  sceneStyle: {
+    backgroundColor: Colors.surface,
+  },
+  cardStyle: {
     backgroundColor: Colors.surface,
   },
 };
@@ -198,6 +205,7 @@ export default function ChildTabLayout() {
         <Tabs
           backBehavior="none"
           screenOptions={childTabScreenOptions}
+          swipeEnabled={false}
           tabBar={(props) => (
             <ChildBottomNavContainer
               {...props}

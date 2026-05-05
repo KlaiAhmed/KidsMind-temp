@@ -1,5 +1,5 @@
 // Apps/mobile/components/badges/BadgeCard.tsx
-import { memo, useEffect, useRef } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
@@ -59,7 +59,7 @@ function BadgeCardComponent({ badge, onPress, highlight = false }: BadgeCardProp
     ]).start();
   }, [highlight, pulseValue]);
 
-  const subtitle = badge.earned ? formatEarnedDate(badge.earnedAt) : badge.condition;
+  
 
   return (
     <Animated.View style={[styles.animatedWrap, { transform: [{ scale: pulseValue }] }]}>
@@ -70,11 +70,13 @@ function BadgeCardComponent({ badge, onPress, highlight = false }: BadgeCardProp
         style={({ pressed }) => [styles.card, pressed ? styles.cardPressed : null]}
       >
         <View style={styles.iconContainer}>
-          <Image
-            source={badge.iconAsset}
-            contentFit="cover"
-            style={[styles.iconImage, !badge.earned ? styles.lockedIconImage : null]}
-          />
+          {badge.iconAsset ? (
+            <BadgeIconWithFallback asset={badge.iconAsset} earned={!!badge.earned} />
+          ) : (
+            <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: Colors.surfaceContainerHigh, alignItems: 'center', justifyContent: 'center' }}>
+              <MaterialCommunityIcons name="medal-outline" size={28} color={Colors.textTertiary} />
+            </View>
+          )}
           {!badge.earned ? (
             <View style={styles.lockOverlay}>
               <MaterialCommunityIcons name="lock" size={16} color={Colors.textSecondary} />
@@ -86,8 +88,18 @@ function BadgeCardComponent({ badge, onPress, highlight = false }: BadgeCardProp
           {badge.name}
         </Text>
         <Text numberOfLines={2} style={styles.subtitleText}>
-          {subtitle}
+          {badge.earned ? formatEarnedDate(badge.earnedAt) : (badge.description ?? '')}
         </Text>
+        {!badge.earned ? (
+          <>
+            <Text numberOfLines={1} style={styles.conditionText}>
+              {badge.condition ?? ''}
+            </Text>
+            {typeof badge.progressPercent === 'number' && badge.progressPercent > 0 && badge.progressPercent < 100 ? (
+              <Text style={styles.progressText}>{badge.progressPercent}%</Text>
+            ) : null}
+          </>
+        ) : null}
       </Pressable>
     </Animated.View>
   );
@@ -152,4 +164,37 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     textAlign: 'center',
   },
+  conditionText: {
+    ...Typography.caption,
+    fontSize: 10,
+    color: Colors.textTertiary,
+    textAlign: 'center',
+  },
+  progressText: {
+    ...Typography.caption,
+    fontSize: 10,
+    color: Colors.primary,
+    textAlign: 'center',
+  },
 });
+
+function BadgeIconWithFallback({ asset, earned }: { asset: any; earned: boolean }) {
+  const [hasError, setHasError] = useState(false);
+
+  if (hasError) {
+    return (
+      <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: Colors.surfaceContainerHigh, alignItems: 'center', justifyContent: 'center' }}>
+        <MaterialCommunityIcons name="medal-outline" size={28} color={Colors.textTertiary} />
+      </View>
+    );
+  }
+
+  return (
+    <Image
+      source={asset}
+      contentFit="cover"
+      style={[styles.iconImage, !earned ? styles.lockedIconImage : null]}
+      onError={() => setHasError(true)}
+    />
+  );
+}

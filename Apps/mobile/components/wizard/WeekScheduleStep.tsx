@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useFormContext, useWatch } from 'react-hook-form';
+import { Controller, useFormContext, useWatch } from 'react-hook-form';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import Animated, {
   Easing,
@@ -22,7 +22,6 @@ import type { SubjectKey, WeekdayKey } from '@/types/child';
 
 type ScheduleMode = ChildProfileWizardFormValues['schedule']['mode'];
 
-const DEFAULT_DAILY_CAP = 30;
 const DEFAULT_START_TIME = '08:00';
 const EMPTY_SUBJECTS: SubjectKey[] = [];
 const EMPTY_WEEK_SCHEDULE: ChildProfileWizardFormValues['schedule']['weekSchedule'] = {
@@ -43,6 +42,40 @@ function toMinuteLabel(value: number | null): string {
   return `${value}`;
 }
 
+function toTimeParts(value: string | null | undefined): { hours: string; minutes: string } {
+  const match = value?.match(/^(\d{1,2}):(\d{1,2})(?::\d{1,2})?$/);
+
+  return {
+    hours: match?.[1]?.padStart(2, '0') ?? '',
+    minutes: match?.[2]?.padStart(2, '0') ?? '',
+  };
+}
+
+function toApiTime(hours: string, minutes: string): string | null {
+  if (hours.length !== 2 || minutes.length !== 2) {
+    return null;
+  }
+
+  return `${hours}:${minutes}:00`;
+}
+
+function toDisplayTime(value: string | null | undefined): string | null {
+  const parts = toTimeParts(value);
+  if (!parts.hours || !parts.minutes) {
+    return null;
+  }
+
+  return `${parts.hours}:${parts.minutes}`;
+}
+
+function clampDuration(value: number | null): number | null {
+  if (value === null || Number.isNaN(value)) {
+    return null;
+  }
+
+  return Math.min(600, Math.max(30, value));
+}
+
 function areSameSubjects(left: SubjectKey[], right: SubjectKey[]): boolean {
   if (left.length !== right.length) {
     return false;
@@ -52,9 +85,115 @@ function areSameSubjects(left: SubjectKey[], right: SubjectKey[]): boolean {
 }
 
 function toTimeRangeLabel(startTime: string | null, endTime: string | null): string {
-  const start = startTime ?? '--:--';
-  const end = endTime ?? '--:--';
+  const start = toDisplayTime(startTime) ?? '--:--';
+  const end = toDisplayTime(endTime) ?? '--:--';
   return `${start} - ${end}`;
+}
+
+function HHMMTimeInput({
+  value,
+  onChange,
+  onBlur,
+  accessibilityLabel,
+}: {
+  value: string | null;
+  onChange: (value: string | null) => void;
+  onBlur?: () => void;
+  accessibilityLabel: string;
+}) {
+  const parts = toTimeParts(value);
+  const minuteInputRef = useRef<TextInput>(null);
+  const [hours, setHours] = useState(parts.hours);
+  const [minutes, setMinutes] = useState(parts.minutes);
+
+  useEffect(() => {
+    const nextParts = toTimeParts(value);
+    setHours(nextParts.hours);
+    setMinutes(nextParts.minutes);
+  }, [value]);
+
+  function commitComplete(nextHours: string, nextMinutes: string) {
+    const nextTime = toApiTime(nextHours, nextMinutes);
+    if (nextTime) {
+      onChange(nextTime);
+    }
+  }
+
+  function normalizePart(rawValue: string, maxValue: number): string {
+    if (!rawValue) {
+      return '';
+    }
+
+    const parsed = parseInt(rawValue, 10);
+    if (Number.isNaN(parsed)) {
+      return '';
+    }
+
+    return `${Math.min(maxValue, parsed)}`.padStart(2, '0');
+  }
+
+  function handleHoursChange(nextValue: string) {
+    const nextHours = nextValue.replace(/\D/g, '').slice(0, 2);
+    setHours(nextHours);
+    commitComplete(nextHours, minutes);
+
+    if (nextHours.length === 2) {
+      minuteInputRef.current?.focus();
+    }
+  }
+
+  function handleMinutesChange(nextValue: string) {
+    const nextMinutes = nextValue.replace(/\D/g, '').slice(0, 2);
+    setMinutes(nextMinutes);
+    commitComplete(hours, nextMinutes);
+  }
+
+  function handleHoursBlur() {
+    const nextHours = normalizePart(hours, 23);
+    setHours(nextHours);
+    commitComplete(nextHours, minutes);
+    onBlur?.();
+  }
+
+  function handleMinutesBlur() {
+    const nextHours = normalizePart(hours, 23);
+    const nextMinutes = normalizePart(minutes, 59);
+    setHours(nextHours);
+    setMinutes(nextMinutes);
+    onChange(toApiTime(nextHours, nextMinutes));
+    onBlur?.();
+  }
+
+  return (
+    <View style={styles.timeInputGroup}>
+      <TextInput
+        value={hours}
+        onChangeText={handleHoursChange}
+        onBlur={handleHoursBlur}
+        placeholder="HH"
+        keyboardType="number-pad"
+        inputMode="numeric"
+        maxLength={2}
+        selectTextOnFocus
+        style={[styles.numericInput, styles.timePartInput]}
+        accessibilityLabel={`${accessibilityLabel} hours`}
+      />
+      <Text style={styles.timeSeparator}>:</Text>
+      <TextInput
+        ref={minuteInputRef}
+        value={minutes}
+        onChangeText={handleMinutesChange}
+        onBlur={handleMinutesBlur}
+        placeholder="MM"
+        keyboardType="number-pad"
+        inputMode="numeric"
+        maxLength={2}
+        selectTextOnFocus
+        style={[styles.numericInput, styles.timePartInput]}
+        accessibilityLabel={`${accessibilityLabel} minutes`}
+      />
+    </View>
+  );
 }
 
 export function WeekScheduleStep() {
@@ -109,13 +248,12 @@ export function WeekScheduleStep() {
   }, [switchWidth]);
 
   const simpleConfig = useMemo(() => {
-    const fallbackDuration = Math.max(1, dailyLimitMinutes || DEFAULT_DAILY_CAP);
     const referenceDay = firstEnabledDayKey ? weekSchedule[firstEnabledDayKey] : null;
 
     const durationMinutes =
       referenceDay?.durationMinutes && referenceDay.durationMinutes > 0
         ? referenceDay.durationMinutes
-        : fallbackDuration;
+        : dailyLimitMinutes ?? null;
     const startTime = referenceDay?.startTime ?? DEFAULT_START_TIME;
     const endTime = referenceDay?.endTime ?? computeEndTimeFromStart(startTime, durationMinutes);
 
@@ -204,7 +342,7 @@ export function WeekScheduleStep() {
   function applySimpleConfig(
     targetDays: WeekdayKey[],
     config: {
-      durationMinutes: number;
+      durationMinutes: number | null;
       startTime: string | null;
       endTime: string | null;
     },
@@ -354,7 +492,7 @@ export function WeekScheduleStep() {
     const nextDuration =
       currentDay.durationMinutes && currentDay.durationMinutes > 0
         ? currentDay.durationMinutes
-        : Math.max(1, dailyLimitMinutes || DEFAULT_DAILY_CAP);
+        : dailyLimitMinutes ?? null;
     const nextStart = currentDay.startTime ?? DEFAULT_START_TIME;
     const nextEnd = currentDay.endTime ?? computeEndTimeFromStart(nextStart, nextDuration);
 
@@ -402,7 +540,7 @@ export function WeekScheduleStep() {
 
   function onSimpleDurationChange(nextValue: string) {
     const parsed = parseInt(nextValue.replace(/\D/g, ''), 10);
-    const nextDuration = Number.isNaN(parsed) ? 0 : parsed;
+    const nextDuration = Number.isNaN(parsed) ? null : parsed;
 
     applySimpleConfig(
       enabledDayKeys,
@@ -415,8 +553,25 @@ export function WeekScheduleStep() {
     );
   }
 
-  function onSimpleStartChange(nextValue: string) {
-    const nextStart = nextValue.trim().length > 0 ? nextValue.trim() : null;
+  function onSimpleDurationBlur(nextValue: number | null) {
+    const nextDuration = clampDuration(nextValue);
+    if (nextDuration === nextValue) {
+      return;
+    }
+
+    applySimpleConfig(
+      enabledDayKeys,
+      {
+        durationMinutes: nextDuration,
+        startTime: simpleConfig.startTime,
+        endTime: simpleConfig.endTime,
+      },
+      true,
+    );
+  }
+
+  function onSimpleStartChange(nextValue: string | null) {
+    const nextStart = nextValue?.trim() || null;
 
     applySimpleConfig(
       enabledDayKeys,
@@ -429,8 +584,8 @@ export function WeekScheduleStep() {
     );
   }
 
-  function onSimpleEndChange(nextValue: string) {
-    const nextEnd = nextValue.trim().length > 0 ? nextValue.trim() : null;
+  function onSimpleEndChange(nextValue: string | null) {
+    const nextEnd = nextValue?.trim() || null;
 
     applySimpleConfig(
       enabledDayKeys,
@@ -468,9 +623,18 @@ export function WeekScheduleStep() {
     });
   }
 
-  function onAdvancedStartChange(dayKey: WeekdayKey, nextValue: string) {
+  function onAdvancedDurationBlur(dayKey: WeekdayKey, nextValue: number | null) {
+    const nextDuration = clampDuration(nextValue);
+    if (nextDuration === nextValue) {
+      return;
+    }
+
+    onAdvancedDurationChange(dayKey, nextDuration === null ? '' : `${nextDuration}`);
+  }
+
+  function onAdvancedStartChange(dayKey: WeekdayKey, nextValue: string | null) {
     const dayState = weekSchedule[dayKey];
-    const nextStart = nextValue.trim().length > 0 ? nextValue.trim() : null;
+    const nextStart = nextValue?.trim() || null;
     const nextEnd = computeEndTimeFromStart(nextStart, dayState.durationMinutes);
 
     setValue(`schedule.weekSchedule.${dayKey}.startTime` as any, nextStart, {
@@ -483,8 +647,8 @@ export function WeekScheduleStep() {
     });
   }
 
-  function onAdvancedEndChange(dayKey: WeekdayKey, nextValue: string) {
-    const nextEnd = nextValue.trim().length > 0 ? nextValue.trim() : null;
+  function onAdvancedEndChange(dayKey: WeekdayKey, nextValue: string | null) {
+    const nextEnd = nextValue?.trim() || null;
 
     setValue(`schedule.weekSchedule.${dayKey}.endTime` as any, nextEnd, {
       shouldDirty: true,
@@ -502,14 +666,24 @@ export function WeekScheduleStep() {
       >
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Daily Cap (minutes)</Text>
-          <TextInput
-            value={`${simpleConfig.durationMinutes}`}
-            onChangeText={onSimpleDurationChange}
-            keyboardType="number-pad"
-            inputMode="numeric"
-            maxLength={3}
-            style={styles.numericInput}
-            accessibilityLabel="Simple mode daily cap in minutes"
+          <Controller
+            control={control}
+            name="schedule.dailyLimitMinutes"
+            render={({ field: { onBlur, value } }) => (
+              <TextInput
+                value={toMinuteLabel(value)}
+                onChangeText={onSimpleDurationChange}
+                onBlur={() => {
+                  onSimpleDurationBlur(value);
+                  onBlur();
+                }}
+                keyboardType="number-pad"
+                inputMode="numeric"
+                maxLength={3}
+                style={styles.numericInput}
+                accessibilityLabel="Simple mode daily cap in minutes"
+              />
+            )}
           />
           {errors.schedule?.dailyLimitMinutes?.message ? (
             <Text style={styles.errorText}>{errors.schedule.dailyLimitMinutes.message}</Text>
@@ -519,25 +693,33 @@ export function WeekScheduleStep() {
         <View style={styles.rowInputs}>
           <View style={styles.halfField}>
             <Text style={styles.sectionTitle}>Start (HH:MM)</Text>
-            <TextInput
-              value={simpleConfig.startTime ?? ''}
-              onChangeText={onSimpleStartChange}
-              placeholder="08:00"
-              keyboardType="numbers-and-punctuation"
-              style={styles.numericInput}
-              accessibilityLabel="Simple mode start time"
+            <Controller
+              control={control}
+              name={firstEnabledDayKey ? `schedule.weekSchedule.${firstEnabledDayKey}.startTime` as any : 'schedule.weekSchedule.monday.startTime'}
+              render={({ field: { onBlur } }) => (
+                <HHMMTimeInput
+                  value={simpleConfig.startTime}
+                  onChange={onSimpleStartChange}
+                  onBlur={onBlur}
+                  accessibilityLabel="Simple mode start time"
+                />
+              )}
             />
           </View>
 
           <View style={styles.halfField}>
             <Text style={styles.sectionTitle}>End (HH:MM)</Text>
-            <TextInput
-              value={simpleConfig.endTime ?? ''}
-              onChangeText={onSimpleEndChange}
-              placeholder="08:30"
-              keyboardType="numbers-and-punctuation"
-              style={styles.numericInput}
-              accessibilityLabel="Simple mode end time"
+            <Controller
+              control={control}
+              name={firstEnabledDayKey ? `schedule.weekSchedule.${firstEnabledDayKey}.endTime` as any : 'schedule.weekSchedule.monday.endTime'}
+              render={({ field: { onBlur } }) => (
+                <HHMMTimeInput
+                  value={simpleConfig.endTime}
+                  onChange={onSimpleEndChange}
+                  onBlur={onBlur}
+                  accessibilityLabel="Simple mode end time"
+                />
+              )}
             />
           </View>
         </View>
@@ -556,7 +738,7 @@ export function WeekScheduleStep() {
           <View key={`simple-${day.key}`} style={styles.simpleDayRow}>
             <Text style={styles.simpleDayLabel}>{day.fullLabel}</Text>
             <Text style={styles.simpleDayValue}>
-              {simpleConfig.durationMinutes}m • {toTimeRangeLabel(simpleConfig.startTime, simpleConfig.endTime)}
+              {toMinuteLabel(simpleConfig.durationMinutes) || '--'}m - {toTimeRangeLabel(simpleConfig.startTime, simpleConfig.endTime)}
             </Text>
           </View>
         ))}
@@ -596,7 +778,7 @@ export function WeekScheduleStep() {
                 <View style={styles.dayCardHeaderContent}>
                   <Text style={styles.dayTitle}>{day.fullLabel}</Text>
                   <Text style={styles.daySummary}>
-                    {toMinuteLabel(dayState.durationMinutes) || '0'}m • {toTimeRangeLabel(dayState.startTime, dayState.endTime)}
+                    {toMinuteLabel(dayState.durationMinutes) || '--'}m - {toTimeRangeLabel(dayState.startTime, dayState.endTime)}
                   </Text>
                   <Text style={styles.daySummarySecondary}>{daySubjectLabel || 'No subjects selected'}</Text>
                 </View>
@@ -612,39 +794,57 @@ export function WeekScheduleStep() {
                   <View style={styles.rowInputs}>
                     <View style={styles.halfField}>
                       <Text style={styles.dayLabel}>Start (HH:MM)</Text>
-                      <TextInput
-                        value={dayState.startTime ?? ''}
-                        onChangeText={(nextValue) => onAdvancedStartChange(day.key, nextValue)}
-                        placeholder="08:00"
-                        keyboardType="numbers-and-punctuation"
-                        style={styles.numericInput}
-                        accessibilityLabel={`${day.fullLabel} start time`}
+                      <Controller
+                        control={control}
+                        name={`schedule.weekSchedule.${day.key}.startTime` as any}
+                        render={({ field: { onBlur } }) => (
+                          <HHMMTimeInput
+                            value={dayState.startTime}
+                            onChange={(nextValue) => onAdvancedStartChange(day.key, nextValue)}
+                            onBlur={onBlur}
+                            accessibilityLabel={`${day.fullLabel} start time`}
+                          />
+                        )}
                       />
                     </View>
 
                     <View style={styles.halfField}>
                       <Text style={styles.dayLabel}>End (HH:MM)</Text>
-                      <TextInput
-                        value={dayState.endTime ?? ''}
-                        onChangeText={(nextValue) => onAdvancedEndChange(day.key, nextValue)}
-                        placeholder="08:30"
-                        keyboardType="numbers-and-punctuation"
-                        style={styles.numericInput}
-                        accessibilityLabel={`${day.fullLabel} end time`}
+                      <Controller
+                        control={control}
+                        name={`schedule.weekSchedule.${day.key}.endTime` as any}
+                        render={({ field: { onBlur } }) => (
+                          <HHMMTimeInput
+                            value={dayState.endTime}
+                            onChange={(nextValue) => onAdvancedEndChange(day.key, nextValue)}
+                            onBlur={onBlur}
+                            accessibilityLabel={`${day.fullLabel} end time`}
+                          />
+                        )}
                       />
                     </View>
                   </View>
 
                   <View style={styles.dayCardFullField}>
                     <Text style={styles.dayLabel}>Daily Cap (minutes)</Text>
-                    <TextInput
-                      value={toMinuteLabel(dayState.durationMinutes)}
-                      onChangeText={(nextValue) => onAdvancedDurationChange(day.key, nextValue)}
-                      keyboardType="number-pad"
-                      inputMode="numeric"
-                      maxLength={3}
-                      style={styles.numericInput}
-                      accessibilityLabel={`${day.fullLabel} daily cap in minutes`}
+                    <Controller
+                      control={control}
+                      name={`schedule.weekSchedule.${day.key}.durationMinutes` as any}
+                      render={({ field: { onBlur, value } }) => (
+                        <TextInput
+                          value={toMinuteLabel(value)}
+                          onChangeText={(nextValue) => onAdvancedDurationChange(day.key, nextValue)}
+                          onBlur={() => {
+                            onAdvancedDurationBlur(day.key, value);
+                            onBlur();
+                          }}
+                          keyboardType="number-pad"
+                          inputMode="numeric"
+                          maxLength={3}
+                          style={styles.numericInput}
+                          accessibilityLabel={`${day.fullLabel} daily cap in minutes`}
+                        />
+                      )}
                     />
                   </View>
 
@@ -1020,6 +1220,19 @@ const styles = StyleSheet.create({
     ...Typography.body,
     height: 44,
     paddingHorizontal: Spacing.sm,
+  },
+  timeInputGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  timePartInput: {
+    flex: 1,
+    textAlign: 'center',
+  },
+  timeSeparator: {
+    ...Typography.bodySemiBold,
+    color: Colors.text,
   },
   errorText: {
     ...Typography.caption,

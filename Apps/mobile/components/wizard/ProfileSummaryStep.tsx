@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useWatch, useFormContext } from 'react-hook-form';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Colors, Radii, Spacing, Typography } from '@/constants/theme';
+import { useChildProfile } from '@/hooks/useChildProfile';
 import type { ChildProfileWizardFormValues } from '@/src/schemas/childProfileWizardSchema';
 import {
   LANGUAGE_LABEL_MAP,
@@ -31,8 +32,23 @@ function formatTimeWindowLabel(startTime: string | null, endTime: string | null)
   return `${startTime} - ${endTime}`;
 }
 
+const EDUCATION_LABELS: Record<string, string> = {
+  KINDERGARTEN: 'Kindergarten',
+  PRIMARY: 'Primary School',
+  SECONDARY: 'Secondary School',
+};
+
+function getEducationLabel(value: string | null | undefined): string {
+  if (!value) {
+    return '-';
+  }
+
+  return EDUCATION_LABELS[value] ?? value.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 export function ProfileSummaryStep({ onEditStep }: ProfileSummaryStepProps) {
   const { control } = useFormContext<ChildProfileWizardFormValues>();
+  const { avatars } = useChildProfile();
 
   const childInfo = useWatch({ control, name: 'childInfo' });
   const avatar = useWatch({ control, name: 'avatar' });
@@ -47,6 +63,11 @@ export function ProfileSummaryStep({ onEditStep }: ProfileSummaryStepProps) {
 
     return calculateAgeFromDateOfBirth(date);
   }, [childInfo.birthDateIso]);
+
+  const selectedAvatar = useMemo(
+    () => avatars.find((entry) => entry.id === avatar.avatarId) ?? null,
+    [avatar.avatarId, avatars],
+  );
 
   const scheduleSummary = useMemo(() => {
     const enabledDays = WEEKDAY_OPTIONS.filter((day) => schedule.weekSchedule[day.key].enabled);
@@ -95,7 +116,7 @@ export function ProfileSummaryStep({ onEditStep }: ProfileSummaryStepProps) {
         <Text style={styles.itemText}>Name: {childInfo.nickname || '-'}</Text>
         <Text style={styles.itemText}>Date of birth: {childInfo.birthDateIso || '-'}</Text>
         <Text style={styles.itemText}>Age: {age ?? '-'}</Text>
-        <Text style={styles.itemText}>Education level: {childInfo.educationLevel || '-'}</Text>
+        <Text style={styles.itemText}>Education level: {getEducationLabel(childInfo.educationLevel)}</Text>
       </View>
 
       <View style={styles.card}>
@@ -106,6 +127,11 @@ export function ProfileSummaryStep({ onEditStep }: ProfileSummaryStepProps) {
           </Pressable>
         </View>
         <Text style={styles.itemText}>Avatar: {avatar.avatarId || '-'}</Text>
+        {selectedAvatar?.name ? (
+          <Text style={[Typography.caption, { color: Colors.textSecondary, marginTop: 4, textAlign: 'center' }]}>
+            {selectedAvatar.name}
+          </Text>
+        ) : null}
       </View>
 
       <View style={styles.card}>

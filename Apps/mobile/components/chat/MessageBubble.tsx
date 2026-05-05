@@ -64,6 +64,19 @@ function MessageBubbleComponent({
         ? styles.messageTextCompact
         : styles.messageTextDefault;
 
+  if (hasQuizPayload && message.quizStatus === 'loading') {
+    return (
+      <View style={[styles.row, styles.rowLeft]}>
+        <View style={styles.aiAvatarBadge}>
+          <MaterialCommunityIcons name="robot-happy-outline" size={16} color={Colors.primary} />
+        </View>
+        <View style={styles.bubble}>
+          <ThinkingIndicator />
+        </View>
+      </View>
+    );
+  }
+
   if (hasQuizPayload) {
     return (
       <View style={[styles.row, styles.rowLeft]}>

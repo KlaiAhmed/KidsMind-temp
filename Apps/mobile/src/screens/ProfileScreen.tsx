@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 
 import { useBadges } from '@/hooks/useBadges';
@@ -15,6 +16,7 @@ import { ProfileHero } from '@/src/components/profile/ProfileHero';
 import { RecentBadges } from '@/src/components/profile/RecentBadges';
 import { SubjectProgress } from '@/src/components/profile/SubjectProgress';
 import { ProfileColors } from '@/src/components/profile/profileTokens';
+import { Colors } from '@/constants/theme';
 import { WeeklyInsight } from '@/src/components/profile/WeeklyInsight';
 import { useParentDashboardChild } from '@/src/hooks/useParentDashboardChild';
 import {
@@ -31,13 +33,13 @@ function formatMetric(value: number): string {
 export default function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
   const {
     profile,
     defaultAvatarId,
     getAvatarById,
     isLoading: isProfileLoading,
     error: profileError,
-    refreshChildData,
   } = useChildProfile();
   const {
     selectedSubjects,
@@ -48,7 +50,6 @@ export default function ProfileScreen() {
   const {
     earnedBadges,
     isLoading: badgesLoading,
-    refresh: refreshBadges,
   } = useBadges();
   const { activeChild, getChildAvatarSource } = useParentDashboardChild();
   const overviewQuery = useChildDashboardOverview();
@@ -107,11 +108,11 @@ export default function ProfileScreen() {
         dashed: true,
         onPress: () => router.push('/(child-tabs)/badges' as never),
       },
-      {
+{
         iconName: 'check-decagram' as const,
         iconColor: ProfileColors.statPurple,
-        value: formatMetric(activeProfile?.totalExercisesCompleted ?? 0),
-        label: 'EXERCISES',
+        value: formatMetric(overviewQuery.data?.totalSessions ?? 0),
+        label: 'SESSIONS',
         onPress: () => router.push('/(child-tabs)/explore' as never),
       },
       {
@@ -125,8 +126,8 @@ export default function ProfileScreen() {
     [
       activeProfile?.streakDays,
       activeProfile?.totalBadgesEarned,
-      activeProfile?.totalExercisesCompleted,
       overviewQuery.data?.streakDays,
+      overviewQuery.data?.totalSessions,
       effectiveXp,
       earnedBadges.length,
       router,
@@ -166,38 +167,30 @@ export default function ProfileScreen() {
 
   const isRefreshing = overviewQuery.isRefetching || progressQuery.isRefetching || badgesLoading;
 
-  const handleRefresh = useCallback(() => {
+  const handleRefresh = useCallback(async () => {
     if (isRefreshing || isProfileLoading || childDataLoading) {
       return;
     }
 
-    const refreshes: Promise<unknown>[] = [
-      overviewQuery.refetch(),
-      progressQuery.refetch(),
-      refreshBadges(),
-    ];
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['child-dashboard-overview', activeProfile?.id] }),
+      queryClient.invalidateQueries({ queryKey: ['child-dashboard-progress', activeProfile?.id] }),
+      queryClient.invalidateQueries({ queryKey: ['badges', activeProfile?.id] }),
+    ]);
 
-    if (activeProfile?.id) {
-      refreshes.push(refreshChildData(activeProfile.id));
-    }
-
-    void Promise.all(refreshes).then(() => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
-    });
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
   }, [
     activeProfile?.id,
     childDataLoading,
     isProfileLoading,
     isRefreshing,
-    overviewQuery,
-    progressQuery,
-    refreshBadges,
-    refreshChildData,
+    queryClient,
   ]);
 
   return (
-    <SafeAreaView edges={['top']} style={styles.screen}>
-      <StatusBar style="light" />
+    <View style={{ flex: 1, backgroundColor: Colors.primary }}>
+      <SafeAreaView edges={['top']} style={styles.screen}>
+        <StatusBar style="light" />
 
       <ScrollView
         contentContainerStyle={styles.contentContainer}
@@ -236,6 +229,7 @@ export default function ProfileScreen() {
     />
   </ScrollView>
   </SafeAreaView>
+    </View>
   );
 }
 

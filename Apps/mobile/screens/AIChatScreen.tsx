@@ -187,6 +187,7 @@ function AIChatSessionGate({
     transcribeRecording,
     speechToSpeechRecording,
     setInputText,
+    clearChat,
     clearError,
   } = useChatSession({
     childId: profile?.id ?? null,
@@ -440,6 +441,7 @@ function AIChatSessionGate({
           subjectName={resolvedSubjectName}
           elapsedSeconds={elapsedSeconds}
           minutesRemaining={minutesRemaining}
+          onClearChat={clearChat}
         />
 
         {state.error ? (

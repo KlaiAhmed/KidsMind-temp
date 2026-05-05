@@ -1,7 +1,8 @@
 // Apps/mobile/components/profile/ProfileHeroCard.tsx
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View, type ImageSourcePropType } from 'react-native';
 import { Image } from 'expo-image';
+import AvatarPlaceholder from '@/components/ui/AvatarPlaceholder';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors, Gradients, Radii, Spacing, Typography } from '@/constants/theme';
@@ -74,7 +75,7 @@ export function ProfileHeroCard({
     >
       <View style={styles.headerRow}>
         <View style={styles.identityRow}>
-          <Image source={avatarSource} contentFit="cover" style={styles.avatar} />
+          <AvatarOrImage source={avatarSource} style={styles.avatar} />
 
           <View style={styles.identityTextColumn}>
             <Text numberOfLines={1} style={styles.nicknameText}>
@@ -114,6 +115,17 @@ export function ProfileHeroCard({
       </Animated.View>
     </LinearGradient>
   );
+}
+
+function AvatarOrImage({ source, style }: { source: any; style: any }) {
+  const [hasError, setHasError] = useState(false);
+
+  if (hasError || !source) {
+    const size = style?.width && typeof style.width === 'number' ? style.width : 72;
+    return <AvatarPlaceholder size={size} style={{ borderRadius: size / 2 }} />;
+  }
+
+  return <Image source={source} contentFit="cover" style={style} onError={() => setHasError(true)} />;
 }
 
 const styles = StyleSheet.create({

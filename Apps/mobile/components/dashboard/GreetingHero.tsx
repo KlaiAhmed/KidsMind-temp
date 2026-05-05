@@ -1,6 +1,8 @@
 import { memo } from 'react';
 import { Pressable, StyleSheet, Text, View, type ImageSourcePropType } from 'react-native';
+import { useState } from 'react';
 import { Image } from 'expo-image';
+import AvatarPlaceholder from '@/components/ui/AvatarPlaceholder';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors, Gradients, Radii, Spacing, Typography } from '@/constants/theme';
 
@@ -61,11 +63,7 @@ function GreetingHeroComponent({
           pressed ? styles.avatarButtonPressed : null,
         ]}
       >
-        <Image
-          source={avatarSource}
-          contentFit="cover"
-          style={styles.avatarImage}
-        />
+        <AvatarOrImage source={avatarSource} style={styles.avatarImage} />
       </Pressable>
     </LinearGradient>
   );
@@ -122,3 +120,14 @@ const styles = StyleSheet.create({
     borderRadius: 35,
   },
 });
+
+function AvatarOrImage({ source, style }: { source: any; style: any }) {
+  const [hasError, setHasError] = useState(false);
+
+  if (hasError || !source) {
+    const size = style?.width && typeof style.width === 'number' ? style.width : 70;
+    return <AvatarPlaceholder size={size} style={{ borderRadius: size / 2 }} />;
+  }
+
+  return <Image source={source} contentFit="cover" style={style} onError={() => setHasError(true)} />;
+}
