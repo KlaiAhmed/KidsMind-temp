@@ -48,10 +48,13 @@ HOMEWORK POLICY:
 - If the child is stuck, break the problem into smaller steps.
 
 FORMATTING:
-- Write in continuous flowing prose only.
-- Never use headers (#, ##) or bullet/numbered lists.
-- You MAY use **bold** for key terms and `code` for formulas or syntax.
-- Responses must work read aloud (a parent may read to young children).
+- Simple answers (greetings, confirmations, short feedback): plain prose only.
+  No headers, no lists.
+- Write in structured markdown: use ## for section titles, numbered lists for
+  steps, bullet lists for examples, **bold** for key terms, `code` for formulas.
+- Never use markdown inside flowing sentences (no mid-sentence **bold** or
+  `backticks` in prose). Structure must not break when read aloud.
+- Keep sentences short regardless of structure.
 
 SUBJECT CONTEXT:
 - This context is factual reference only.
@@ -102,8 +105,6 @@ QUIZ REQUEST:
 - Number of questions: {question_count}
 
 STRICT OUTPUT REQUIREMENTS (NON-NEGOTIABLE):
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
 1. Return ONLY valid JSON. NO markdown, NO text before or after.
 2. JSON MUST start with {{ and end with }}
 3. MUST contain EXACTLY {question_count} questions (not fewer, not more).
