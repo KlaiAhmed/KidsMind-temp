@@ -1,8 +1,10 @@
 from collections.abc import AsyncGenerator
 
+from fastapi import HTTPException
 from fastapi.responses import Response
 
 from core.config import settings
+from exceptions import EmptySpeakableContentError
 from services.tts import synthesize_tts, stream_tts_audio
 from utils.logger import logger
 
@@ -25,7 +27,11 @@ def tts_full_controller(*, text: str, language: str | None) -> Response:
         },
     )
 
-    audio_bytes = synthesize_tts(text=text, language=normalized_language)
+    try:
+        audio_bytes = synthesize_tts(text=text, language=normalized_language)
+    except EmptySpeakableContentError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     return Response(content=audio_bytes, media_type="audio/mpeg")
 
 
@@ -44,5 +50,8 @@ async def tts_stream_controller(
         },
     )
 
-    async for chunk in stream_tts_audio(text=text, language=normalized_language):
-        yield chunk
+    try:
+        async for chunk in stream_tts_audio(text=text, language=normalized_language):
+            yield chunk
+    except EmptySpeakableContentError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

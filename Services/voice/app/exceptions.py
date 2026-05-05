@@ -21,3 +21,8 @@ class EmptyTranscriptionError(STTBaseError):
 class TranscriptionError(STTBaseError):
     """Raised when transcription fails unexpectedly."""
     pass
+
+
+class EmptySpeakableContentError(STTBaseError):
+    """Raised when TTS input contains no speakable content after normalization."""
+    pass

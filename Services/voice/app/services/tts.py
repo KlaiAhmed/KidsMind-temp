@@ -3,8 +3,9 @@ from functools import lru_cache
 from typing import AsyncGenerator
 
 from core.config import settings
-
+from exceptions import EmptySpeakableContentError
 from services.tts_gtts import GttsTtsProvider
+from utils.text_normalize import has_speakable_content, normalize_tts_text
 
 
 class TtsProvider(ABC):
@@ -28,8 +29,12 @@ def get_tts_provider() -> TtsProvider:
 
 
 def synthesize_tts(text: str, language: str | None = None) -> bytes:
+    normalized = normalize_tts_text(text)
+    if not has_speakable_content(normalized):
+        raise EmptySpeakableContentError("Input contains no speakable content after normalization.")
+
     provider = get_tts_provider()
-    return provider.synthesize(text=text, language=language)
+    return provider.synthesize(text=normalized, language=language)
 
 
 async def stream_tts_audio(
