@@ -1,10 +1,10 @@
-// Apps/mobile/components/badges/BadgeCard.tsx
 import { memo, useEffect, useRef, useState } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { Colors, Radii, Spacing, Typography } from '@/constants/theme';
 import type { Badge } from '@/types/badge';
+import { formatCriteria } from '@/utils/badgeCriteria';
 
 const MIN_CHILD_TAP_TARGET = 56;
 
@@ -93,7 +93,7 @@ function BadgeCardComponent({ badge, onPress, highlight = false }: BadgeCardProp
         {!badge.earned ? (
           <>
             <Text numberOfLines={1} style={styles.conditionText}>
-              {badge.condition ?? ''}
+              {formatCriteria(badge.condition ?? '')}
             </Text>
             {typeof badge.progressPercent === 'number' && badge.progressPercent > 0 && badge.progressPercent < 100 ? (
               <Text style={styles.progressText}>{badge.progressPercent}%</Text>
@@ -120,6 +120,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.xs,
     paddingVertical: Spacing.sm,
     alignItems: 'center',
+    flexGrow: 1,
     gap: Spacing.xs,
   },
   cardPressed: {

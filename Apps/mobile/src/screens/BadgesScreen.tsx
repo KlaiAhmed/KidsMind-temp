@@ -293,6 +293,7 @@ const styles = StyleSheet.create({
     width: '50%',
     paddingHorizontal: 6,
     paddingBottom: 12,
+    alignSelf: 'stretch',
   },
   emptyCard: {
     borderRadius: 14,
