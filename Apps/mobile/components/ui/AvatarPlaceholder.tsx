@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, ViewStyle } from 'react-native';
+import { View, ViewStyle } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors } from '@/constants/theme';
 
@@ -22,7 +22,5 @@ export function AvatarPlaceholder({ size = 48, style }: { size?: number; style?:
     </View>
   );
 }
-
-const styles = StyleSheet.create({});
 
 export default AvatarPlaceholder;

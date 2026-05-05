@@ -69,7 +69,7 @@ export default function BadgesScreen() {
     await queryClient.invalidateQueries({ queryKey: ['badges', activeProfile?.id] });
     await refresh();
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
-  }, [refresh, clearError, queryClient, activeProfile?.id]);
+  }, [refresh, clearError, activeProfile?.id]);
 
   function handleBack() {
     // SECURITY: Child badge navigation never uses history back because prior stack entries may be parent routes.

@@ -22,6 +22,10 @@ interface ChatHistoryMessageApiResponse {
   role: string;
   content: string;
   created_at: string | null;
+  is_flagged?: boolean;
+  flag_category?: string | null;
+  flag_reason?: string | null;
+  safety_flags?: unknown;
 }
 
 interface ChatHistorySessionApiResponse {
@@ -30,9 +34,9 @@ interface ChatHistorySessionApiResponse {
 }
 
 interface ChatHistoryApiResponse {
-  child_id: string;
-  sessions: ChatHistorySessionApiResponse[];
-  pagination: {
+  child_id?: string;
+  sessions?: ChatHistorySessionApiResponse[];
+  pagination?: {
     limit: number;
     offset: number;
     has_more: boolean;
@@ -42,8 +46,10 @@ interface ChatHistoryApiResponse {
 export interface ParentConversationMessage {
   id: string;
   sender: 'child' | 'ai';
+  rawContent: string;
   body: string;
   createdAt: string | null;
+  safetyFlags: string[];
   safetyFlagDescription: string | null;
 }
 
@@ -88,6 +94,16 @@ function normalizeOptionalString(value: unknown): string | null {
   return normalized.length > 0 ? normalized : null;
 }
 
+function normalizeStringList(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((entry) => normalizeOptionalString(entry))
+    .filter((entry): entry is string => Boolean(entry));
+}
+
 function safeJsonParse(value: string): unknown {
   try {
     return JSON.parse(value);
@@ -98,7 +114,7 @@ function safeJsonParse(value: string): unknown {
 
 function flattenAssistantPayload(payload: Record<string, unknown>): {
   body: string;
-  safetyFlagDescription: string | null;
+  safetyFlags: string[];
 } {
   const sections = STRUCTURED_RESPONSE_FIELDS.flatMap(([field, label]) => {
     const value = normalizeOptionalString(payload[field]);
@@ -109,14 +125,37 @@ function flattenAssistantPayload(payload: Record<string, unknown>): {
     return [label ? `${label}: ${value}` : value];
   });
 
-  const safetyFlags = Array.isArray(payload.safety_flags)
-    ? payload.safety_flags.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
-    : [];
+  const safetyFlags = normalizeStringList(payload.safety_flags);
 
   return {
     body: sections.join('\n\n').trim(),
-    safetyFlagDescription: safetyFlags.length > 0 ? safetyFlags.join(', ') : null,
+    safetyFlags,
   };
+}
+
+function buildMessageSafetyFlags(
+  message: ChatHistoryMessageApiResponse,
+  parsedContent: unknown,
+  structuredAssistantContent: ReturnType<typeof flattenAssistantPayload> | null,
+): string[] {
+  const flags = [
+    ...normalizeStringList(message.safety_flags),
+    ...(structuredAssistantContent?.safetyFlags ?? []),
+  ];
+
+  if (message.is_flagged) {
+    flags.push(
+      normalizeOptionalString(message.flag_reason) ??
+        normalizeOptionalString(message.flag_category) ??
+        'Flagged message',
+    );
+  }
+
+  if (isRecord(parsedContent)) {
+    flags.push(...normalizeStringList(parsedContent.safety_flags));
+  }
+
+  return [...new Set(flags)];
 }
 
 function normalizeMessage(
@@ -124,18 +163,22 @@ function normalizeMessage(
   sessionId: string,
   index: number,
 ): ParentConversationMessage {
-  const sender = message.role === 'assistant' ? 'ai' : 'child';
+  const normalizedRole = message.role.toLowerCase();
+  const sender = normalizedRole === 'assistant' || normalizedRole === 'ai' ? 'ai' : 'child';
   const rawBody = normalizeOptionalString(message.content) ?? '';
   const parsedContent = safeJsonParse(rawBody);
   const structuredAssistantContent =
     sender === 'ai' && isRecord(parsedContent) ? flattenAssistantPayload(parsedContent) : null;
+  const safetyFlags = buildMessageSafetyFlags(message, parsedContent, structuredAssistantContent);
 
   return {
     id: `${sessionId}-${index}`,
     sender,
+    rawContent: rawBody,
     body: structuredAssistantContent?.body || rawBody,
     createdAt: normalizeOptionalString(message.created_at),
-    safetyFlagDescription: structuredAssistantContent?.safetyFlagDescription ?? null,
+    safetyFlags,
+    safetyFlagDescription: safetyFlags.length > 0 ? safetyFlags.join(', ') : null,
   };
 }
 
@@ -173,9 +216,50 @@ function normalizeSession(session: ChatHistorySessionApiResponse): ParentConvers
     startedAt: createdAtValues[0] ?? null,
     lastMessageAt,
     messageCount: messages.length,
-    hasSafetyFlags: messages.some((message) => Boolean(message.safetyFlagDescription)),
+    hasSafetyFlags: messages.some((message) => message.safetyFlags.length > 0),
     messages,
   };
+}
+
+interface ChatSummaryApiResponse {
+  summary?: unknown;
+  text?: unknown;
+  message?: unknown;
+}
+
+function normalizeSummaryResponse(response: unknown): string | null {
+  if (typeof response === 'string') {
+    return normalizeOptionalString(response);
+  }
+
+  if (!isRecord(response)) {
+    return null;
+  }
+
+  const payload = response as ChatSummaryApiResponse;
+  return (
+    normalizeOptionalString(payload.summary) ??
+    normalizeOptionalString(payload.text) ??
+    normalizeOptionalString(payload.message)
+  );
+}
+
+export async function generateConversationSummary(
+  messages: ParentConversationMessage[],
+): Promise<string | null> {
+  const response = await apiRequest<unknown>('/api/v1/chat/summary', {
+    method: 'POST',
+    timeoutMs: 12000,
+    body: {
+      messages: messages.map((message) => ({
+        role: message.sender === 'ai' ? 'assistant' : 'user',
+        content: message.rawContent,
+        created_at: message.createdAt,
+      })),
+    },
+  });
+
+  return normalizeSummaryResponse(response);
 }
 
 export async function getChildAvatarUrl(child: ChildProfile): Promise<string | null> {
@@ -230,7 +314,9 @@ export async function getConversationHistory(params: {
     },
   );
 
-  const sessions = [...response.sessions]
+  const responseSessions = Array.isArray(response.sessions) ? response.sessions : [];
+  const pagination = response.pagination;
+  const sessions = [...responseSessions]
     .map(normalizeSession)
     .sort((left, right) => {
       const leftTime = left.lastMessageAt ? new Date(left.lastMessageAt).getTime() : 0;
@@ -239,12 +325,12 @@ export async function getConversationHistory(params: {
     });
 
   return {
-    childId: response.child_id,
+    childId: normalizeOptionalString(response.child_id) ?? params.childId,
     sessions,
     pagination: {
-      limit: response.pagination.limit,
-      offset: response.pagination.offset,
-      hasMore: response.pagination.has_more,
+      limit: pagination?.limit ?? params.limit ?? 200,
+      offset: pagination?.offset ?? params.offset ?? 0,
+      hasMore: pagination?.has_more ?? false,
     },
   };
 }

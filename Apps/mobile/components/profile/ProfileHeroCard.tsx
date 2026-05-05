@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View, type ImageSourcePropType } from 'react-native';
 import { Image } from 'expo-image';
-import AvatarPlaceholder from '@/components/ui/AvatarPlaceholder';
+import { AvatarPlaceholder } from '@/components/ui/AvatarPlaceholder';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors, Gradients, Radii, Spacing, Typography } from '@/constants/theme';

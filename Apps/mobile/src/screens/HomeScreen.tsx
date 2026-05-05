@@ -15,6 +15,7 @@ import { FeaturedLesson } from '@/src/components/FeaturedLesson';
 import { ProgressCard } from '@/src/components/ProgressCard';
 import { StreakCard } from '@/src/components/StreakCard';
 import { SubjectGrid } from '@/src/components/SubjectGrid';
+import { EarnedBadgesRow } from '@/src/components/home/EarnedBadgesRow';
 import { ChildSpaceHeader } from '@/src/components/spaceSwitch/ChildSpaceHeader';
 import { getChildTabSceneBottomPadding } from '@/components/navigation/bottomNavTokens';
 import { buildSubjectGridItems } from '@/src/utils/profilePresentation';
@@ -49,6 +50,7 @@ export default function HomeScreen() {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['child-dashboard-overview', profile?.id] }),
       queryClient.invalidateQueries({ queryKey: ['child-dashboard-progress', profile?.id] }),
+      queryClient.invalidateQueries({ queryKey: ['badges', profile?.id] }),
     ]);
 
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
@@ -77,6 +79,8 @@ export default function HomeScreen() {
         <ProgressCard currentXP={currentXP} level={level} maxXP={maxXP} />
 
         <StreakCard days={streakDays} />
+
+        <EarnedBadgesRow />
 
         <FeaturedLesson
           category="SCIENCE • SPACE"

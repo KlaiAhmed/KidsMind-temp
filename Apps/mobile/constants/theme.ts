@@ -179,6 +179,7 @@ export const Spacing = {
 // ─── Radii ────────────────────────────────────────────────────────
 
 export const Radii = {
+  xs: 4,
   sm: 8,
   md: 12,
   lg: 16,
@@ -192,6 +193,13 @@ export const Radii = {
 /** Stitch-specified shadows */
 export const Shadows = {
   button: {
+    shadowOffset: { width: 0, height: 8 },
+    shadowRadius: 24,
+    shadowOpacity: 0.08,
+    shadowColor: '#3B2FCC',
+    elevation: 8,
+  },
+  md: {
     shadowOffset: { width: 0, height: 8 },
     shadowRadius: 24,
     shadowOpacity: 0.08,

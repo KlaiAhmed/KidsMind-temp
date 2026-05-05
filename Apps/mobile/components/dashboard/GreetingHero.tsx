@@ -1,8 +1,8 @@
-import { memo } from 'react';
+import { memo , useState } from 'react';
 import { Pressable, StyleSheet, Text, View, type ImageSourcePropType } from 'react-native';
-import { useState } from 'react';
+
 import { Image } from 'expo-image';
-import AvatarPlaceholder from '@/components/ui/AvatarPlaceholder';
+import { AvatarPlaceholder } from '@/components/ui/AvatarPlaceholder';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors, Gradients, Radii, Spacing, Typography } from '@/constants/theme';
 

@@ -13,7 +13,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import * as Haptics from 'expo-haptics';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
-import { useSharedValue, withTiming } from 'react-native-reanimated';
+import { useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { Colors, Radii, Spacing, Typography } from '@/constants/theme';
 import { ChatInput } from '@/components/chat/ChatInput';
 import { MessageBubble } from '@/components/chat/MessageBubble';
@@ -119,6 +119,7 @@ export default function AIChatScreen() {
     <AIChatSessionGate
       childTabSceneBottomPadding={childTabSceneBottomPadding}
       gateState={gateState}
+      insets={insets}
       keyboardOffset={keyboardOffset}
       params={params}
       profile={profile}
@@ -129,6 +130,7 @@ export default function AIChatScreen() {
 interface AIChatSessionGateProps {
   childTabSceneBottomPadding: number;
   gateState: SessionGateState;
+  insets: ReturnType<typeof useSafeAreaInsets>;
   keyboardOffset: SharedValue<number>;
   params: ChatRouteParams;
   profile: ChildProfile | null;
@@ -137,6 +139,7 @@ interface AIChatSessionGateProps {
 function AIChatSessionGate({
   childTabSceneBottomPadding,
   gateState,
+  insets,
   keyboardOffset,
   params,
   profile,
@@ -216,6 +219,9 @@ function AIChatSessionGate({
     };
   }, []);
 
+  const [showScrollButton, setShowScrollButton] = useState(false);
+  const scrollButtonOpacity = useSharedValue(0);
+
   // Cycle phrase: fade out → swap index after fade completes
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
@@ -288,7 +294,15 @@ function AIChatSessionGate({
 
   const handleListScroll = useCallback((event: { nativeEvent: { contentOffset: { y: number } } }) => {
     isNearBottom.current = event.nativeEvent.contentOffset.y < NEAR_BOTTOM_THRESHOLD;
-  }, []);
+    const scrolledUp = event.nativeEvent.contentOffset.y > 80;
+    if (scrolledUp !== showScrollButton) {
+      setShowScrollButton(scrolledUp);
+      scrollButtonOpacity.value = withSpring(scrolledUp ? 1 : 0, {
+        damping: 10,
+        mass: 1,
+      });
+    }
+  }, [showScrollButton, scrollButtonOpacity]);
 
   const handleSend = useCallback(
     async (text: string, inputSource: 'keyboard' | 'voice' = 'keyboard') => {
@@ -423,6 +437,14 @@ function AIChatSessionGate({
     };
   });
 
+  const scrollButtonAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: scrollButtonOpacity.value,
+  }));
+
+  const scrollToBottom = useCallback(() => {
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+  }, []);
+
   if (gateState.status !== 'ACTIVE' && !state.isAwaitingResponse) {
     return (
       <GateMessageScreen
@@ -480,6 +502,17 @@ function AIChatSessionGate({
               </View>
             }
           />
+          <Animated.View
+            style={[
+              styles.scrollToBottomButton,
+              { bottom: 80 + insets.bottom + 8 },
+              scrollButtonAnimatedStyle,
+            ]}
+          >
+            <Pressable onPress={scrollToBottom} style={styles.scrollToBottomPressable}>
+              <MaterialCommunityIcons name="chevron-down" size={22} color="#ffffff" />
+            </Pressable>
+          </Animated.View>
         </Animated.View>
 
         <Animated.View style={chatInputAnimatedStyle}>
@@ -550,5 +583,21 @@ const styles = StyleSheet.create({
     ...Typography.caption,
     color: Colors.textSecondary,
     textAlign: 'center',
+  },
+  scrollToBottomButton: {
+    position: 'absolute',
+    right: 16,
+    width: 36,
+    height: 36,
+    borderRadius: Radii.full,
+    backgroundColor: Colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scrollToBottomPressable: {
+    width: 36,
+    height: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

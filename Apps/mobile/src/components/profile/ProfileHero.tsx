@@ -2,6 +2,8 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import type { ImageSourcePropType } from 'react-native';
 import { StyleSheet, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { AvatarPlaceholder } from '@/components/ui/AvatarPlaceholder';
 
 import { ProfileSkeletonBlock } from '@/src/components/profile/ProfileSkeletonBlock';
 import { StatCard, type StatCardProps } from '@/src/components/profile/StatCard';
@@ -24,6 +26,7 @@ export function ProfileHero({
   stats,
   loading = false,
 }: ProfileHeroProps) {
+  const [hasAvatarError, setHasAvatarError] = useState(false);
   return (
     <LinearGradient colors={[ProfileColors.heroTop, ProfileColors.heroBottom]} style={styles.container}>
       {loading ? (
@@ -50,7 +53,11 @@ export function ProfileHero({
       ) : (
         <>
           <View style={styles.avatarRing}>
-            <Image contentFit="cover" source={avatarSource} style={styles.avatarImage} />
+            {hasAvatarError || !avatarSource ? (
+              <AvatarPlaceholder size={84} />
+            ) : (
+              <Image contentFit="cover" source={avatarSource} style={styles.avatarImage} onError={() => setHasAvatarError(true)} />
+            )}
           </View>
 
           <View style={styles.levelPill}>

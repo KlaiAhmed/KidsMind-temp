@@ -56,7 +56,7 @@ export default function ProfileScreen() {
   const progressQuery = useChildDashboardProgress();
 
   const activeProfile = activeChild ?? profile;
-  const displayName = activeProfile?.nickname?.trim() || activeProfile?.name?.trim() || '';
+  const displayName = activeProfile?.nickname ?? activeProfile?.name ?? 'Explorer';
   const fallbackAvatarSource = getAvatarById(activeProfile?.avatarId ?? defaultAvatarId).asset;
   const avatarSource = activeProfile ? getChildAvatarSource(activeProfile) : fallbackAvatarSource;
   const effectiveXp = overviewQuery.data?.xp ?? activeProfile?.xp ?? 0;
@@ -76,12 +76,12 @@ export default function ProfileScreen() {
       levelTitle: levelIdentity.title,
       subjects: subjectCards,
       streakDays: overviewQuery.data?.streakDays ?? activeProfile?.streakDays ?? 0,
-      exerciseCount: activeProfile?.totalExercisesCompleted ?? 0,
+      exerciseCount: overviewQuery.data?.totalSessions ?? 0,
     }),
     [
       activeProfile?.streakDays,
-      activeProfile?.totalExercisesCompleted,
       overviewQuery.data?.streakDays,
+      overviewQuery.data?.totalSessions,
       dashboardWeeklyInsight,
       displayName,
       levelIdentity.title,

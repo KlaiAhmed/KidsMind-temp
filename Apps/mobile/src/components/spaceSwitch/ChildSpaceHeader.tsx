@@ -3,11 +3,12 @@ import {
   StyleSheet,
   Text,
   View,
+  Pressable,
   type ImageSourcePropType,
   type ViewStyle,
 } from 'react-native';
 import { useState } from 'react';
-import AvatarPlaceholder from '@/components/ui/AvatarPlaceholder';
+import { AvatarPlaceholder } from '@/components/ui/AvatarPlaceholder';
 
 import { Radii, Spacing, Colors } from '@/constants/theme';
 import { useChildProfile } from '@/hooks/useChildProfile';
@@ -17,6 +18,7 @@ interface ChildSpaceHeaderProps {
   childName: string;
   welcomeLabel?: string;
   greetingText?: string;
+  onRequestParentAccess?: () => void;
   style?: ViewStyle;
   children?: React.ReactNode;
 }
@@ -53,6 +55,7 @@ export function ChildSpaceHeader({
   childName,
   welcomeLabel = 'WELCOME BACK!',
   greetingText,
+  onRequestParentAccess,
   style,
   children,
 }: ChildSpaceHeaderProps) {
@@ -71,6 +74,16 @@ export function ChildSpaceHeader({
             {displayGreeting}
           </Text>
         </View>
+
+        {onRequestParentAccess ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={onRequestParentAccess}
+            style={styles.parentZoneButton}
+          >
+            <Text style={styles.parentZoneText}>Parent Zone</Text>
+          </Pressable>
+        ) : null}
       </View>
 
       {children}
@@ -124,6 +137,17 @@ const styles = StyleSheet.create({
     color: Colors.text,
     lineHeight: 24,
     flexShrink: 1,
+  },
+  parentZoneButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: Colors.surfaceContainerLow,
+  },
+  parentZoneText: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 12,
+    color: Colors.primary,
   },
 });
 

@@ -9,7 +9,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { Image } from 'expo-image';
-import AvatarPlaceholder from '@/components/ui/AvatarPlaceholder';
+import { AvatarPlaceholder } from '@/components/ui/AvatarPlaceholder';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { Colors, Radii, Spacing, Typography } from '@/constants/theme';

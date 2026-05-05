@@ -3,11 +3,19 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors, Radii, Spacing, Typography } from '@/constants/theme';
 import { MessageActionBar } from '@/components/chat/MessageActionBar';
+import { MarkdownMessage } from '@/components/chat/MarkdownMessage';
 import { QuizCard } from '@/components/chat/QuizCard';
 import { SafetyFlagBanner } from '@/components/chat/SafetyFlagBanner';
 import { ThinkingIndicator } from '@/components/chat/ThinkingIndicator';
 import type { Message } from '@/types/chat';
 import type { AgeGroup } from '@/types/child';
+
+interface AIResponsePayload {
+  explanation?: string | null;
+  example?: string | null;
+  exercise?: string | null;
+  encouragement?: string | null;
+}
 
 interface MessageBubbleProps {
   message: Message;
@@ -23,6 +31,10 @@ interface MessageBubbleProps {
   onQuizTryAnother?: (topic?: string) => void;
 }
 
+type MessageWithAiResponse = Message & {
+  response?: AIResponsePayload | null;
+};
+
 function formatTimeLabel(isoDate: string): string {
   const parsedDate = new Date(isoDate);
   if (Number.isNaN(parsedDate.getTime())) {
@@ -33,6 +45,24 @@ function formatTimeLabel(isoDate: string): string {
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+function buildMarkdownContent(response: AIResponsePayload): string {
+  const parts = [response.explanation];
+  if (response.example) parts.push(`\n\n${response.example}`);
+  if (response.exercise) parts.push(`\n\n---\n\n${response.exercise}`);
+  if (response.encouragement) parts.push(`\n\n*${response.encouragement}*`);
+  return parts.filter(Boolean).join('');
+}
+
+function getAiMessageContent(message: Message): string {
+  const response = (message as MessageWithAiResponse).response;
+  if (!response) {
+    return message.content;
+  }
+
+  const markdownContent = buildMarkdownContent(response);
+  return markdownContent.trim().length > 0 ? markdownContent : message.content;
 }
 
 function MessageBubbleComponent({
@@ -56,6 +86,7 @@ function MessageBubbleComponent({
   const shouldShowThinkingIndicator = isTypingPlaceholder || isStreamingPlaceholder;
   const isErrorMessage = message.status === 'error';
   const senderLabel = isAiMessage ? 'AI' : 'Child';
+  const displayContent = isAiMessage && !isErrorMessage ? getAiMessageContent(message) : message.content;
 
   const bubbleTextSizeStyle =
     ageGroup === '3-6'
@@ -111,7 +142,7 @@ function MessageBubbleComponent({
     !shouldShowThinkingIndicator &&
     !hasSafetyFlags &&
     !hasQuiz &&
-    message.content.trim().length > 0;
+    displayContent.trim().length > 0;
 
   return (
     <View style={styles.outer}>
@@ -153,11 +184,11 @@ function MessageBubbleComponent({
             accessibilityLabel={
               hasSafetyFlags
                 ? `${senderLabel} shared a safe learning redirection at ${formatTimeLabel(message.createdAt)}`
-                : `${senderLabel} said: ${message.content} at ${formatTimeLabel(message.createdAt)}`
+                : `${senderLabel} said: ${displayContent} at ${formatTimeLabel(message.createdAt)}`
             }
             onLongPress={() => {
-              if (!shouldShowThinkingIndicator && onLongPressMessage && message.content.trim().length > 0) {
-                onLongPressMessage(message.content);
+              if (!shouldShowThinkingIndicator && onLongPressMessage && displayContent.trim().length > 0) {
+                onLongPressMessage(displayContent);
               }
             }}
             style={[styles.bubble, isAiMessage ? styles.aiBubble : styles.childBubble]}
@@ -166,10 +197,12 @@ function MessageBubbleComponent({
               <ThinkingIndicator />
             ) : hasSafetyFlags ? (
               <SafetyFlagBanner flags={message.safetyFlags} />
+            ) : isAiMessage ? (
+              <MarkdownMessage content={displayContent} />
             ) : (
               <Text
                 allowFontScaling
-                style={[bubbleTextSizeStyle, isAiMessage ? styles.aiText : styles.childText]}
+                style={[bubbleTextSizeStyle, styles.childText]}
               >
                 {message.content}
               </Text>
@@ -198,6 +231,9 @@ function MessageBubbleComponent({
 function areMessageBubblePropsEqual(previous: MessageBubbleProps, next: MessageBubbleProps) {
   if (previous.message.id !== next.message.id) return false;
   if (previous.message.content !== next.message.content) return false;
+  if ((previous.message as MessageWithAiResponse).response !== (next.message as MessageWithAiResponse).response) {
+    return false;
+  }
   if (previous.message.status !== next.message.status) return false;
   if (previous.isTypingPlaceholder !== next.isTypingPlaceholder) return false;
   if (previous.ageGroup !== next.ageGroup) return false;
@@ -292,9 +328,6 @@ const styles = StyleSheet.create({
     ...Typography.body,
     fontSize: 15,
     lineHeight: 22,
-  },
-  aiText: {
-    color: Colors.text,
   },
   childText: {
     color: Colors.white,

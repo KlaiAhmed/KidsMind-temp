@@ -9,6 +9,7 @@ import {
   startChatSession,
   submitQuizAnswers,
 } from '@/services/chatService';
+import { clearConversationSession } from '@/services/parentDashboardService';
 import { sendSpeechToSpeechStreaming, sendVoiceTranscriptionStreaming } from '@/services/voiceService';
 import { ttsSpeak } from '@/src/utils/tts';
 import { isLocalSessionId } from '@/src/utils/sessionId';
@@ -93,7 +94,7 @@ interface UseChatSessionResult {
   transcribeRecording: (audioUri: string) => Promise<string>;
   speechToSpeechRecording: (audioUri: string) => Promise<void>;
   setInputText: (text: string) => void;
-  clearChat: () => void;
+  clearChat: () => Promise<void>;
   clearError: () => void;
   onQuizSummaryDismissed?: () => void;
 }
@@ -1380,12 +1381,26 @@ export function useChatSession({
     }
   }, [appendMessage, removeMessageById]);
 
-  const clearChat = useCallback(() => {
+  const clearChat = useCallback(async () => {
     abortRef.current?.abort();
     abortRef.current = null;
     transcriptionAbortRef.current?.abort();
     transcriptionAbortRef.current = null;
     activeQuizRef.current = null;
+
+    const activeSession = sessionRef.current;
+    if (activeSession && !isLocalSessionId(activeSession.id)) {
+      try {
+        await clearConversationSession({
+          userId: getCurrentUserId(),
+          childId: activeSession.childId,
+          sessionId: activeSession.id,
+        });
+      } catch (err) {
+        // Non-fatal: continue to clear local state even if server call fails
+      }
+    }
+
     messagesRef.current = [];
     setState((current) => ({
       ...current,
@@ -1395,7 +1410,14 @@ export function useChatSession({
       isAwaitingResponse: false,
       error: null,
     }));
-  }, []);
+
+    // Start a fresh session (local fallback allowed)
+    try {
+      void startSession();
+    } catch {
+      // ignore
+    }
+  }, [startSession]);
 
   const transcribeRecording = useCallback(
     async (audioUri: string): Promise<string> => {

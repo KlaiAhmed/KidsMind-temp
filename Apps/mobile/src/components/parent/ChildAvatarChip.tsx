@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useState } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import AvatarPlaceholder from '@/components/ui/AvatarPlaceholder';
+import { AvatarPlaceholder } from '@/components/ui/AvatarPlaceholder';
 
 import { Colors, Radii, Spacing, Typography } from '@/constants/theme';
 
@@ -56,12 +56,7 @@ export function ChildAvatarChip({
             size={26}
           />
         ) : (
-          (() => {
-            const [hasError, setHasError] = [false, () => {}];
-            // Inline hook-like behavior isn't allowed here in render helper, so
-            // lift to actual component below instead.
-            return <AvatarOrImage source={avatarSource} style={styles.avatar} />;
-          })()
+          <AvatarOrImage source={avatarSource} style={styles.avatar} />
         )}
       </Pressable>
 
